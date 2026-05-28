@@ -1,0 +1,44 @@
+name: map
+description: 물류 일자리 플랫폼 — 일자리
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_naver_map: ^1.4.4
+  shared_preferences: ^2.5.3
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  path_provider: ^2.1.5
+  share_plus: ^10.1.4
+  intl: ^0.20.2
+  http: ^1.2.2
+  image_picker: ^1.1.2
+  webview_flutter: ^4.10.0
+  app_links: ^6.4.0
+  geolocator: ^13.0.2
+  daum_postcode_search: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icon/app_icon_1024.png
+  adaptive_icon_background: '#7C5CFC'
+  adaptive_icon_foreground: assets/icon/app_icon_foreground_1024.png
+  remove_alpha_ios: true
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/

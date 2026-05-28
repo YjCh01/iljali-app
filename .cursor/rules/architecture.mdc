@@ -1,0 +1,58 @@
+---
+description: Monorepo layout, Flutter feature structure, domain rules, and key modules
+globs: "{map/**,server/**}"
+alwaysApply: false
+---
+
+# Architecture — 일자리 Monorepo
+
+## Layout
+
+| Path | Role |
+|------|------|
+| `map/` | Flutter app (corporate, job seeker, admin, hiring) |
+| `map/lib/features/<feature>/` | `domain/` · `data/` · `presentation/` |
+| `map/lib/core/` | Shared: session, compliance, hiring, geo, address, config |
+| `map/test/` | Widget + unit tests (mirror `lib/` paths) |
+| `server/` | FastAPI — compliance, address, payments webhooks |
+| `map/PUSH_PACKAGE_PRICING.md` | **요금 정책 SSOT** — 패키지·기본 플랜 |
+| `map/PRODUCT_REQUIREMENTS.md` | PRD — §4 요금 |
+| `map/PRODUCTION.md` | Runbook, dart-define, mock vs prod |
+
+## Domain rules (do not drift)
+
+### Push & packages (replaces partnership tiers)
+
+- **Default plan**: 700m radius, 1 free push/day, 2 signup bonus pushes, 1 base location.
+- **Package product**: 5,000 KRW = 1 location slot + 1 push at **1km** from that base.
+- **Bundles**: 10→45,000 / 30→120,000 / 100→350,000 KRW.
+- **Wallet depletion**: daily free → signup bonus → package credits.
+- **Deprecated**: `premium_partnership_tier.dart`, partnership subscription, tier cards — migrate to `PushPackageCatalog` / `EmployerPushWallet`.
+
+### Payments & entitlements
+
+- Mock PG when keys missing (`env_config.dart`).
+- **All push beyond free/bonus requires package credit** (or triggers package shop).
+- **Contact/chat**: available on default plan (no tier gate).
+
+### Address
+
+- Mobile: Daum Postcode WebView (`daum_postcode_picker_page.dart`).
+- Windows/desktop: QC manual entry when WebView unavailable (`workplace_address_qc.dart`).
+
+### Commissions
+
+- Daily worker: fixed fee on check-in (`commission_calculator.dart`).
+- Permanent: % on verified employment (`permanent_commission_calculator.dart`).
+
+## Conventions
+
+- Flutter: feature-first folders; prefer `const` widgets; `AppColors`, `AppRoutes`.
+- State: `AuthSession.instance` for current user/profile.
+- New routes: register in `app_routes.dart` + navigator.
+- Server: add routers under `server/app/`; keep secrets in `.env`, never commit.
+
+## Before large changes
+
+- Grep for existing pattern (e.g. tier cards, payment sections).
+- Check tests under `map/test/features/<area>/`.

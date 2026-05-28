@@ -1,0 +1,22 @@
+# Flutter build-time defines (--dart-define=KEY=value)
+# Windows MVP: NAVER_MAP 미설정 시 mock 지도. Android/iOS는 PRODUCTION.md 이중 설정 참고.
+
+NAVER_MAP_CLIENT_ID=
+COMPLIANCE_API_URL=http://10.0.2.2:8000
+TOSS_CLIENT_KEY=
+CLOVA_OCR_URL=
+CLOVA_OCR_SECRET=
+NTS_API_KEY=
+
+KAKAO_REST_API_KEY=
+
+# 건강보험 인증(CODEF/Hyphen/Barocert/PortOne/INSURANCE_CI_SECRET)은
+# Flutter가 아닌 server/.env 에 설정 — COMPLIANCE_API_URL 로 API 연동
+
+# --- MVP 제품 범위 (product_feature_flags.dart · docs/disabled_features.md) ---
+# 기본값: 일용직만 · 상시직/일반/계약 off · 제휴사 위저드 on
+# ENABLE_WORKER_GENERAL=false
+# ENABLE_WORKER_CONTRACT=false
+# ENABLE_PERMANENT_HIRE=false
+# ENABLE_PREMIUM_PARTNER_WIZARD=true
+# ENABLE_ENTERPRISE_OUTSOURCING=true

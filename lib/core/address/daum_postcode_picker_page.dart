@@ -1,0 +1,153 @@
+import 'package:daum_postcode_search/daum_postcode_search.dart';
+import 'package:flutter/material.dart';
+import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/widgets/app_back_button.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
+/// Daum 우편번호 서비스 WebView — 동·도로명 주소 검색
+class DaumPostcodePickerPage extends StatefulWidget {
+  const DaumPostcodePickerPage({super.key});
+
+  static Future<DataModel?> show(BuildContext context) {
+    return Navigator.of(context).push<DataModel>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const DaumPostcodePickerPage(),
+      ),
+    );
+  }
+
+  @override
+  State<DaumPostcodePickerPage> createState() => _DaumPostcodePickerPageState();
+}
+
+class _DaumPostcodePickerPageState extends State<DaumPostcodePickerPage> {
+  final _server = DaumPostcodeLocalServer();
+  WebViewController? _controller;
+  bool _ready = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _startServer();
+  }
+
+  Future<void> _startServer() async {
+    try {
+      await _server.start();
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..addJavaScriptChannel(
+          'DaumPostcodeChannel',
+          onMessageReceived: (JavaScriptMessage message) {
+            final result =
+                DaumPostcodeCallbackParser.fromPostMessage(message.message);
+            if (result != null && mounted) {
+              Navigator.of(context).pop(result);
+            }
+          },
+        )
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onWebResourceError: (error) {
+              if (!mounted) return;
+              setState(() {
+                _errorMessage = error.description;
+                _ready = false;
+              });
+            },
+          ),
+        )
+        ..loadRequest(
+          Uri.parse('${_server.url}/${DaumPostcodeAssets.jsChannel}'),
+        );
+
+      if (!mounted) return;
+      setState(() {
+        _controller = controller;
+        _ready = true;
+        _errorMessage = null;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = error.toString();
+        _ready = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _server.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        leading: const AppBackButton(),
+        automaticallyImplyLeading: false,
+        title: const Text('주소 검색'),
+      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: AppColors.primary, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                '주소 검색을 불러오지 못했습니다',
+                style: TextStyle(
+                  color: AppColors.textPrimary.withValues(alpha: 0.95),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary.withValues(alpha: 0.95),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _errorMessage = null;
+                    _ready = false;
+                    _controller = null;
+                  });
+                  _startServer();
+                },
+                child: const Text('다시 시도'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!_ready || _controller == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return WebViewWidget(controller: _controller!);
+  }
+}

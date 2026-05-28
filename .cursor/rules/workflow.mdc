@@ -1,0 +1,73 @@
+---
+description: Plan-Execute-Verify-Improve loop and workflow_state.md progress tracking
+alwaysApply: true
+---
+
+# Workflow — Self-Directed Execution
+
+## Loop (every task)
+
+1. **Plan** — Read `workflow_state.md`, relevant PRD sections, and touched modules. State goal + files in mind (briefly, internally).
+2. **Execute** — Implement the smallest correct change. Prefer extending existing abstractions.
+3. **Verify** — Run targeted tests, then broader suite if risk is high. Fix failures before declaring done.
+4. **Improve** — Update `workflow_state.md`. Note follow-ups only if actionable.
+
+## Autonomous continuation
+
+- When **Current Task** is complete, take the next open **Backlog** item without asking.
+- If Backlog is empty, add up to 5 actionable items from PRD/code gaps, then continue.
+- See `.cursor/rules/autonomous-execution.mdc`.
+
+## workflow_state.md (mandatory)
+
+Path: **`d:/1jari/workflow_state.md`** (repo root).
+
+Update at **start** (Current Task), **during** (Progress bullets), and **end** (Completed + Test/Lint status) of every session task.
+
+Required sections:
+
+```markdown
+# Workflow State
+
+## Current Task
+- ...
+
+## Backlog (priority order)
+1. [ ] ...
+
+## Definition of Done
+- flutter analyze 0 errors; flutter test all pass; ...
+
+## Progress
+- [ ] ...
+- [x] ...
+
+## Completed (recent)
+- YYYY-MM-DD — summary
+
+## Blockers
+- none | ...
+
+## Verification
+- Tests: ...
+- Lint: ...
+```
+
+Keep **Completed (recent)** to the last ~10 entries. Archive old items into one-line summaries.
+
+## When to delegate vs do directly
+
+- Single coherent feature/bugfix: one end-to-end pass (investigate → code → test).
+- Long builds or full test suites: run in background; fix failures when notified.
+- Do not decompose small tasks into multiple agents.
+
+## Interruptions
+
+- Do not ask for permission to run tests, lint, or read-only exploration.
+- Do ask before: production deploy, force git ops, committing secrets, deleting large data.
+
+## Windows shell
+
+- PowerShell: use `;` not `&&` between commands.
+- Flutter cwd: `d:\1jari\map`
+- Server cwd: `d:\1jari\server`

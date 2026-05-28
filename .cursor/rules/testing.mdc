@@ -1,0 +1,62 @@
+---
+description: Proactive test and lint verification — run, fix, repeat
+globs: "{map/test/**,map/lib/**,server/**}"
+alwaysApply: false
+---
+
+# Testing — Verify Before Done
+
+## Default commands
+
+```powershell
+cd d:\1jari\map; flutter test
+cd d:\1jari\map; flutter analyze
+```
+
+Run **targeted tests first**, then full suite when touching shared core, pricing, or auth.
+
+### Targeted examples
+
+```powershell
+cd d:\1jari\map; flutter test test/features/corporate/corporate_home_shell_test.dart
+cd d:\1jari\map; flutter test test/features/corporate/
+cd d:\1jari\map; flutter test test/core/compliance/
+```
+
+## When to add tests
+
+- User requests tests, OR
+- Bug fix with clear repro → add regression test, OR
+- New business rule (tier limits, payment gating, commission math).
+
+Do **not** add trivial widget existence tests.
+
+## Widget tests
+
+- Use `SharedPreferences.setMockInitialValues({})` + `AuthSession.instance.signOut()` in tearDown.
+- Scroll before tap if home shell content is below fold (`scrollUntilVisible` / `ensureVisible`).
+
+## Fix loop
+
+1. Run failing test → read stack trace.
+2. Fix root cause (not assertion-only hacks).
+3. Re-run failed file → then related folder → then full `flutter test` if high risk.
+4. Record result in `workflow_state.md` → **Verification**.
+
+## Lint
+
+- After substantive edits: `ReadLints` on touched paths or `flutter analyze`.
+- Zero new analyzer errors in changed files before marking task complete.
+
+## Server
+
+```powershell
+cd d:\1jari\server; python -m pytest
+```
+
+Run when changing `server/app/` routes or compliance logic.
+
+## CI mindset
+
+- Prefer green suite over skipping tests.
+- Mock external APIs (PG, OCR, maps) — never require real keys in unit tests.

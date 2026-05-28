@@ -1,0 +1,48 @@
+---
+description: Continuous autonomous execution — backlog loop, no trivial asks, session kickoff
+alwaysApply: true
+---
+
+# Autonomous Execution — Continuous Push
+
+The user wants **Plan → Execute → Verify → Improve → next task** without stopping for trivial confirmation.
+
+## Session start (every chat)
+
+1. Read `d:/1jari/workflow_state.md` (**Backlog** first).
+2. If **Current Task** is done or empty, take **Backlog item #1** (or highest open priority).
+3. Do not ask "should I proceed?" — implement, test, update state, continue to next backlog item if time allows.
+
+## Backlog loop
+
+- Finish one backlog item → mark `[x]` → run **Verification** → pick next item.
+- If blocked: write **Blockers** in `workflow_state.md`, try workaround, only then stop.
+- When Backlog is empty: scan codebase for stale tier copy, failing tests, PRD gaps; append new backlog items yourself (max 5), then continue.
+
+## Never ask (do automatically)
+
+- Run `flutter analyze`, `flutter test`, read files, grep, small refactors.
+- Fix compile/test failures caused by your changes.
+- Update `workflow_state.md` after each meaningful chunk.
+
+## Always ask first
+
+- `git commit`, `git push`, force push, production deploy.
+- Committing `.env`, secrets, API keys.
+- Irreversible data deletion or product direction change contradicting `PUSH_PACKAGE_PRICING.md`.
+
+## User kickoff phrases (honor immediately)
+
+- `Backlog 처리` / `자율 모드` / `쭉 밀어` → run backlog loop until blocked or session limit.
+- No extra scope question — infer from Backlog + PRD.
+
+## Multitask / long work
+
+- Prefer background subagents for multi-file features; parent coordinates, does not re-summarize completed workers unless user asks.
+
+## Definition of Done (this repo)
+
+- `flutter analyze`: **0 errors**
+- `flutter test`: **all pass**
+- UI copy aligned with `map/PUSH_PACKAGE_PRICING.md` (1km, BRN bonus 5, no tier names)
+- `workflow_state.md` updated

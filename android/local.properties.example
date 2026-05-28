@@ -1,0 +1,5 @@
+# Uncomment and set flutter.sdk path after installing Flutter SDK.
+# flutter.sdk=C:\\flutter
+
+# Naver Map SDK (Android manifest + optional reference for dart-define)
+# naver.map.client.id=YOUR_NAVER_MAP_CLIENT_ID

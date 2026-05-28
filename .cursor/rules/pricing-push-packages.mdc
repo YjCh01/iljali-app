@@ -1,0 +1,64 @@
+---
+description: Push·location package pricing — replaces all legacy tiers (2026)
+alwaysApply: true
+---
+
+# Pricing — 추가구매 우선 (푸시·거점 패키지)
+
+**Legacy REMOVED**: Basic, Starter, Growth, Enterprise, Premium, monthly partnership tiers. Do not reintroduce.
+
+**Source of truth**: `map/PUSH_PACKAGE_PRICING.md` + PRD §4.
+
+## Default plan (only free tier)
+
+| Field | Value |
+|-------|-------|
+| Name | `기본 플랜` (no tier enum labels) |
+| Push radius | **1km** (interim: same as package) |
+| Daily free push | **1/day** |
+| Signup bonus | **5 packages per BRN** (90-day expiry; not per account) |
+| Base locations | **1** |
+| Monthly fee | **0** |
+
+Free is **stingy by design** — drive package purchases (extra bases + pushes).
+
+## Core product
+
+**`푸시·거점 패키지`** — **5,000 KRW** = **1 location + 1 push** (push at **1km** from that location).
+
+## Bundles
+
+| SKU | Count | Price | Discount |
+|-----|-------|-------|----------|
+| 10회 팩 | 10 | 45,000 | 10% |
+| 30회 팩 | 30 | 120,000 | 20% |
+| 100회 팩 | 100 | 350,000 | 30% |
+
+Credits expire **365 days** after purchase.
+
+## Depletion order
+
+1. Daily free (1km, 1/day)  
+2. Signup bonus (1km, BRN ledger)  
+3. Package credits (1km at chosen base point)
+
+## BRN bonus ledger
+
+- `CompanyBonusLedgerRepository.tryClaimSignupBonus(companyKey)` — once per BRN  
+- Wallet keyed by `companyKey`; handlers share balance
+
+## Revenue mix
+
+- **Primary**: package sales  
+- **Secondary**: daily-worker check-in fee (10,000 KRW), permanent-worker 5.5% — unchanged unless PRD updates
+
+## UX copy rules
+
+- Home/marketing: **1km · 1/day · BRN bonus 5** vs **package = extra bases + pushes**  
+- Never show tier comparison grids or “upgrade plan”
+
+## Code migration
+
+- Deprecate `PremiumPartnershipTier`, partnership subscription pages  
+- Use `PushPackageCatalog`, `EmployerPushWallet`, `PushWalletRepository`, `CompanyBonusLedgerRepository`  
+- `PushPlanEnforcement` reads wallet, not tier

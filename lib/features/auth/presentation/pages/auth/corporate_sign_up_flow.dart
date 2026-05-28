@@ -1,0 +1,904 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/session/auth_session.dart';
+import 'package:map/core/session/auth_user.dart';
+import 'package:map/core/session/member_type.dart';
+import 'package:map/features/auth/domain/usecases/validate_sign_up_form_usecase.dart';
+import 'package:map/features/auth/presentation/widgets/auth_form_card.dart';
+import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart';
+import 'package:map/features/auth/presentation/widgets/auth_scaffold.dart';
+import 'package:map/features/auth/presentation/widgets/auth_text_field.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:map/core/compliance/business_entity_type.dart';
+import 'package:map/core/compliance/outsourcing_policy.dart';
+import 'package:map/core/compliance/services/business_verification_service.dart';
+import 'package:map/core/compliance/verified_business_record.dart';
+import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
+import 'package:map/features/corporate/data/repositories/corporate_account_registry.dart';
+import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
+
+enum _CorporateSignUpStep {
+  account,
+  company,
+  verification,
+  handler,
+  codeConfirm,
+}
+
+/// 기업회원 다단계 가입 — 계정 → 기업정보 → 담당부서/담당자 → 4자리 코드
+class CorporateSignUpFlow extends StatefulWidget {
+  const CorporateSignUpFlow({super.key});
+
+  @override
+  State<CorporateSignUpFlow> createState() => _CorporateSignUpFlowState();
+}
+
+class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
+  final _validateSignUp = const ValidateSignUpFormUseCase();
+  _CorporateSignUpStep _step = _CorporateSignUpStep.account;
+  bool _usedSocialSignUp = false;
+
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _passwordConfirmController = TextEditingController();
+  final _companyController = TextEditingController();
+  final _businessRegController = TextEditingController();
+  final _departmentController = TextEditingController();
+  final _contactPersonController = TextEditingController();
+
+  bool _obscurePassword = true;
+  bool _obscurePasswordConfirm = true;
+  bool _submitting = false;
+
+  String? _nameError;
+  String? _phoneError;
+  String? _emailError;
+  String? _passwordError;
+  String? _passwordConfirmError;
+  String? _companyError;
+  String? _businessRegError;
+  String? _departmentError;
+  String? _contactError;
+  String? _verificationError;
+
+  BusinessEntityType _entityType = BusinessEntityType.corporation;
+  String? _certificateImageRef;
+  bool _policyAccepted = false;
+  bool _verifying = false;
+  VerifiedBusinessRecord? _verificationRecord;
+
+  CorporateMemberProfile? _assignedProfile;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _passwordConfirmController.dispose();
+    _companyController.dispose();
+    _businessRegController.dispose();
+    _departmentController.dispose();
+    _contactPersonController.dispose();
+    super.dispose();
+  }
+
+  void _snack(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.authBackground,
+        ),
+      );
+  }
+
+  void _mockSocialSignUp(String provider) {
+    setState(() {
+      _usedSocialSignUp = true;
+      _nameController.text = '김담당';
+      _phoneController.text = '01055556666';
+      _emailController.text = '$provider.demo@iljari.co.kr';
+      _passwordController.clear();
+      _passwordConfirmController.clear();
+      _step = _CorporateSignUpStep.company;
+    });
+    _snack('$provider 로 가입 정보를 불러왔습니다. (MVP mock)');
+  }
+
+  void _continueFromAccount() {
+    if (_usedSocialSignUp) {
+      if (_nameController.text.trim().isEmpty ||
+          _emailController.text.trim().isEmpty) {
+        _snack('소셜 가입 정보를 확인해 주세요.');
+        return;
+      }
+      setState(() => _step = _CorporateSignUpStep.company);
+      return;
+    }
+
+    final result = _validateSignUp(
+      name: _nameController.text,
+      phone: _phoneController.text,
+      email: _emailController.text,
+      password: _passwordController.text,
+      passwordConfirm: _passwordConfirmController.text,
+    );
+    setState(() {
+      _nameError = result.nameError;
+      _phoneError = result.phoneError;
+      _emailError = result.emailError;
+      _passwordError = result.passwordError;
+      _passwordConfirmError = result.passwordConfirmError;
+    });
+    if (!result.isValid) {
+      final message = result.firstError;
+      if (message != null) _snack(message);
+      return;
+    }
+    setState(() => _step = _CorporateSignUpStep.company);
+  }
+
+  void _continueFromCompany() {
+    final company = _companyController.text.trim();
+    final businessReg = _businessRegController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    setState(() {
+      _companyError = company.isEmpty ? '회사명을 입력해 주세요.' : null;
+      _businessRegError = businessReg.length != 10
+          ? '사업자등록번호 10자리를 입력해 주세요.'
+          : null;
+    });
+    if (_companyError != null || _businessRegError != null) {
+      _snack(_companyError ?? _businessRegError!);
+      return;
+    }
+    setState(() => _step = _CorporateSignUpStep.verification);
+  }
+
+  void _mockUploadCertificate() {
+    _pickCertificateImage(fromCamera: false);
+  }
+
+  Future<void> _pickCertificateImage({required bool fromCamera}) async {
+    try {
+      final picker = ImagePicker();
+      final file = await picker.pickImage(
+        source: fromCamera ? ImageSource.camera : ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      setState(() {
+        _certificateImageRef = file.path;
+        _verificationError = null;
+      });
+      _snack('사업자등록증이 업로드되었습니다.');
+    } on Object {
+      setState(() {
+        _certificateImageRef =
+            'mock://certificate/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      });
+      _snack('갤러리 접근 불가 — mock 업로드로 대체합니다.');
+    }
+  }
+
+  Future<void> _runBusinessVerification() async {
+    if (_certificateImageRef == null) {
+      setState(() => _verificationError = '사업자등록증을 업로드해 주세요.');
+      _snack('사업자등록증 업로드가 필요합니다.');
+      return;
+    }
+    if (!_policyAccepted) {
+      setState(() => _verificationError = '이용 제한 약관에 동의해 주세요.');
+      _snack('아웃소싱·인력공급 이용 제한 약관에 동의해 주세요.');
+      return;
+    }
+
+    setState(() {
+      _verifying = true;
+      _verificationError = null;
+    });
+
+    try {
+      final service = BusinessVerificationService();
+      final record = await service.verifyWithCertificate(
+        businessRegistrationNumber: _businessRegController.text,
+        companyName: _companyController.text.trim(),
+        entityType: _entityType,
+        certificateImageRef: _certificateImageRef!,
+      );
+      if (!mounted) return;
+      setState(() {
+        _verificationRecord = record;
+        _verifying = false;
+        _step = _CorporateSignUpStep.handler;
+      });
+      if (record.requiresAdminReview) {
+        _snack('업종 검토 대상입니다. Enterprise 가입·관리자 승인 후 연락 기능이 활성화됩니다.');
+      } else {
+        _snack('사업자 검증이 완료되었습니다.');
+      }
+    } on BusinessVerificationException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _verifying = false;
+        _verificationError = e.message;
+      });
+      _snack(e.message);
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _verifying = false;
+        _verificationError = '검증 중 오류가 발생했습니다.';
+      });
+      _snack('사업자 검증에 실패했습니다.');
+    }
+  }
+
+  void _continueFromVerification() {
+    if (_verificationRecord != null) {
+      setState(() => _step = _CorporateSignUpStep.handler);
+      return;
+    }
+    _runBusinessVerification();
+  }
+
+  Future<void> _assignHandlerCode() async {
+    final department = _departmentController.text.trim();
+    final contact = _contactPersonController.text.trim();
+    setState(() {
+      _departmentError = department.isEmpty ? '담당부서를 입력해 주세요.' : null;
+      _contactError = contact.isEmpty ? '담당자명을 입력해 주세요.' : null;
+    });
+    if (_departmentError != null || _contactError != null) {
+      _snack(_departmentError ?? _contactError!);
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      final registry = await CorporateAccountRegistry.create();
+      final profile = await registry.registerHandler(
+        companyName: _companyController.text.trim(),
+        businessRegistrationNumber: _businessRegController.text,
+        department: department,
+        contactPersonName: contact,
+      );
+      final record = _verificationRecord;
+      final enriched = record == null
+          ? profile
+          : profile.copyWith(
+              entityType: record.entityType,
+              verificationStatus: record.status,
+              requiresAdminReview: record.requiresAdminReview,
+              adminReviewReason: record.adminReviewReason,
+              certificateImageRef: record.certificateImageRef,
+              industryName: record.industryName,
+              policyAcceptedAt: DateTime.now(),
+            );
+      if (!mounted) return;
+      setState(() {
+        _assignedProfile = enriched;
+        _step = _CorporateSignUpStep.codeConfirm;
+        _submitting = false;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _snack('담당자 코드 발급에 실패했습니다.');
+    }
+  }
+
+  Future<void> _completeSignUp() async {
+    final profile = _assignedProfile;
+    if (profile == null) return;
+
+    await AuthSession.instance.signIn(
+      AuthUser(
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        phone: _phoneController.text.trim().isEmpty
+            ? null
+            : _phoneController.text.trim(),
+        memberType: MemberType.corporate,
+        corporateProfile: profile,
+      ),
+    );
+
+    final signedIn = AuthSession.instance.currentUser?.corporateProfile;
+    if (signedIn != null) {
+      await PushWalletService().loadWallet(signedIn);
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      AppRoutes.corporateWelcomeOnboarding,
+      (_) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AuthScaffold(
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+        onPressed: () {
+          if (_step == _CorporateSignUpStep.account) {
+            Navigator.of(context).pop();
+          } else {
+            setState(() {
+              _step = switch (_step) {
+                _CorporateSignUpStep.company => _CorporateSignUpStep.account,
+                _CorporateSignUpStep.verification =>
+                  _CorporateSignUpStep.company,
+                _CorporateSignUpStep.handler =>
+                  _CorporateSignUpStep.verification,
+                _CorporateSignUpStep.codeConfirm =>
+                  _CorporateSignUpStep.handler,
+                _ => _CorporateSignUpStep.account,
+              };
+            });
+          }
+        },
+      ),
+      body: AuthFormCard(
+        child: switch (_step) {
+          _CorporateSignUpStep.account => _buildAccountStep(),
+          _CorporateSignUpStep.company => _buildCompanyStep(),
+          _CorporateSignUpStep.verification => _buildVerificationStep(),
+          _CorporateSignUpStep.handler => _buildHandlerStep(),
+          _CorporateSignUpStep.codeConfirm => _buildCodeConfirmStep(),
+        },
+      ),
+      bottom: GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: RichText(
+          textAlign: TextAlign.center,
+          text: const TextSpan(
+            style: TextStyle(fontSize: 14, color: Colors.white70),
+            children: [
+              TextSpan(text: '이미 계정이 있으신가요? '),
+              TextSpan(
+                text: '로그인하기',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
+                  decorationColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          '기업회원 가입',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '소셜 또는 아이디로 가입한 뒤 기업·담당자 정보를 등록합니다.',
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.4,
+            color: AppColors.textSecondary.withValues(alpha: 0.95),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: _SocialButton(
+                label: '카카오',
+                color: const Color(0xFFFEE500),
+                textColor: Colors.black87,
+                onTap: () => _mockSocialSignUp('Kakao'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SocialButton(
+                label: '네이버',
+                color: const Color(0xFF03C75A),
+                onTap: () => _mockSocialSignUp('Naver'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SocialButton(
+                label: 'Google',
+                color: Colors.white,
+                textColor: AppColors.textPrimary,
+                onTap: () => _mockSocialSignUp('Google'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: Divider(color: AppColors.textSecondary.withValues(alpha: 0.3))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(
+                '아이디 가입',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary.withValues(alpha: 0.9),
+                ),
+              ),
+            ),
+            Expanded(child: Divider(color: AppColors.textSecondary.withValues(alpha: 0.3))),
+          ],
+        ),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '이름',
+          hint: '홍길동',
+          controller: _nameController,
+          keyboardType: TextInputType.name,
+          textInputAction: TextInputAction.next,
+          errorText: _nameError,
+        ),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '휴대폰 번호',
+          hint: '01012345678',
+          controller: _phoneController,
+          keyboardType: TextInputType.number,
+          maxLength: 11,
+          textInputAction: TextInputAction.next,
+          errorText: _phoneError,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(11),
+          ],
+        ),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '이메일',
+          hint: 'example@email.com',
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          errorText: _emailError,
+        ),
+        if (!_usedSocialSignUp) ...[
+          const SizedBox(height: 16),
+          AuthTextField(
+            label: '비밀번호',
+            hint: '8자 이상 입력',
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            textInputAction: TextInputAction.next,
+            errorText: _passwordError,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: AppColors.textSecondary,
+                size: 22,
+              ),
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+            ),
+          ),
+          const SizedBox(height: 16),
+          AuthTextField(
+            label: '비밀번호 확인',
+            hint: '비밀번호를 다시 입력하세요',
+            controller: _passwordConfirmController,
+            obscureText: _obscurePasswordConfirm,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _continueFromAccount(),
+            errorText: _passwordConfirmError,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePasswordConfirm
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: AppColors.textSecondary,
+                size: 22,
+              ),
+              onPressed: () => setState(
+                () => _obscurePasswordConfirm = !_obscurePasswordConfirm,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+        AuthPrimaryButton(
+          label: '다음 — 기업 정보',
+          onPressed: _continueFromAccount,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompanyStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          '기업 정보',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '회사명과 사업자등록번호를 입력해 주세요.',
+          style: TextStyle(
+            fontSize: 14,
+            color: AppColors.textSecondary.withValues(alpha: 0.95),
+          ),
+        ),
+        const SizedBox(height: 24),
+        AuthTextField(
+          label: '회사명',
+          hint: '(주)일자리',
+          controller: _companyController,
+          textInputAction: TextInputAction.next,
+          errorText: _companyError,
+        ),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '사업자등록번호',
+          hint: '1234567890',
+          controller: _businessRegController,
+          keyboardType: TextInputType.number,
+          maxLength: 12,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _continueFromCompany(),
+          errorText: _businessRegError,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(10),
+          ],
+        ),
+        const SizedBox(height: 24),
+        AuthPrimaryButton(
+          label: '다음 — 사업자 검증',
+          onPressed: _continueFromCompany,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerificationStep() {
+    final record = _verificationRecord;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          '사업자 검증',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '사업자등록증 업로드 후 OCR·국세청 API로 실제 사업자·업종을 확인합니다.',
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.4,
+            color: AppColors.textSecondary.withValues(alpha: 0.95),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          '사업자 유형',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSecondary.withValues(alpha: 0.95),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<BusinessEntityType>(
+          segments: const [
+            ButtonSegment(
+              value: BusinessEntityType.soleProprietor,
+              label: Text('개인사업자'),
+            ),
+            ButtonSegment(
+              value: BusinessEntityType.corporation,
+              label: Text('법인'),
+            ),
+          ],
+          selected: {_entityType},
+          onSelectionChanged: (selection) {
+            setState(() => _entityType = selection.first);
+          },
+        ),
+        const SizedBox(height: 20),
+        OutlinedButton.icon(
+          onPressed: _mockUploadCertificate,
+          icon: const Icon(Icons.upload_file_outlined),
+          label: Text(
+            _certificateImageRef == null
+                ? '사업자등록증 업로드 (필수)'
+                : '업로드 완료 — 다시 선택',
+          ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => _pickCertificateImage(fromCamera: true),
+          icon: const Icon(Icons.photo_camera_outlined),
+          label: const Text('카메라로 촬영'),
+        ),
+        if (_certificateImageRef != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            '파일: ${_certificateImageRef!.split('/').last}',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary.withValues(alpha: 0.9),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.textSecondary.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                OutsourcingPolicy.termsTitle,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                OutsourcingPolicy.termsBody.trim(),
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.45,
+                  color: AppColors.textSecondary.withValues(alpha: 0.95),
+                ),
+              ),
+            ],
+          ),
+        ),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _policyAccepted,
+          onChanged: (value) =>
+              setState(() => _policyAccepted = value ?? false),
+          title: const Text(
+            '아웃소싱·인력공급 이용 제한 약관에 동의합니다.',
+            style: TextStyle(fontSize: 13),
+          ),
+          controlAffinity: ListTileControlAffinity.leading,
+        ),
+        if (record != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: record.requiresAdminReview
+                  ? Colors.orange.withValues(alpha: 0.12)
+                  : AppColors.primaryLight.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              record.requiresAdminReview
+                  ? '업종「${record.industryName}」— 관리자 검토·Enterprise 가입 필요'
+                  : '검증 완료 · ${record.industryName ?? ''}',
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ),
+        ],
+        if (_verificationError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _verificationError!,
+            style: const TextStyle(color: Colors.red, fontSize: 13),
+          ),
+        ],
+        const SizedBox(height: 20),
+        AuthPrimaryButton(
+          label: _verifying
+              ? 'OCR·국세청 검증 중...'
+              : record == null
+                  ? '검증 후 다음'
+                  : '다음 — 담당자 정보',
+          onPressed: _verifying ? () {} : _continueFromVerification,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHandlerStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          '담당부서 및 담당자를\n입력해주세요',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            height: 1.35,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '같은 기업의 담당자마다 4자리 하위 코드가 자동 발급됩니다.',
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.4,
+            color: AppColors.textSecondary.withValues(alpha: 0.95),
+          ),
+        ),
+        const SizedBox(height: 24),
+        AuthTextField(
+          label: '담당부서',
+          hint: '인사팀 / 채용팀',
+          controller: _departmentController,
+          textInputAction: TextInputAction.next,
+          errorText: _departmentError,
+        ),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '담당자명',
+          hint: '홍길동',
+          controller: _contactPersonController,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _assignHandlerCode(),
+          errorText: _contactError,
+        ),
+        const SizedBox(height: 24),
+        AuthPrimaryButton(
+          label: _submitting ? '코드 발급 중...' : '담당자 코드 발급',
+          onPressed: () {
+            if (!_submitting) _assignHandlerCode();
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCodeConfirmStep() {
+    final profile = _assignedProfile!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          '담당자 코드가 발급되었습니다',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            children: [
+              Text(
+                profile.handlerCode,
+                style: const TextStyle(
+                  fontSize: 42,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 6,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                profile.companyName,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${profile.department} · ${profile.contactPersonName}',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary.withValues(alpha: 0.95),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '공고 등록·결제 시 이 코드로 내부 결재 보고서가 생성됩니다.',
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.45,
+            color: AppColors.textSecondary.withValues(alpha: 0.9),
+          ),
+        ),
+        const SizedBox(height: 24),
+        AuthPrimaryButton(
+          label: '가입 완료',
+          onPressed: _completeSignUp,
+        ),
+      ],
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  const _SocialButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.textColor = Colors.white,
+  });
+
+  final String label;
+  final Color color;
+  final Color textColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.searchBarBorder),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
