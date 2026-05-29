@@ -3,6 +3,7 @@ import 'package:map/features/corporate/domain/entities/job_post_payment_record.d
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
+import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 /// 채용 공고 고용 형태 — 일용직(출근 확인) · 상시직(재직 확인)
@@ -33,6 +34,7 @@ class CorporateJobPost {
     required this.status,
     required this.applicantCount,
     required this.postedAt,
+    this.expiresAt,
     this.employmentType = JobEmploymentType.daily,
     this.workerCategory,
     this.dailyWage,
@@ -81,6 +83,7 @@ class CorporateJobPost {
   final CorporateJobPostStatus status;
   final int applicantCount;
   final DateTime postedAt;
+  final DateTime? expiresAt;
 
   CorporateJobPost copyWith({
     String? title,
@@ -104,6 +107,7 @@ class CorporateJobPost {
     CorporateJobPostStatus? status,
     int? applicantCount,
     DateTime? postedAt,
+    DateTime? expiresAt,
   }) {
     return CorporateJobPost(
       id: id,
@@ -128,6 +132,7 @@ class CorporateJobPost {
       status: status ?? this.status,
       applicantCount: applicantCount ?? this.applicantCount,
       postedAt: postedAt ?? this.postedAt,
+      expiresAt: expiresAt ?? this.expiresAt,
     );
   }
 }
@@ -168,6 +173,14 @@ extension CorporateJobPostMapPinX on CorporateJobPost {
 }
 
 extension CorporateJobPostDisplayX on CorporateJobPost {
+  DateTime get effectiveExpiresAt =>
+      expiresAt ?? JobPostValidity.expiresAtFromRegistration(postedAt);
+
+  bool get isExpired => JobPostValidity.isExpired(effectiveExpiresAt);
+
+  bool get isActiveForSeekers =>
+      !isExpired && status != CorporateJobPostStatus.closed;
+
   /// 구버전(합쳐진 summary만 있는 공고) 호환
   String get fullDescriptionText {
     final job = jobDescription.trim();

@@ -36,7 +36,7 @@ class _CorporateWelcomeOnboardingPageState
           title: '지도 기반\n스마트 채용',
           body: '근무지 도로명 주소를 기준으로\n'
               '공고 노출 범위 설정으로 주변 구직자에게 공고를 알립니다.\n'
-              '공고 등록은 무료, 넓은 노출은 패키지로 확장하세요.',
+              '공고 등록은 완전 무료, 추가 모집지역은 지역 푸시권으로 확장하세요.',
         ),
         _OnboardingSlide(
           icon: Icons.verified_user_outlined,
@@ -60,7 +60,7 @@ class _CorporateWelcomeOnboardingPageState
         title: '지도 기반\n스마트 채용',
         body: '근무지 도로명 주소를 기준으로\n'
             '공고 노출 범위 설정으로 주변 구직자에게 공고를 알립니다.\n'
-            '공고 등록은 무료, 넓은 노출은 패키지로 확장하세요.',
+            '공고 등록은 완전 무료, 추가 모집지역은 지역 푸시권으로 확장하세요.',
       ),
       _OnboardingSlide(
         icon: Icons.verified_user_outlined,

@@ -78,7 +78,7 @@ class _CorporateMoreTabState extends State<CorporateMoreTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '공고 노출·모집 패키지',
+                  '유료 지역 푸시권',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -87,7 +87,7 @@ class _CorporateMoreTabState extends State<CorporateMoreTab> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '5,000원 = 노출 범위 1 + 모집 1회 (1km) · 번들 할인 · 기본 플랜 1km·일 1회',
+                  '5,000원/회 · 10회 45,000원 · 30회 120,000원 · 100회 350,000원 · 황금핀은 100회 팩 전용',
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.4,

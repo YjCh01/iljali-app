@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/corporate/domain/usecases/search_workplace_address_usecase.dart';
@@ -13,6 +15,8 @@ import 'package:map/features/corporate/domain/services/push_wallet_service.dart'
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
 import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
+import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
+import 'package:map/features/corporate/presentation/widgets/exposure_zone_add_row.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 
@@ -45,7 +49,7 @@ class _PushNotificationBasePointPageState
   String _addressLabel = '';
   List<WorkplaceAddress> _searchResults = [];
   bool _searching = false;
-  bool _showAddZoneMenu = false;
+  bool _walletReady = false;
 
   @override
   void initState() {
@@ -96,10 +100,16 @@ class _PushNotificationBasePointPageState
 
   Future<void> _ensureWalletLoaded() async {
     final profile = AuthSession.instance.currentUser?.corporateProfile;
-    if (profile == null) return;
+    if (profile == null) {
+      if (mounted) setState(() => _walletReady = true);
+      return;
+    }
     await PushWalletService().loadWallet(profile);
     if (!mounted) return;
-    setState(_clampAllToPlan);
+    setState(() {
+      _walletReady = true;
+      _clampAllToPlan();
+    });
   }
 
   void _clampAllToPlan() {
@@ -124,7 +134,7 @@ class _PushNotificationBasePointPageState
     }
   }
 
-  /// 패키지 구매 후 반경·거점 한도를 지갑 기준으로 일괄 반영
+  /// 지역 푸시권 구매 후 반경·거점 한도를 지갑 기준으로 일괄 반영
   void _applyWalletDefaults() {
     _pointTier = PushPlanEnforcement.maxPointTier;
     _radiusTier = PushPlanEnforcement.defaultFreeRadiusTier;
@@ -183,9 +193,30 @@ class _PushNotificationBasePointPageState
     _searchController.text = point.addressLabel;
   }
 
-  int get _maxPoints => PushPlanEnforcement.maxBasePointsSync;
+  int get _maxPoints {
+    final wallet =
+        AuthSession.instance.currentUser?.corporateProfile?.pushWallet ??
+            const EmployerPushWallet();
+    return PushWalletCreditPolicy.effectiveMaxExposurePoints(
+      wallet: wallet,
+      currentPointsLength: _points.length,
+    );
+  }
 
-  /// 기본 거점(사업장)은 이동 불가 — 패키지로 추가 거점 슬롯이 있을 때만 검색·이동
+  int get _availableCredits =>
+      AuthSession.instance.currentUser?.corporateProfile?.pushWallet
+          ?.packageRecruitCredits ??
+      0;
+
+  int get _remainingAddSlots => PushWalletCreditPolicy.configureRemainingAddSlots(
+        slotRemaining:
+            (_maxPoints - _points.length).clamp(0, _maxPoints),
+        availableCredits: _availableCredits,
+        recruitZoneCount:
+            PushWalletCreditPolicy.recruitmentZoneCountFromPoints(_points),
+      );
+
+  /// 기본 거점(사업장)은 이동 불가 — 지역 푸시권으로 추가 거점 슬롯이 있을 때만 검색·이동
   bool get _canEditActivePointLocation =>
       _maxPoints > 1 && _activePointIndex > 0;
 
@@ -250,7 +281,7 @@ class _PushNotificationBasePointPageState
     if (!PushPlanEnforcement.isRadiusAllowed(tier)) {
       _showPlanUpsell(
         '${tier.label}은(는) ${PushPackageCatalog.defaultPlanLabel} 한도를 초과합니다. '
-        '1km·추가 공고 노출 범위는 패키지가 필요합니다.',
+        '추가 공고 노출 범위는 지역 푸시권이 필요합니다.',
       );
       return;
     }
@@ -274,32 +305,68 @@ class _PushNotificationBasePointPageState
     setState(() {
       _activePointIndex = index;
       _loadActivePointState();
-      _showAddZoneMenu = false;
     });
   }
 
   void _addPoint() {
+    if (_remainingAddSlots <= 0) return;
     if (_points.length >= _maxPoints) return;
     _syncActivePointToList();
+    unawaited(_addPointWithCredit());
+  }
+
+  Future<void> _addPointWithCredit() async {
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (profile == null) return;
+    if (_availableCredits <= 0) {
+      await _openPushPackageShop();
+      return;
+    }
+    final result =
+        await PushWalletService().tryConsumeRecruitmentCredit(profile);
+    if (!mounted) return;
+    if (!result.success) {
+      await _openPushPackageShop();
+      return;
+    }
+    await _ensureWalletLoaded();
+    if (!mounted) return;
+    if (_remainingAddSlots <= 0 || _points.length >= _maxPoints) return;
+    _syncActivePointToList();
+    setState(_addPointInternal);
+  }
+
+  void _removePoint(int index) {
+    if (index <= 0 || index >= _points.length) return;
+    unawaited(_removePointWithRefund(index));
+  }
+
+  Future<void> _removePointWithRefund(int index) async {
+    if (index <= 0 || index >= _points.length) return;
+    _syncActivePointToList();
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (profile != null) {
+      await PushWalletService().refundRecruitmentCredit(profile);
+      await _ensureWalletLoaded();
+    }
+    if (!mounted) return;
     setState(() {
-      _addPointInternal();
-      _showAddZoneMenu = false;
+      _points.removeAt(index);
+      if (_activePointIndex >= _points.length) {
+        _activePointIndex = _points.length - 1;
+      } else if (_activePointIndex > index) {
+        _activePointIndex--;
+      }
+      _loadActivePointState();
     });
   }
 
-  void _onAddZoneFabPressed() {
-    setState(() => _showAddZoneMenu = !_showAddZoneMenu);
-  }
-
-  int get _exposureRangeRemaining =>
-      (_maxPoints - _points.length).clamp(0, _maxPoints);
-
-  void _onAddZoneFromMenu() {
+  void _onAddZoneFromRow() {
+    if (_remainingAddSlots <= 0) return;
     if (_points.length >= _maxPoints) {
-      setState(() => _showAddZoneMenu = false);
       _showPlanUpsell(
         _maxPoints <= 1
-            ? '추가 공고 노출 범위는 패키지 구매 후 이용할 수 있습니다.'
+            ? '추가 공고 노출 범위는 지역 푸시권 구매 후 이용할 수 있습니다.'
             : '설정 가능한 공고 노출 범위 $_maxPoints곳을 모두 사용 중입니다.',
       );
       return;
@@ -309,14 +376,17 @@ class _PushNotificationBasePointPageState
 
   void _confirm() {
     _syncActivePointToList();
+    _clampAllToPlan();
+    final maxPoints = _maxPoints;
     Navigator.of(context).pop(
       JobPostNotificationSettings(
-        basePoints: List.unmodifiable(_points),
+        basePoints: List.unmodifiable(_points.take(maxPoints).toList()),
         pushCountLimit: PushPlanEnforcement.dailyPushLimit,
-        maxBasePointsAllowed: PushPlanEnforcement.maxPointTier.maxPoints,
-        paymentCompleted: true,
+        maxBasePointsAllowed: maxPoints,
+        paymentCompleted: _points.length <= PushPackageCatalog.baseLocationSlots,
         designatedPointTier: _pointTier,
-        spotPaymentCompleted: true,
+        spotPaymentCompleted:
+            _points.length <= PushPackageCatalog.baseLocationSlots,
       ),
     );
   }
@@ -325,10 +395,10 @@ class _PushNotificationBasePointPageState
     final goShop = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('패키지 필요'),
+        title: const Text('지역 푸시권 필요'),
         content: Text(
           '$message\n\n'
-          '패키지로 1km 반경·추가 공고 노출 범위·지원자 모집하기를 사용할 수 있습니다.',
+          '지역 푸시권으로 모집지역 추가 및 추가 모집 발송을 진행할 수 있습니다.',
         ),
         actions: [
           TextButton(
@@ -337,7 +407,7 @@ class _PushNotificationBasePointPageState
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('패키지 보기'),
+            child: const Text('지역 푸시권 보기'),
           ),
         ],
       ),
@@ -354,7 +424,9 @@ class _PushNotificationBasePointPageState
 
   @override
   Widget build(BuildContext context) {
-    final theme = _visualTheme;
+    final walletTheme = _visualTheme;
+    final activeTheme =
+        PushCreditVisualTheme.forRecruitPoint(_activePointIndex);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -365,7 +437,9 @@ class _PushNotificationBasePointPageState
         automaticallyImplyLeading: false,
         title: const Text('공고 노출 범위 설정'),
       ),
-      body: Column(
+      body: !_walletReady
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1) 지도 + 반경 슬라이더 — 항상 최상단
@@ -386,7 +460,7 @@ class _PushNotificationBasePointPageState
                     centerEditable: _canEditActivePointLocation,
                     existingPoints: _existingMapOverlays,
                     activePointLabel: _activeMapLabel,
-                    visualTheme: theme,
+                    visualTheme: activeTheme,
                     onExistingPointTap: _points.length > 1
                         ? _selectPointTab
                         : null,
@@ -398,123 +472,55 @@ class _PushNotificationBasePointPageState
                       });
                     },
                   ),
-                  Positioned(
-                    right: 12,
-                    bottom: 12,
-                    child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (_showAddZoneMenu) ...[
-                            Material(
-                              elevation: 4,
-                              borderRadius: BorderRadius.circular(12),
-                              color: AppColors.surface,
-                              child: InkWell(
-                                onTap: _onAddZoneFromMenu,
-                                borderRadius: BorderRadius.circular(12),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        '모집지역 추가',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: _points.length >= _maxPoints
-                                              ? AppColors.textSecondary
-                                                  .withValues(alpha: 0.5)
-                                              : theme.accent,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '남은 $_exposureRangeRemaining곳',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: _points.length >= _maxPoints
-                                              ? AppColors.textSecondary
-                                                  .withValues(alpha: 0.45)
-                                              : AppColors.textSecondary
-                                                  .withValues(alpha: 0.85),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          FloatingActionButton(
-                            heroTag: 'push_base_add_zone',
-                            onPressed: _onAddZoneFabPressed,
-                            backgroundColor: theme.fabBackground,
-                            foregroundColor: theme.fabForeground,
-                            elevation: 3,
-                            child: Icon(
-                              _showAddZoneMenu
-                                  ? Icons.close_rounded
-                                  : Icons.add_rounded,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Column(
-              children: [
-                Text(
-                  _pointTabLabel(_activePointIndex),
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: theme.accent,
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ExposureZoneRowList(
+                    points: _points,
+                    activeIndex: _activePointIndex,
+                    remainingAddSlots: _remainingAddSlots,
+                    onSelect: _selectPointTab,
+                    onRemove: _removePoint,
+                    onAdd: _onAddZoneFromRow,
                   ),
-                ),
-                if (_points.length > 1) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _pointTabLabel(_activePointIndex),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: activeTheme.accent,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Text(
-                    '${ExposurePointLabels.radiusUi(_radiusTier)} · '
-                    '${ExposurePointLabels.slotCount(_points.length, _maxPoints)}',
+                    _points.length > 1
+                        ? '${ExposurePointLabels.zoneRowSubtitle(_activePointIndex)} · '
+                            '지역 푸시권 $_availableCredits회'
+                        : ExposurePointLabels.zoneRowSubtitle(_activePointIndex),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textSecondary.withValues(alpha: 0.9),
                     ),
                   ),
-                ],
-                const SizedBox(height: 6),
-                PushRadiusKmSlider(
-                  selectedKm: _radiusTier.radiusKm,
-                  allowedKmSteps: PushPlanEnforcement.allowedSliderKmSteps,
-                  accentColor: theme.accent,
-                  suppressCenterLabel: true,
-                  onChanged: (km) =>
-                      _selectRadius(PushRadiusOptions.fromKm(km)),
-                ),
-              ],
-            ),
-          ),
-          // 2) 아래 스크롤 — 검색·거점·플랜·완료
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+                  const SizedBox(height: 6),
+                  PushRadiusKmSlider(
+                    selectedKm: _radiusTier.radiusKm,
+                    allowedKmSteps: PushPlanEnforcement.allowedSliderKmSteps,
+                    accentColor: activeTheme.accent,
+                    suppressCenterLabel: true,
+                    onChanged: (km) =>
+                        _selectRadius(PushRadiusOptions.fromKm(km)),
+                  ),
+                  const SizedBox(height: 12),
                   if (_canEditActivePointLocation) ...[
                     TextField(
                       controller: _searchController,
@@ -592,27 +598,30 @@ class _PushNotificationBasePointPageState
                       ),
                     ),
                   ],
-                  if (theme.showBasicPassNotice) ...[
+                  if (walletTheme.showBasicPassNotice) ...[
                     const SizedBox(height: 12),
                     BasicPassNoticeBanner(
-                      backgroundColor: theme.accentLight.withValues(alpha: 0.22),
-                      borderColor: theme.accent.withValues(alpha: 0.35),
-                      iconColor: theme.accent,
+                      backgroundColor:
+                          walletTheme.accentLight.withValues(alpha: 0.22),
+                      borderColor: walletTheme.accent.withValues(alpha: 0.35),
+                      iconColor: walletTheme.accent,
                     ),
                   ],
                   const SizedBox(height: 12),
                   _PushPackagePlanBanner(
                     pointCount: _points.length,
-                    maxPoints: _maxPoints,
-                    radiusUiLabel: ExposurePointLabels.radiusUi(_radiusTier),
+                    packageCredits: _availableCredits,
+                    radiusUiLabel: ExposurePointLabels.zoneRowSubtitle(
+                      _activePointIndex > 0 ? _activePointIndex : 0,
+                    ),
                     onOpenShop: _openPushPackageShop,
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: _confirm,
                     style: FilledButton.styleFrom(
-                      backgroundColor: theme.actionBackground,
-                      foregroundColor: theme.actionForeground,
+                      backgroundColor: walletTheme.actionBackground,
+                      foregroundColor: walletTheme.actionForeground,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -633,10 +642,11 @@ class _PushNotificationBasePointPageState
   }
 
   String get _confirmLabel {
+    final credits = _availableCredits;
     if (_points.length <= 1) {
-      return '${ExposurePointLabels.radiusUi(_radiusTier)} · 설정 완료';
+      return '근무지만 · 지역 푸시권 $credits회 · 설정 완료';
     }
-    return '${ExposurePointLabels.slotCount(_points.length, _maxPoints)} · 설정 완료';
+    return '노출 ${_points.length}곳 · 지역 푸시권 $credits회 · 설정 완료';
   }
 
   List<PushRadiusMapOverlayPoint> get _existingMapOverlays {
@@ -648,6 +658,7 @@ class _PushNotificationBasePointPageState
             radiusMeters: _points[i].radiusTier.radiusMeters,
             label: _pointTabLabel(i),
             pointIndex: i,
+            visualTheme: PushCreditVisualTheme.forRecruitPoint(i),
           ),
     ];
   }
@@ -660,17 +671,264 @@ class _PushNotificationBasePointPageState
   String _pointTabLabel(int index) => ExposurePointLabels.title(index);
 }
 
-/// 기본 플랜 요약 + 패키지 상점 이동
+class _ExposureZoneRowList extends StatefulWidget {
+  const _ExposureZoneRowList({
+    required this.points,
+    required this.activeIndex,
+    required this.remainingAddSlots,
+    required this.onSelect,
+    required this.onRemove,
+    required this.onAdd,
+  });
+
+  static const int maxVisibleRows = 4;
+  static const double rowHeight = 46;
+  static const double listRadius = 12;
+
+  final List<PushNotificationBasePoint> points;
+  final int activeIndex;
+  final int remainingAddSlots;
+  final ValueChanged<int> onSelect;
+  final ValueChanged<int> onRemove;
+  final VoidCallback onAdd;
+
+  @override
+  State<_ExposureZoneRowList> createState() => _ExposureZoneRowListState();
+}
+
+class _ExposureZoneRowListState extends State<_ExposureZoneRowList> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ExposureZoneRowList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.points.length > oldWidget.points.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollController.hasClients) return;
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canAdd = widget.remainingAddSlots > 0;
+    final scrollHeight = (widget.points.length.clamp(1, _ExposureZoneRowList.maxVisibleRows) *
+            _ExposureZoneRowList.rowHeight)
+        .toDouble();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '모집 지역',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary.withValues(alpha: 0.92),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(_ExposureZoneRowList.listRadius),
+            border: Border.all(color: AppColors.searchBarBorder),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: scrollHeight,
+                child: ListView.separated(
+                  controller: _scrollController,
+                  padding: EdgeInsets.zero,
+                  clipBehavior: Clip.hardEdge,
+                  physics: widget.points.length > _ExposureZoneRowList.maxVisibleRows
+                      ? const ClampingScrollPhysics()
+                      : const NeverScrollableScrollPhysics(),
+                  itemCount: widget.points.length,
+                  separatorBuilder: (_, __) => Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: AppColors.searchBarBorder.withValues(alpha: 0.85),
+                  ),
+                  itemBuilder: (context, index) {
+                    return _ExposureZoneRow(
+                      index: index,
+                      point: widget.points[index],
+                      selected: index == widget.activeIndex,
+                      isFirst: index == 0,
+                      onTap: () => widget.onSelect(index),
+                      onRemove:
+                          index > 0 ? () => widget.onRemove(index) : null,
+                    );
+                  },
+                ),
+              ),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: AppColors.searchBarBorder.withValues(alpha: 0.85),
+              ),
+                ExposureZoneAddRow(
+                  remainingCredits: widget.remainingAddSlots,
+                  rowHeight: _ExposureZoneRowList.rowHeight,
+                  listRadius: _ExposureZoneRowList.listRadius,
+                  onTap: canAdd ? widget.onAdd : null,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ExposureZoneRow extends StatelessWidget {
+  const _ExposureZoneRow({
+    required this.index,
+    required this.point,
+    required this.selected,
+    required this.isFirst,
+    required this.onTap,
+    this.onRemove,
+  });
+
+  final int index;
+  final PushNotificationBasePoint point;
+  final bool selected;
+  final bool isFirst;
+  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PushCreditVisualTheme.forRecruitPoint(index);
+    final isWorkplace = index == 0;
+    final subtitle = ExposurePointLabels.zoneRowSubtitle(index);
+    final rowRadius = isFirst
+        ? const BorderRadius.vertical(
+            top: Radius.circular(_ExposureZoneRowList.listRadius),
+          )
+        : BorderRadius.zero;
+
+    return Material(
+      color: selected
+          ? theme.accentLight.withValues(alpha: 0.32)
+          : AppColors.surface,
+      borderRadius: rowRadius,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: rowRadius,
+        child: SizedBox(
+          height: _ExposureZoneRowList.rowHeight,
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: selected ? theme.accent : Colors.transparent,
+                  borderRadius: isFirst && selected
+                      ? const BorderRadius.only(
+                          topLeft: Radius.circular(
+                            _ExposureZoneRowList.listRadius,
+                          ),
+                        )
+                      : BorderRadius.zero,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                isWorkplace
+                    ? Icons.storefront_outlined
+                    : Icons.location_on_outlined,
+                size: 18,
+                color: theme.accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ExposurePointLabels.title(index),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: selected ? theme.accent : AppColors.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary.withValues(alpha: 0.92),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    size: 18,
+                    color: theme.accent,
+                  ),
+                ),
+              if (onRemove != null)
+                IconButton(
+                  onPressed: onRemove,
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.textSecondary.withValues(alpha: 0.75),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                )
+              else
+                const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 기본 플랜 요약 + 지역 푸시권 상점 이동
 class _PushPackagePlanBanner extends StatelessWidget {
   const _PushPackagePlanBanner({
     required this.pointCount,
-    required this.maxPoints,
+    required this.packageCredits,
     required this.radiusUiLabel,
     required this.onOpenShop,
   });
 
   final int pointCount;
-  final int maxPoints;
+  final int packageCredits;
   final String radiusUiLabel;
   final VoidCallback onOpenShop;
 
@@ -714,10 +972,11 @@ class _PushPackagePlanBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${ExposurePointLabels.slotCount(pointCount, maxPoints)} · '
+                      '노출 $pointCount곳 · 지역 푸시권 $packageCredits회 · '
                       '$radiusUiLabel · '
-                      '일 ${plan.dailyPushLimitLabel} · '
-                      '추가 ${PartnershipPlanFormat.krw(plan.extraPushPriceKrw)}/회',
+                      '근무지 푸시 일 ${plan.dailyPushLimitLabel} · '
+                      '모집지역 추가 시 푸시권 1회 · '
+                      '지역 푸시권 ${PartnershipPlanFormat.krw(plan.extraPushPriceKrw)}/회',
                       style: TextStyle(
                         fontSize: 12,
                         height: 1.35,

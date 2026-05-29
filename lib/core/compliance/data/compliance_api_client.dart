@@ -23,6 +23,8 @@ class ComplianceApiClient {
     required String companyName,
     required BusinessEntityType entityType,
     required String certificateImageRef,
+    required String representativeName,
+    required String openingDate,
   }) async {
     final response = await _client.post(
       Uri.parse('$_baseUrl/v1/compliance/business/verify'),
@@ -30,6 +32,8 @@ class ComplianceApiClient {
       body: jsonEncode({
         'company_name': companyName,
         'business_registration_number': businessRegistrationNumber,
+        'representative_name': representativeName,
+        'opening_date': openingDate,
         'entity_type': entityType.name,
         'certificate_image_ref': certificateImageRef,
       }),

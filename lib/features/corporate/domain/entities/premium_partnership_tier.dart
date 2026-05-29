@@ -44,8 +44,8 @@ extension PremiumPartnershipTierX on PremiumPartnershipTier {
 
   String get summaryLine =>
       '${PushPackageCatalog.defaultPlanLabel} · 0원/월 · '
-      '반경 ${PushPackageCatalog.pushRadiusLabel} · '
-      '패키지 ${PushPackageCatalog.krwSuffix(PushPackageCatalog.singlePackagePriceKrw)}';
+      '근무지 ${PushPackageCatalog.pushRadiusLabel} 무료 푸시(일 1회) · '
+      '지역 푸시권 ${PushPackageCatalog.krwSuffix(PushPackageCatalog.singlePackagePriceKrw)}';
 }
 
 abstract final class PartnershipPlanFormat {
@@ -60,25 +60,29 @@ abstract final class PartnershipPlanDefaults {
 abstract final class PremiumPartnershipPlans {
   static const questionText = '일자리 프로모션 제휴사이신가요?';
   static const pushStrategyNote =
-      '기본 1km·하루 1회 · 패키지 5,000원 = 노출 범위 1 + 모집 1회 (1km) · 번들 할인';
+      '공고 등록은 완전 무료입니다. 근무지 1km 무료 푸시(일 1회) 이후 '
+      '추가 모집지역은 지역 푸시권(5,000원/회)으로 이용할 수 있습니다.';
   static const commissionSavingsNote =
       '일용직 출근비 1만원 · 상시직 채용 수수료 5.5% (플랜과 무관)';
 
   static String buildChatNoticeBody() {
     final buffer = StringBuffer()
       ..writeln('안녕하세요, 일자리 운영팀입니다.')
-      ..writeln('공고 노출·모집 패키지 요금 안내드립니다.')
+      ..writeln('공고 등록/푸시 정책 안내드립니다.')
       ..writeln()
-      ..writeln('■ 기본 플랜 (무료)')
-      ..writeln('· 공고 등록 무료')
-      ..writeln('· 푸시 반경 ${PushPackageCatalog.pushRadiusLabel} · 하루 ${PushPackageCatalog.dailyFreePush}회')
-      ..writeln('· 가입 보너스 ${PushPackageCatalog.signupBonusPushes}회')
+      ..writeln('■ 공고 등록')
+      ..writeln('· 완전 무료')
+      ..writeln('· 사업자번호당 동시 활성 공고 최대 10개')
       ..writeln()
-      ..writeln('■ 공고 노출·모집 패키지 — ${PushPackageCatalog.krwSuffix(PushPackageCatalog.singlePackagePriceKrw)}')
-      ..writeln('· 공고 노출 범위 1곳 + 지원자 모집하기 1회 (1km)')
+      ..writeln('■ 무료 푸시')
+      ..writeln('· 근무지 ${PushPackageCatalog.pushRadiusLabel} · 하루 ${PushPackageCatalog.dailyFreePush}회')
+      ..writeln()
+      ..writeln('■ 유료 지역 푸시권 — ${PushPackageCatalog.krwSuffix(PushPackageCatalog.singlePackagePriceKrw)}')
+      ..writeln('· 모집지역 1곳 푸시 1회')
       ..writeln('· 10회 ${PushPackageCatalog.krwSuffix(45000)} / '
           '30회 ${PushPackageCatalog.krwSuffix(120000)} / '
-          '100회 ${PushPackageCatalog.krwSuffix(350000)}');
+          '100회 ${PushPackageCatalog.krwSuffix(350000)}')
+      ..writeln('· 황금핀(◆)은 100회 팩 구매자 전용');
     return buffer.toString();
   }
 }

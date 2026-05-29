@@ -8,12 +8,18 @@ class PushDispatchArgs {
     required this.radiusTier,
     required this.recruitmentSlotCount,
     this.reachSeed,
+    this.jobPostId,
+    this.jobTitle,
+    this.companyName,
   });
 
   final PushRadiusTier radiusTier;
   /// 모집권(노출·모집 지역) 1곳당 20~25명 도달로 합산
   final int recruitmentSlotCount;
   final int? reachSeed;
+  final String? jobPostId;
+  final String? jobTitle;
+  final String? companyName;
 }
 
 /// 예상 푸시 도달 인원 (MVP mock — 추후 서버 집계로 교체)

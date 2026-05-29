@@ -29,11 +29,11 @@ void main() {
     expect(find.textContaining('45,000원 / 반경1km'), findsOneWidget);
     expect(find.text('30회 팩'), findsOneWidget);
     expect(find.text('100회 팩'), findsOneWidget);
-    expect(find.text('공고 노출·모집 패키지 보기'), findsOneWidget);
+    expect(find.text('지역 푸시권 보기'), findsOneWidget);
     expect(find.text('BASIC'), findsNothing);
     expect(find.text('Starter'), findsNothing);
 
-    await tester.tap(find.text('공고 노출·모집 패키지 보기'));
+    await tester.tap(find.text('지역 푸시권 보기'));
     await tester.pump();
 
     expect(shopTapped, isTrue);

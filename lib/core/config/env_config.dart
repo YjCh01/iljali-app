@@ -17,11 +17,23 @@ abstract final class EnvConfig {
     defaultValue: '',
   );
 
-  /// 사업자등록 검증 — 클라이언트 직접 호출 시 (권장: 서버 경유).
+  /// 사업자등록 검증 — 클라이언트 직접 odcloud 호출 (권장: 서버 경유).
   static const String ntsApiKey = String.fromEnvironment(
     'NTS_API_KEY',
     defaultValue: '',
   );
+
+  /// 공공데이터포털 서비스키 — [ntsApiKey] 미설정 시 대체.
+  static const String dataGoKrServiceKey = String.fromEnvironment(
+    'DATA_GO_KR_SERVICE_KEY',
+    defaultValue: '',
+  );
+
+  static String get ntsServiceKey =>
+      ntsApiKey.isNotEmpty ? ntsApiKey : dataGoKrServiceKey;
+
+  static bool get isNtsApiConfigured =>
+      ntsServiceKey.isNotEmpty && !ntsServiceKey.startsWith('YOUR_');
 
   /// Kakao Local REST API — 서버 없이 전국 주소 검색
   static const String kakaoRestApiKey = String.fromEnvironment(

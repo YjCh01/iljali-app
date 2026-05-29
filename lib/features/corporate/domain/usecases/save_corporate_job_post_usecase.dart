@@ -7,6 +7,7 @@ import 'package:map/features/corporate/domain/entities/salary_payment_schedule.d
 import 'package:map/features/corporate/domain/entities/salary_pay_type.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
+import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 String formatCorporateHourlyWage(String hourlyWage) {
@@ -106,8 +107,9 @@ class CreateCorporateJobPostUseCase {
       registeredBy: registeredBy,
     );
 
+    final postedAt = DateTime.now();
     final post = CorporateJobPost(
-      id: 'post_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'post_${postedAt.millisecondsSinceEpoch}',
       title: title.trim(),
       employmentType: employmentType ?? workerCategory.employmentType,
       workerCategory: workerCategory,
@@ -128,7 +130,8 @@ class CreateCorporateJobPostUseCase {
       mapPinDisplayTier: mapPinTier,
       status: CorporateJobPostStatus.recruiting,
       applicantCount: 0,
-      postedAt: DateTime.now(),
+      postedAt: postedAt,
+      expiresAt: JobPostValidity.expiresAtFromRegistration(postedAt),
     );
 
     return _dataSource.createJobPost(post).then(

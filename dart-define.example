@@ -7,6 +7,8 @@ TOSS_CLIENT_KEY=
 CLOVA_OCR_URL=
 CLOVA_OCR_SECRET=
 NTS_API_KEY=
+# 또는 DATA_GO_KR_SERVICE_KEY= (공공데이터포털 국세청 사업자 진위확인 API)
+# server/.env: NTS_API_KEY= (서버 경유 권장 — Flutter에 키 노출 방지)
 
 KAKAO_REST_API_KEY=
 

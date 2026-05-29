@@ -21,6 +21,10 @@ import 'package:map/features/corporate/domain/entities/push_package_catalog.dart
 import 'package:map/features/corporate/domain/services/push_dispatch_service.dart';
 import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
+import 'package:map/features/corporate/domain/utils/extra_push_availability.dart';
+import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
+import 'package:map/features/corporate/presentation/widgets/push_package_quick_shop_grid.dart';
 
 import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
 
@@ -28,6 +32,8 @@ import 'package:map/features/corporate/presentation/widgets/corporate_job_post_c
 
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_speed_dial.dart';
 
+import 'package:map/features/corporate/presentation/widgets/corporate_job_post_preview_sheet.dart';
+import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
 import 'package:map/features/corporate/presentation/widgets/extra_push_confirm_sheet.dart';
 
 
@@ -52,19 +58,25 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
 
   static const _dataSource = CorporateJobPostLocalDataSourceImpl();
 
-
-
   final _getJobPosts = const GetCorporateJobPostsUseCase(_dataSource);
+  final _scrollController = ScrollController();
+  final _shopGridKey = GlobalKey();
 
 
 
   List<CorporateJobPost> _posts = [];
 
-  int? _availablePushCredits;
+  EmployerPushWallet? _wallet;
 
   bool _loading = true;
 
 
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
 
@@ -82,13 +94,23 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
 
     setState(() => _loading = true);
 
-    final posts = await _getJobPosts();
-
     final profile = AuthSession.instance.currentUser?.corporateProfile;
-    int? credits;
+    EmployerPushWallet? wallet;
+    var posts = await _getJobPosts();
     if (profile != null) {
-      final wallet = await PushWalletService().loadWallet(profile);
-      credits = wallet.availablePushCredits;
+      wallet = await PushWalletService().loadWallet(profile);
+      posts = posts
+          .map((post) {
+            final settings = post.notificationSettings;
+            if (settings == null) return post;
+            final clamped = PushWalletCreditPolicy.clampNotificationSettings(
+              settings,
+              wallet!,
+            );
+            if (identical(clamped, settings)) return post;
+            return post.copyWith(notificationSettings: clamped);
+          })
+          .toList(growable: false);
     }
 
     if (!mounted) return;
@@ -97,7 +119,7 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
 
       _posts = posts;
 
-      _availablePushCredits = credits;
+      _wallet = wallet;
 
       _loading = false;
 
@@ -249,46 +271,28 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
 
 
 
-  Future<void> _sendExtraPush(CorporateJobPost post) async {
-
+  Future<void> _sendRecruitPush(CorporateJobPost post) async {
     final settings = post.notificationSettings;
 
     if (settings?.hasConfiguredBase != true) {
-
       ScaffoldMessenger.of(context).showSnackBar(
-
         const SnackBar(
-
-          content: Text('공고 노출 범위가 설정되지 않았습니다. 공고 수정에서 설정해 주세요.'),
-
+          content: Text('먼저 「모집지역 설정」을 완료해 주세요.'),
+          behavior: SnackBarBehavior.floating,
         ),
-
       );
-
       return;
-
     }
-
-
 
     final radiusTier = settings!.primaryBase?.radiusTier;
-
     if (radiusTier == null || radiusTier == PushRadiusTier.radius0km) {
-
       ScaffoldMessenger.of(context).showSnackBar(
-
-        const SnackBar(content: Text('노출 반경이 0km인 공고는 지원자 모집하기를 사용할 수 없습니다.')),
-
+        const SnackBar(content: Text('노출 반경이 0km인 공고는 모집할 수 없습니다.')),
       );
-
       return;
-
     }
 
-
-
     final profile = AuthSession.instance.currentUser?.corporateProfile;
-
     if (profile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('기업 프로필이 없어 푸시를 보낼 수 없습니다.')),
@@ -296,41 +300,24 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
       return;
     }
 
-    final credits = _availablePushCredits ?? 0;
-    final confirmed = await showExtraPushConfirmSheet(
-      context,
-      post: post,
-      availablePushCredits: credits,
-    );
-    if (!mounted || confirmed == null) return;
-
-    if (confirmed.updatedBasePoints != null) {
-      final updatedSettings = settings.copyWith(
-        basePoints: confirmed.updatedBasePoints,
-      );
-      await _dataSource.updateJobPost(
-        post.copyWith(notificationSettings: updatedSettings),
-      );
-    }
-
-    final prepared = await PushDispatchService().prepare(
+    final prepared = await PushDispatchService().prepareQuickRecruitPush(
       context: context,
       profile: profile,
+      settings: settings,
     );
     if (!mounted) return;
     if (prepared == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('지원자 모집하기 결제가 취소되었습니다.')),
+        const SnackBar(content: Text('모집하기를 완료하지 못했습니다.')),
       );
       return;
     }
 
-    if (!mounted) return;
     await Navigator.of(context).pushNamed<bool>(
       AppRoutes.corporatePushDispatch,
       arguments: PushDispatchArgs(
         radiusTier: prepared.radiusTier,
-        recruitmentSlotCount: 1,
+        recruitmentSlotCount: prepared.recruitmentPushCount.clamp(1, 999),
       ),
     );
 
@@ -345,13 +332,120 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
         ? ' (${PushPackageCatalog.krwSuffix(prepared.paymentKrw)} 결제)'
         : '';
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('지원자 모집하기가 전송되었습니다.$feeLabel')),
+      SnackBar(content: Text('모집 알림이 전송되었습니다.$feeLabel')),
     );
 
     await _load();
   }
 
+  Future<void> _viewPost(CorporateJobPost post) async {
+    await showCorporateJobPostPreviewSheet(context, post);
+  }
 
+  Future<void> _configureExposure(CorporateJobPost post) async {
+    final credits = _wallet?.packageRecruitCredits ?? 0;
+    final confirmed = await showExtraPushConfirmSheet(
+      context,
+      post: post,
+      availablePushCredits: credits,
+      mode: ExtraPushSheetMode.configureZones,
+    );
+    if (!mounted || confirmed == null) return;
+
+    final points = confirmed.updatedBasePoints;
+    if (points == null || points.isEmpty) return;
+
+    final maxPoints = _wallet == null
+        ? points.length
+        : PushWalletCreditPolicy.effectiveMaxExposurePoints(
+            wallet: _wallet!,
+            currentPointsLength: points.length,
+          );
+    final settings = JobPostNotificationSettings(
+      basePoints: points.take(maxPoints).toList(growable: false),
+      pushCountLimit: PushPlanEnforcement.dailyPushLimit,
+      maxBasePointsAllowed: maxPoints,
+      paymentCompleted: points.length <= PushPackageCatalog.baseLocationSlots,
+      designatedPointTier: DesignatedPointTier.onePoint,
+      spotPaymentCompleted:
+          points.length <= PushPackageCatalog.baseLocationSlots,
+    );
+
+    await _dataSource.updateJobPost(
+      post.copyWith(notificationSettings: settings),
+    );
+    JobBoardRefresh.markUpdated();
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('모집지역이 저장되었습니다. 「모집하기」로 알림을 보낼 수 있습니다.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _recruit(CorporateJobPost post) async {
+    final availability = ExtraPushAvailability.resolve(
+      post: post,
+      wallet: _wallet,
+    );
+
+    if (!availability.canDispatchRecruit) {
+      if (!mounted) return;
+      if (availability.needsExposureSetup) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('먼저 「모집지역 설정」을 완료해 주세요.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (availability.reason == ExtraPushDisableReason.creditsExhausted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('지역 푸시권이 부족합니다. 「지역 푸시권 충전」 또는 아래 상품을 이용해 주세요.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        await _scrollToShopGrid();
+      }
+      return;
+    }
+
+    await _sendRecruitPush(post);
+  }
+
+  Future<void> _scrollToShopGrid() async {
+    final context = _shopGridKey.currentContext;
+    if (context == null) return;
+    await Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  String _shopGridMessage() {
+    final wallet = _wallet;
+    if (wallet != null && !wallet.hasUsablePush) {
+      return '지역 푸시권을 모두 사용했습니다. 아래에서 바로 충전할 수 있습니다.';
+    }
+    final needsSettings = _posts.any(
+      (post) =>
+          ExtraPushAvailability.resolve(post: post, wallet: wallet)
+              .needsExposureSetup,
+    );
+    if (needsSettings && wallet != null && wallet.hasUsablePush) {
+      return '지역 푸시권이 충전되었습니다. 「모집지역 설정」 후 「모집하기」를 눌러 주세요.';
+    }
+    if (needsSettings) {
+      return '노출 범위가 없는 공고는 모집할 수 없습니다. '
+          '노출 범위 설정 후 이용권을 사용하세요.';
+    }
+    return '추가 모집·노출 범위 확장이 필요하면 패키지를 구매하세요.';
+  }
 
   @override
 
@@ -387,38 +481,62 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
 
           else
 
-            ListView.separated(
-
+            ListView(
+              controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
-
-              itemCount: _posts.length,
-
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-
-              itemBuilder: (context, index) {
-
-                final post = _posts[index];
-
-                return CorporateJobPostCard(
-
-                  post: post,
-
-                  availablePushCredits: _availablePushCredits,
-
-                  onEdit: () => _editPost(post),
-
-                  onDelete: () => _deletePost(post),
-
-                  onExtraPush: () => _sendExtraPush(post),
-
-                  onApplicantsTap: post.applicantCount > 0
-                      ? () => widget.onViewApplicants?.call(post)
-                      : null,
-
-                );
-
-              },
-
+              children: [
+                if (_wallet != null) ...[
+                  _PushPolicyStatusBanner(wallet: _wallet!),
+                  const SizedBox(height: 12),
+                ],
+                for (var i = 0; i < _posts.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  Builder(
+                    builder: (context) {
+                      final post = _posts[i];
+                      final availability = ExtraPushAvailability.resolve(
+                        post: post,
+                        wallet: _wallet,
+                      );
+                      return CorporateJobPostCard(
+                        post: post,
+                        extraPushAvailability: availability,
+                        creditsDisplay: _wallet == null
+                            ? null
+                            : PushWalletCreditPolicy.jobPostCardCredits(
+                                wallet: _wallet!,
+                              ),
+                        onView: () => _viewPost(post),
+                        onEdit: () => _editPost(post),
+                        onDelete: () => _deletePost(post),
+                        onConfigureExposure: () => _configureExposure(post),
+                        onRecruit: () => _recruit(post),
+                        onOpenShop: _scrollToShopGrid,
+                        onApplicantsTap: post.applicantCount > 0
+                            ? () => widget.onViewApplicants?.call(post)
+                            : null,
+                      );
+                    },
+                  ),
+                ],
+                const SizedBox(height: 20),
+                Material(
+                  key: _shopGridKey,
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  child: Ink(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppColors.searchBarBorder),
+                    ),
+                    child: PushPackageQuickShopGrid(
+                      message: _shopGridMessage(),
+                      onPurchased: _load,
+                    ),
+                  ),
+                ),
+              ],
             ),
 
           Positioned.fill(
@@ -428,6 +546,116 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
               onCreate: _openCreate,
 
               onEdit: _openEditPicker,
+
+            ),
+
+          ),
+
+        ],
+
+      ),
+
+    );
+
+  }
+
+}
+
+
+
+class _PushPolicyStatusBanner extends StatelessWidget {
+
+  const _PushPolicyStatusBanner({required this.wallet});
+
+
+
+  final EmployerPushWallet wallet;
+
+
+
+  @override
+
+  Widget build(BuildContext context) {
+
+    final credits = PushWalletCreditPolicy.jobPostCardCredits(wallet: wallet);
+
+    final pkg = wallet.packageRecruitCredits;
+
+    final freeHint = credits.accountFreePushHint;
+
+    final freeUsed = !wallet.dailyFreePostingAvailable;
+
+
+
+    return Container(
+
+      width: double.infinity,
+
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+
+      decoration: BoxDecoration(
+
+        color: AppColors.primary.withValues(alpha: 0.06),
+
+        borderRadius: BorderRadius.circular(12),
+
+        border: Border.all(
+
+          color: AppColors.primary.withValues(alpha: 0.18),
+
+        ),
+
+      ),
+
+      child: Column(
+
+        crossAxisAlignment: CrossAxisAlignment.start,
+
+        children: [
+
+          const Text(
+
+            '공고 등록 무료',
+
+            style: TextStyle(
+
+              fontSize: 13,
+
+              fontWeight: FontWeight.w800,
+
+              color: AppColors.textPrimary,
+
+            ),
+
+          ),
+
+          const SizedBox(height: 4),
+
+          Text(
+
+            [
+
+              if (freeHint != null) freeHint!,
+
+              if (freeUsed) '근무지 1km · 오늘 무료 푸시 소진',
+
+              if (pkg > 0) '지역 푸시권 $pkg회',
+
+              if (pkg <= 0 && freeUsed)
+
+                '모집지역 푸시는 지역 푸시권 구매 필요',
+
+            ].join(' · '),
+
+            style: TextStyle(
+
+              fontSize: 12,
+
+              height: 1.45,
+
+              fontWeight: FontWeight.w600,
+
+              color: AppColors.textSecondary.withValues(alpha: 0.95),
 
             ),
 

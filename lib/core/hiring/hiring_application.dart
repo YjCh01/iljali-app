@@ -23,6 +23,8 @@ class HiringApplication {
     this.workplaceLatitude,
     this.workplaceLongitude,
     this.checkedInAt,
+    this.employerConfirmedAt,
+    this.mutuallyConfirmedAt,
     this.checkInLatitude,
     this.checkInLongitude,
     this.commissionAmountKrw,
@@ -49,6 +51,8 @@ class HiringApplication {
   final double? workplaceLatitude;
   final double? workplaceLongitude;
   final DateTime? checkedInAt;
+  final DateTime? employerConfirmedAt;
+  final DateTime? mutuallyConfirmedAt;
   final double? checkInLatitude;
   final double? checkInLongitude;
   final int? commissionAmountKrw;
@@ -61,8 +65,23 @@ class HiringApplication {
       status == HiringApplicationStatus.checkedIn ||
       status == HiringApplicationStatus.commissionPaid;
 
+  bool get seekerCheckedIn => checkedInAt != null;
+
+  bool get employerConfirmed => employerConfirmedAt != null;
+
+  bool get isMutuallyConfirmed =>
+      mutuallyConfirmedAt != null ||
+      (status == HiringApplicationStatus.checkedIn && checkedInAt != null);
+
+  bool get awaitingEmployerConfirm =>
+      seekerCheckedIn && !employerConfirmed && !isMutuallyConfirmed;
+
+  bool get awaitingSeekerCheckIn =>
+      employerConfirmed && !seekerCheckedIn && !isMutuallyConfirmed;
+
   bool get needsCommissionPayment =>
       employmentType == JobEmploymentType.daily &&
+      isMutuallyConfirmed &&
       status == HiringApplicationStatus.checkedIn &&
       commissionPaidAt == null;
 
@@ -90,6 +109,8 @@ class HiringApplication {
     double? workplaceLatitude,
     double? workplaceLongitude,
     DateTime? checkedInAt,
+    DateTime? employerConfirmedAt,
+    DateTime? mutuallyConfirmedAt,
     double? checkInLatitude,
     double? checkInLongitude,
     int? commissionAmountKrw,
@@ -116,6 +137,8 @@ class HiringApplication {
       workplaceLatitude: workplaceLatitude ?? this.workplaceLatitude,
       workplaceLongitude: workplaceLongitude ?? this.workplaceLongitude,
       checkedInAt: checkedInAt ?? this.checkedInAt,
+      employerConfirmedAt: employerConfirmedAt ?? this.employerConfirmedAt,
+      mutuallyConfirmedAt: mutuallyConfirmedAt ?? this.mutuallyConfirmedAt,
       checkInLatitude: checkInLatitude ?? this.checkInLatitude,
       checkInLongitude: checkInLongitude ?? this.checkInLongitude,
       commissionAmountKrw: commissionAmountKrw ?? this.commissionAmountKrw,
@@ -144,6 +167,8 @@ class HiringApplication {
         'workplaceLatitude': workplaceLatitude,
         'workplaceLongitude': workplaceLongitude,
         'checkedInAt': checkedInAt?.toIso8601String(),
+        'employerConfirmedAt': employerConfirmedAt?.toIso8601String(),
+        'mutuallyConfirmedAt': mutuallyConfirmedAt?.toIso8601String(),
         'checkInLatitude': checkInLatitude,
         'checkInLongitude': checkInLongitude,
         'commissionAmountKrw': commissionAmountKrw,
@@ -177,6 +202,10 @@ class HiringApplication {
       workplaceLatitude: (json['workplaceLatitude'] as num?)?.toDouble(),
       workplaceLongitude: (json['workplaceLongitude'] as num?)?.toDouble(),
       checkedInAt: DateTime.tryParse(json['checkedInAt'] as String? ?? ''),
+      employerConfirmedAt:
+          DateTime.tryParse(json['employerConfirmedAt'] as String? ?? ''),
+      mutuallyConfirmedAt:
+          DateTime.tryParse(json['mutuallyConfirmedAt'] as String? ?? ''),
       checkInLatitude: (json['checkInLatitude'] as num?)?.toDouble(),
       checkInLongitude: (json['checkInLongitude'] as num?)?.toDouble(),
       commissionAmountKrw: json['commissionAmountKrw'] as int?,

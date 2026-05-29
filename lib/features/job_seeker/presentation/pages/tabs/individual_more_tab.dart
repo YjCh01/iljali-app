@@ -70,6 +70,13 @@ class IndividualMoreTab extends StatelessWidget {
             ),
           ),
           _MenuTile(
+            icon: Icons.notifications_active_outlined,
+            title: '푸시 알림',
+            onTap: () => Navigator.of(context).pushNamed(
+              AppRoutes.seekerPushInbox,
+            ),
+          ),
+          _MenuTile(
             icon: Icons.notifications_outlined,
             title: '알림 설정',
             onTap: () => showMvpInfoSnackBar(context, '알림 설정'),

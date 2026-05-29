@@ -13,7 +13,7 @@ extension HiringApplicationStatusX on HiringApplicationStatus {
         HiringApplicationStatus.applied => '접수 완료',
         HiringApplicationStatus.chatting => '채팅 중',
         HiringApplicationStatus.scheduled => '출근 예정',
-        HiringApplicationStatus.checkedIn => '출근 완료',
+        HiringApplicationStatus.checkedIn => '상호 확인 완료',
         HiringApplicationStatus.commissionPaid => '정산 완료',
         HiringApplicationStatus.rejected => '불합격',
       };

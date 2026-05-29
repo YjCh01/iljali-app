@@ -167,25 +167,115 @@ class LocalHiringRepository {
     if (existing.status != HiringApplicationStatus.scheduled) {
       throw StateError('not_scheduled');
     }
+    if (existing.seekerCheckedIn) {
+      throw StateError('already_checked_in');
+    }
 
     final now = DateTime.now();
-    final checkedIn = existing.copyWith(
-      status: HiringApplicationStatus.checkedIn,
+    final updated = existing.copyWith(
       checkedInAt: now,
       checkInLatitude: latitude,
       checkInLongitude: longitude,
-      commissionDueAt: now.add(const Duration(minutes: 1)),
-      commissionAmountKrw: existing.commissionAmountKrw ??
-          CommissionCalculator.defaultKrw(),
     );
-    await _upsert(checkedIn);
+    final confirmed = _applyMutualConfirmation(updated, now: now);
+    await _upsert(confirmed);
     HiringRefresh.markUpdated();
-    return checkedIn;
+    return confirmed;
+  }
+
+  /// 기업 출근 확인 — 구직자 선확인·기업 선확인 모두 지원
+  Future<HiringApplication> confirmEmployerAttendance(
+    String applicationId,
+  ) async {
+    final existing = await findById(applicationId);
+    if (existing == null) throw StateError('not_found');
+    if (existing.status != HiringApplicationStatus.scheduled) {
+      throw StateError('not_scheduled');
+    }
+    if (existing.isMutuallyConfirmed) {
+      throw StateError('already_mutually_confirmed');
+    }
+    if (existing.employerConfirmed) {
+      throw StateError('already_employer_confirmed');
+    }
+
+    final now = DateTime.now();
+    final updated = existing.copyWith(employerConfirmedAt: now);
+    final confirmed = _applyMutualConfirmation(updated, now: now);
+    await _upsert(confirmed);
+    HiringRefresh.markUpdated();
+    return confirmed;
+  }
+
+  /// 구직자 출근 후 48시간 기업 무응답 시 자동 기업 확인
+  Future<List<HiringApplication>> autoConfirmSilentEmployers({
+    Duration silenceThreshold = const Duration(hours: 48),
+  }) async {
+    final all = await fetchAll();
+    final now = DateTime.now();
+    final autoConfirmed = <HiringApplication>[];
+
+    for (final item in all) {
+      if (item.status != HiringApplicationStatus.scheduled) continue;
+      if (!item.seekerCheckedIn || item.employerConfirmed) continue;
+      final checkedInAt = item.checkedInAt;
+      if (checkedInAt == null) continue;
+      if (now.difference(checkedInAt) < silenceThreshold) continue;
+
+      final updated = item.copyWith(employerConfirmedAt: now);
+      final confirmed = _applyMutualConfirmation(updated, now: now);
+      await _upsert(confirmed);
+      autoConfirmed.add(confirmed);
+    }
+
+    if (autoConfirmed.isNotEmpty) HiringRefresh.markUpdated();
+    return autoConfirmed;
+  }
+
+  /// 미확인 출근 예정(구직자 미체크인) 건수 — 앱 잠금 판단용
+  Future<List<HiringApplication>> fetchOverdueUncheckedShifts(
+    String seekerEmail,
+  ) async {
+    final all = await fetchForSeeker(seekerEmail);
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+
+    return all.where((item) {
+      if (item.status != HiringApplicationStatus.scheduled) return false;
+      if (item.seekerCheckedIn) return false;
+      final workDate = item.workDate;
+      if (workDate == null) return false;
+      final workDayStart =
+          DateTime(workDate.year, workDate.month, workDate.day);
+      if (workDayStart.isAfter(todayStart)) return false;
+      if (workDayStart == todayStart) {
+        return now.hour >= 23;
+      }
+      return true;
+    }).toList();
+  }
+
+  HiringApplication _applyMutualConfirmation(
+    HiringApplication app, {
+    required DateTime now,
+  }) {
+    if (!app.seekerCheckedIn || !app.employerConfirmed) return app;
+
+    return app.copyWith(
+      status: HiringApplicationStatus.checkedIn,
+      mutuallyConfirmedAt: now,
+      commissionDueAt: now.add(const Duration(minutes: 1)),
+      commissionAmountKrw:
+          app.commissionAmountKrw ?? CommissionCalculator.defaultKrw(),
+    );
   }
 
   Future<HiringApplication> markCommissionPaid(String applicationId) async {
     final existing = await findById(applicationId);
     if (existing == null) throw StateError('not_found');
+    if (!existing.isMutuallyConfirmed) {
+      throw StateError('not_mutually_confirmed');
+    }
 
     final paid = existing.copyWith(
       status: HiringApplicationStatus.commissionPaid,

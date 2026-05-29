@@ -78,6 +78,17 @@ class EmployerTrustService {
         (profile?.pushWallet?.packageCredits ?? 0) > 0) {
       score += 10;
     }
+
+    final now = DateTime.now();
+    for (final app in apps) {
+      if (!app.awaitingEmployerConfirm) continue;
+      final checkedInAt = app.checkedInAt;
+      if (checkedInAt == null) continue;
+      if (now.difference(checkedInAt) >= const Duration(hours: 24)) {
+        score -= 8;
+      }
+    }
+
     score = score.clamp(0, 100);
 
     return EmployerTrustSummary(

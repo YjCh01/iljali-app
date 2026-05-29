@@ -107,9 +107,13 @@ class PushCreditVisualTheme {
     actionBackground: Color(0xFFC9A227),
     actionForeground: Colors.white,
   );
+
+  /// 지원자 모집 — 근무지(0)는 고정·회색, 모집지역은 패키지 보라
+  static PushCreditVisualTheme forRecruitPoint(int pointIndex) =>
+      pointIndex == 0 ? basic : package;
 }
 
-/// 기본이용권(일 1회·가입 5회) 안내
+/// 근무지 무료 푸시(1km · 일 1회) 안내
 class BasicPassNoticeBanner extends StatelessWidget {
   const BasicPassNoticeBanner({
     super.key,
@@ -123,8 +127,8 @@ class BasicPassNoticeBanner extends StatelessWidget {
   final Color? iconColor;
 
   static const noticeText =
-      '매일 1회 및 최초 가입 시 5회 제공되는 기본이용권은 '
-      '근무지 주변에서만 구직자를 모집할 수 있습니다.';
+      '근무지 무료 푸시(1km · 일 1회)는 근무지 주변에서만 사용할 수 있습니다. '
+      '추가 모집지역은 지역 푸시권이 필요합니다.';
 
   @override
   Widget build(BuildContext context) {

@@ -7,8 +7,10 @@ from pydantic import BaseModel, Field
 class VerifyBusinessRequest(BaseModel):
     company_name: str
     business_registration_number: str = Field(min_length=10, max_length=12)
+    representative_name: str = Field(default="", max_length=50)
+    opening_date: str = Field(default="", max_length=8)
     entity_type: Literal["sole_proprietor", "corporation"] = "corporation"
-    certificate_image_ref: str
+    certificate_image_ref: str = ""
 
 
 class VerifyBusinessResponse(BaseModel):

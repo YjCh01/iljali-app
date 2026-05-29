@@ -25,8 +25,9 @@ class JobMapPinsLocalDataSource implements JobMapPinsDataSource {
 
     final activePosts = posts.where(
       (post) =>
-          post.status == CorporateJobPostStatus.recruiting ||
-          post.status == CorporateJobPostStatus.closingSoon,
+          (post.status == CorporateJobPostStatus.recruiting ||
+              post.status == CorporateJobPostStatus.closingSoon) &&
+          post.isActiveForSeekers,
     );
 
     var fallbackIndex = 0;

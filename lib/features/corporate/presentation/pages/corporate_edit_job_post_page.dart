@@ -19,6 +19,7 @@ import 'package:map/features/corporate/domain/entities/salary_payment_schedule.d
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_job_post_write_page.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_card.dart';
+import 'package:map/core/widgets/korean_calendar.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_form.dart';
 
 /// 기업회원 — 수정할 공고 선택 (Speed Dial 2)
@@ -82,9 +83,13 @@ class _CorporateSelectJobPostPageState extends State<CorporateSelectJobPostPage>
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final post = _posts[index];
-                return CorporateJobPostCard(
-                  post: post,
-                  onTap: () => _openEdit(post),
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => _openEdit(post),
+                    child: CorporateJobPostCard(post: post),
+                  ),
                 );
               },
             ),
@@ -191,14 +196,12 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
 
   Future<void> _pickPaymentDate() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showKoreanDatePickerSheet(
+      context,
       initialDate: _paymentDate ?? now,
       firstDate: now.subtract(const Duration(days: 30)),
       lastDate: now.add(const Duration(days: 365)),
-      helpText: '급여지급일 선택',
-      cancelText: '취소',
-      confirmText: '확인',
+      title: '급여지급일 선택',
     );
     if (picked != null && mounted) {
       setState(() => _paymentDate = picked);
@@ -303,12 +306,6 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
     if (!mounted) return;
     if (paymentOutcome == null) {
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('결제가 취소되어 수정을 완료하지 못했습니다.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
       return;
     }
     notificationSettings = paymentOutcome.notificationSettings;

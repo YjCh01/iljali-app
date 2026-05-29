@@ -16,12 +16,14 @@ class PushRadiusMapOverlayPoint {
     required this.radiusMeters,
     required this.label,
     required this.pointIndex,
+    this.visualTheme,
   });
 
   final GeoCoordinate coordinate;
   final int radiusMeters;
   final String label;
   final int pointIndex;
+  final PushCreditVisualTheme? visualTheme;
 }
 
 /// 푸시 거점 설정용 지도 피커 (Windows/Web MVP — 추후 Naver Map 연동)
@@ -153,7 +155,11 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                 ? '주변'
                 : '반경 ${widget.radiusMeters ~/ 1000}km';
         final hasExisting = widget.existingPoints.isNotEmpty;
-        final theme = widget.visualTheme ?? PushCreditVisualTheme.basic;
+        final activeTheme = widget.visualTheme ?? PushCreditVisualTheme.basic;
+        // 다중 지역일 때 지도 배경·컨트롤은 고정 — 선택 중인 거점만 activeTheme 색
+        final chromeTheme = hasExisting
+            ? PushCreditVisualTheme.package
+            : activeTheme;
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -162,6 +168,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
               if (event is PointerScrollEvent) _onPointerScroll(event);
             },
             child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onScaleStart: _onScaleStart,
               onScaleUpdate: _onScaleUpdate,
               child: Stack(
@@ -171,8 +178,8 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                   painter: _MapGridPainter(
                     offset: _dragOffset,
                     zoom: _mapZoom,
-                    accentLight: theme.accentLight,
-                    gridBackground: theme.mapGridBackground,
+                    accentLight: chromeTheme.accentLight,
+                    gridBackground: chromeTheme.mapGridBackground,
                   ),
                 ),
                 // 기존 거점 — 연한 영역 + 작은 핀
@@ -180,53 +187,58 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                   Center(
                     child: Transform.translate(
                       offset: _geoOffset(existing.coordinate, _center),
-                      child: GestureDetector(
+                      child: _ExistingPointMarker(
+                        radiusPx: _radiusPixels(
+                          size.shortestSide,
+                          existing.radiusMeters,
+                        ),
+                        label: existing.label,
+                        radiusLabel: existing.radiusMeters <= 0
+                            ? '위치만'
+                            : existing.radiusMeters <=
+                                    PushPackageCatalog.packagePushRadiusM
+                                ? '주변'
+                                : '${existing.radiusMeters ~/ 1000}km',
+                        tappable: widget.onExistingPointTap != null,
                         onTap: widget.onExistingPointTap == null
                             ? null
                             : () => widget.onExistingPointTap!(
                                   existing.pointIndex,
                                 ),
-                        child: _ExistingPointMarker(
-                          radiusPx: _radiusPixels(
-                            size.shortestSide,
-                            existing.radiusMeters,
-                          ),
-                          label: existing.label,
-                          radiusLabel: existing.radiusMeters <= 0
-                              ? '위치만'
-                              : existing.radiusMeters <=
-                                      PushPackageCatalog.packagePushRadiusM
-                                  ? '주변'
-                                  : '${existing.radiusMeters ~/ 1000}km',
-                          tappable: widget.onExistingPointTap != null,
-                          accent: theme.accent,
-                        ),
+                        accent: (existing.visualTheme ??
+                                PushCreditVisualTheme.forRecruitPoint(
+                                  existing.pointIndex,
+                                ))
+                            .accent,
                       ),
                     ),
                   ),
-                // 현재 편집 중인 거점 — 강조
+                // 현재 편집 중인 거점 — 강조 (시각만, 터치는 아래 지도 제스처로)
                 if (activeRadiusPx > 0)
                   Center(
-                    child: Container(
-                      width: activeRadiusPx * 2,
-                      height: activeRadiusPx * 2,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: theme.accent.withValues(alpha: 0.16),
-                        border: Border.all(
-                          color: theme.accent,
-                          width: 2.5,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: activeRadiusPx * 2,
+                        height: activeRadiusPx * 2,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: activeTheme.accent.withValues(alpha: 0.16),
+                          border: Border.all(
+                            color: activeTheme.accent,
+                            width: 2.5,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 Center(
-                  child: Column(
+                  child: IgnorePointer(
+                    child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.add_location_alt_rounded,
-                        color: theme.accent,
+                        color: activeTheme.accent,
                         size: 40,
                         shadows: [
                           Shadow(
@@ -242,7 +254,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: theme.accent,
+                          color: activeTheme.accent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -266,7 +278,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                             color: AppColors.surface.withValues(alpha: 0.95),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: theme.accent.withValues(alpha: 0.45),
+                              color: activeTheme.accent.withValues(alpha: 0.45),
                             ),
                           ),
                           child: Text(
@@ -274,7 +286,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: theme.accent,
+                              color: activeTheme.accent,
                             ),
                           ),
                         ),
@@ -282,49 +294,52 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                     ],
                   ),
                 ),
+              ),
                 if (hasExisting)
                   Positioned(
                     left: 12,
                     top: 12,
                     right: 12,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: AppColors.surface.withValues(alpha: 0.94),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: theme.accentLight.withValues(alpha: 0.55),
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.surface.withValues(alpha: 0.94),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: chromeTheme.accentLight.withValues(alpha: 0.55),
+                          ),
                         ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.layers_outlined,
-                              size: 16,
-                              color: theme.accent.withValues(alpha: 0.85),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                widget.centerEditable
-                                    ? '연한 영역 · 기존 ${widget.existingPoints.length}곳 '
-                                        '· 지도 이동 · 두 손가락으로 확대/축소'
-                                    : '연한 영역 · 기존 ${widget.existingPoints.length}곳 '
-                                        '· 연한 영역을 눌러 다른 구역 편집 · 확대/축소 가능',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  height: 1.3,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary
-                                      .withValues(alpha: 0.95),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.layers_outlined,
+                                size: 16,
+                                color: chromeTheme.accent.withValues(alpha: 0.85),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  widget.centerEditable
+                                      ? '연한 영역 · 다른 지역 ${widget.existingPoints.length}곳 · '
+                                          '탭해 전환 · 지도 이동 · 두 손가락으로 확대/축소'
+                                      : '연한 영역 · 다른 지역 ${widget.existingPoints.length}곳 · '
+                                          '탭해 전환 · 확대/축소 가능',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    height: 1.3,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary
+                                        .withValues(alpha: 0.95),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -337,28 +352,30 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                     canZoomOut: _mapZoom > _minZoom,
                     onZoomIn: () => _nudgeZoom(_zoomStep),
                     onZoomOut: () => _nudgeZoom(-_zoomStep),
-                    accent: theme.accent,
+                    accent: chromeTheme.accent,
                   ),
                 ),
                 Positioned(
                   left: 12,
                   bottom: 12,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: AppColors.surface.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(
-                        '${_center.latitude.toStringAsFixed(5)}, '
-                        '${_center.longitude.toStringAsFixed(5)}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppColors.textSecondary,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Text(
+                          '${_center.latitude.toStringAsFixed(5)}, '
+                          '${_center.longitude.toStringAsFixed(5)}',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ),
                     ),
@@ -428,6 +445,7 @@ class _ExistingPointMarker extends StatelessWidget {
     required this.label,
     required this.radiusLabel,
     this.tappable = false,
+    this.onTap,
     this.accent = AppColors.primary,
   });
 
@@ -435,29 +453,62 @@ class _ExistingPointMarker extends StatelessWidget {
   final String label;
   final String radiusLabel;
   final bool tappable;
+  final VoidCallback? onTap;
   final Color accent;
+
+  static const _tapTargetSize = 52.0;
 
   @override
   Widget build(BuildContext context) {
+    final pinIcon = Icon(
+      Icons.location_on_outlined,
+      color: accent.withValues(alpha: 0.45),
+      size: 26,
+    );
+    final pinLabel = Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: AppColors.searchBarBorder,
+        ),
+      ),
+      child: Text(
+        '$label · $radiusLabel',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondary.withValues(alpha: 0.95),
+        ),
+      ),
+    );
+
     return Stack(
       alignment: Alignment.center,
       clipBehavior: Clip.none,
       children: [
         if (radiusPx > 0)
-          SizedBox(
-            width: radiusPx * 2,
-            height: radiusPx * 2,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: accent.withValues(
-                  alpha: tappable ? 0.1 : 0.06,
-                ),
-                border: Border.all(
+          IgnorePointer(
+            child: SizedBox(
+              width: radiusPx * 2,
+              height: radiusPx * 2,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   color: accent.withValues(
-                    alpha: tappable ? 0.42 : 0.28,
+                    alpha: tappable ? 0.1 : 0.06,
                   ),
-                  width: tappable ? 2 : 1.5,
+                  border: Border.all(
+                    color: accent.withValues(
+                      alpha: tappable ? 0.42 : 0.28,
+                    ),
+                    width: tappable ? 2 : 1.5,
+                  ),
                 ),
               ),
             ),
@@ -465,33 +516,22 @@ class _ExistingPointMarker extends StatelessWidget {
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.location_on_outlined,
-              color: accent.withValues(alpha: 0.45),
-              size: 26,
-            ),
-            Container(
-              margin: const EdgeInsets.only(top: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.surface.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: AppColors.searchBarBorder,
+            if (tappable && onTap != null)
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onTap,
+                  borderRadius: BorderRadius.circular(_tapTargetSize / 2),
+                  child: SizedBox(
+                    width: _tapTargetSize,
+                    height: _tapTargetSize,
+                    child: Center(child: pinIcon),
+                  ),
                 ),
-              ),
-              child: Text(
-                '$label · $radiusLabel',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary.withValues(alpha: 0.95),
-                ),
-              ),
-            ),
+              )
+            else
+              IgnorePointer(child: pinIcon),
+            IgnorePointer(child: pinLabel),
           ],
         ),
       ],

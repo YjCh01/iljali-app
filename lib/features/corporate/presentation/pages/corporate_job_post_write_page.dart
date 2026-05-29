@@ -15,11 +15,17 @@ import 'package:map/features/corporate/domain/entities/job_post_payment_record.d
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/corporate/domain/usecases/save_corporate_job_post_usecase.dart';
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/services/push_job_post_payment_flow.dart';
+import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
+import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/salary_pay_type.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
+import 'package:map/core/widgets/korean_calendar.dart';
+import 'package:map/features/corporate/presentation/widgets/push_registration_cost_banner.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_form.dart';
 
 /// 일자리 등록 — 최종 작성·저장
@@ -58,6 +64,7 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
   SalaryPaymentMonthOffset? _paymentMonthOffset;
   int? _paymentDayOfMonth;
   JobPostNotificationSettings? _notificationSettings;
+  EmployerPushWallet? _wallet;
   WorkerCategory _workerCategory = ProductFeatureFlags.defaultWorkerCategory;
   SalaryPayType _salaryPayType = SalaryPayType.hourly;
   bool _submitting = false;
@@ -80,6 +87,14 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     }
     _salaryPayType = parseSalaryPayType(widget.draft.hourlyWage);
     _loadBranches();
+    _refreshWallet();
+  }
+
+  Future<void> _refreshWallet() async {
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (profile == null) return;
+    final wallet = await PushWalletService().loadWallet(profile);
+    if (mounted) setState(() => _wallet = wallet);
   }
 
   Future<void> _loadBranches() async {
@@ -113,14 +128,12 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
 
   Future<void> _pickPaymentDate() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showKoreanDatePickerSheet(
+      context,
       initialDate: _paymentDate ?? now.add(const Duration(days: 7)),
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
-      helpText: '급여지급일 선택',
-      cancelText: '취소',
-      confirmText: '확인',
+      title: '급여지급일 선택',
     );
     if (picked != null && mounted) {
       setState(() => _paymentDate = picked);
@@ -164,6 +177,7 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     );
     if (result != null && mounted) {
       setState(() => _notificationSettings = result);
+      await _refreshWallet();
     }
   }
 
@@ -221,6 +235,15 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     var extraPushFeeKrw = 0;
     final registeredBy = AuthSession.instance.currentUser?.corporateProfile;
 
+    if (registeredBy != null && notificationSettings != null) {
+      final wallet = await PushWalletService().loadWallet(registeredBy);
+      notificationSettings = PushWalletCreditPolicy.clampNotificationSettings(
+        notificationSettings!,
+        wallet,
+      );
+      setState(() => _notificationSettings = notificationSettings);
+    }
+
     final paymentOutcome = await PushJobPostPaymentFlow().collect(
       context: context,
       notificationSettings: notificationSettings,
@@ -230,12 +253,6 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     if (!mounted) return;
     if (paymentOutcome == null) {
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('지원자 모집하기·유료 알림 결제가 필요합니다. 등록을 완료하지 못했습니다.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
       return;
     }
     notificationSettings = paymentOutcome.notificationSettings;
@@ -270,6 +287,10 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
       return;
     }
 
+    if (mounted) {
+      await _showGoldenPinUpsell();
+    }
+
     if (paymentRecord != null && result.post != null && registeredBy != null) {
       await Navigator.of(context).pushNamed<bool>(
         AppRoutes.corporateInternalApprovalReport,
@@ -293,16 +314,17 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     final pushTier = paymentOutcome.dispatchRadiusTier ??
         notificationSettings?.primaryBase?.radiusTier;
     if (pushTier != null && pushTier != PushRadiusTier.radius0km) {
-      final slotCount = notificationSettings == null
-          ? 1
-          : PushReachEstimator.recruitmentSlotCountFromSettings(
-              notificationSettings,
-            );
+      final slotCount = paymentOutcome.recruitmentPushCount > 0
+          ? paymentOutcome.recruitmentPushCount
+          : 1;
       await Navigator.of(context).pushNamed<bool>(
         AppRoutes.corporatePushDispatch,
         arguments: PushDispatchArgs(
           radiusTier: pushTier,
           recruitmentSlotCount: slotCount,
+          jobPostId: result.post?.id,
+          jobTitle: result.post?.title,
+          companyName: registeredBy?.companyName,
         ),
       );
       if (registeredBy != null) {
@@ -319,12 +341,49 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     Navigator.of(context).pop(true);
   }
 
+  Future<void> _showGoldenPinUpsell() async {
+    final goShop = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('공고 등록 완료'),
+        content: Text(
+          '공고가 무료로 등록되었습니다.\n'
+          '사업자번호당 동시 활성 공고는 최대 10개입니다.\n'
+          '근무지 ${PushPackageCatalog.pushRadiusLabel} · 하루 1회 무료 푸시로 지원자를 모집해 보세요.\n\n'
+          '더 넓은 지역에 알리려면 지역 푸시권을 구매하세요. '
+          '(${PushPackageCatalog.krwSuffix(PushPackageCatalog.singlePackagePriceKrw)}/회)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('나중에'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('지역 푸시권 보기'),
+          ),
+        ],
+      ),
+    );
+    if (goShop == true && mounted) {
+      await Navigator.of(context).pushNamed(AppRoutes.corporatePushPackageShop);
+    }
+  }
+
   Widget? _buildBeforeSubmit() {
-    if (_branches.isEmpty) return null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_selectedBranch == null)
+    final children = <Widget>[];
+    final settings = _notificationSettings;
+    final wallet = _wallet;
+    if (settings?.hasConfiguredBase == true && wallet != null) {
+      children.add(
+        PushRegistrationCostBanner(settings: settings!, wallet: wallet),
+      );
+      children.add(const SizedBox(height: 16));
+    }
+
+    if (_branches.isNotEmpty) {
+      if (_selectedBranch == null) {
+        children.add(
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(12),
@@ -344,6 +403,9 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
               ),
             ),
           ),
+        );
+      }
+      children.add(
         DropdownButtonFormField<CorporateBranch?>(
           value: _selectedBranch,
           decoration: const InputDecoration(
@@ -364,8 +426,14 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
           ],
           onChanged: (value) => setState(() => _selectedBranch = value),
         ),
-        const SizedBox(height: 16),
-      ],
+      );
+      children.add(const SizedBox(height: 16));
+    }
+
+    if (children.isEmpty) return null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
     );
   }
 

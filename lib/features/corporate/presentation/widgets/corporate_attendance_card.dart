@@ -8,10 +8,12 @@ class CorporateAttendanceCard extends StatelessWidget {
     super.key,
     required this.record,
     this.onTap,
+    this.onEmployerConfirm,
   });
 
   final CorporateAttendanceRecord record;
   final VoidCallback? onTap;
+  final VoidCallback? onEmployerConfirm;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +65,41 @@ class CorporateAttendanceCard extends StatelessWidget {
               ),
             ],
           ),
+          if (record.awaitingEmployerConfirm) ...[
+            const SizedBox(height: 8),
+            Text(
+              '구직자 출근 체크 완료 · 기업 확인이 필요합니다',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary.withValues(alpha: 0.95),
+              ),
+            ),
+          ],
+          if (record.awaitingSeekerCheckIn) ...[
+            const SizedBox(height: 8),
+            Text(
+              '기업 출근 확인 완료 · 구직자 출근 체크 대기',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary.withValues(alpha: 0.95),
+              ),
+            ),
+          ],
+          if (record.canEmployerConfirm) ...[
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: onEmployerConfirm ?? onTap,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(
+                record.awaitingEmployerConfirm ? '출근 확인' : '출근 확인 (구직자 대기)',
+              ),
+            ),
+          ],
           if (record.needsCommissionPayment && record.commissionAmountKrw != null) ...[
             const SizedBox(height: 12),
             FilledButton(
@@ -122,6 +159,14 @@ class _StatusBadge extends StatelessWidget {
       CorporateAttendanceStatus.pendingCommission => (
           const Color(0xFFFFEBEE),
           const Color(0xFFC62828),
+        ),
+      CorporateAttendanceStatus.awaitingEmployerConfirm => (
+          const Color(0xFFFFF8E1),
+          const Color(0xFFF57F17),
+        ),
+      CorporateAttendanceStatus.awaitingSeekerCheckIn => (
+          AppColors.primaryLight.withValues(alpha: 0.28),
+          AppColors.primary,
         ),
     };
 

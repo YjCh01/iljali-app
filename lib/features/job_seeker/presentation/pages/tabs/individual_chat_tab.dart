@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/hiring/seeker_attendance_gate_service.dart';
+import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/mvp_feedback.dart';
+import 'package:map/features/hiring/presentation/widgets/seeker_attendance_lock_dialog.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 
 class _ChatPreview {
@@ -16,8 +19,28 @@ class _ChatPreview {
 }
 
 /// 구직자 5번 탭 — 기업 채팅 (↔ 기업 채팅)
-class IndividualChatTab extends StatelessWidget {
+class IndividualChatTab extends StatefulWidget {
   const IndividualChatTab({super.key});
+
+  @override
+  State<IndividualChatTab> createState() => _IndividualChatTabState();
+}
+
+class _IndividualChatTabState extends State<IndividualChatTab> {
+  SeekerAttendanceGateResult? _gate;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGate();
+  }
+
+  Future<void> _loadGate() async {
+    final email = AuthSession.instance.currentUser?.email;
+    if (email == null) return;
+    final gate = await SeekerAttendanceGateService().evaluate(email);
+    if (mounted) setState(() => _gate = gate);
+  }
 
   static const _rooms = [
     _ChatPreview(
@@ -38,12 +61,33 @@ class IndividualChatTab extends StatelessWidget {
       color: AppColors.background,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        itemCount: _rooms.length,
+        itemCount: _rooms.length + (_gate?.isLocked == true ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          final room = _rooms[index];
+          if (_gate?.isLocked == true && index == 0) {
+            return MaterialBanner(
+              backgroundColor: const Color(0xFFFFEBEE),
+              content: Text(
+                _gate!.message ??
+                    '미확인 출근 ${_gate!.overdueCount}건 — 출근 체크 후 채팅·지원이 가능합니다.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => ensureSeekerAttendanceAccess(
+                    context,
+                    AuthSession.instance.currentUser!.email,
+                  ),
+                  child: const Text('해결하기'),
+                ),
+              ],
+            );
+          }
+          final roomIndex = _gate?.isLocked == true ? index - 1 : index;
+          final room = _rooms[roomIndex];
           return CorporateSurfaceCard(
-            onTap: () => showMvpInfoSnackBar(context, '채팅방'),
+            onTap: _gate?.isLocked == true
+                ? null
+                : () => showMvpInfoSnackBar(context, '채팅방'),
             child: Row(
               children: [
                 CircleAvatar(

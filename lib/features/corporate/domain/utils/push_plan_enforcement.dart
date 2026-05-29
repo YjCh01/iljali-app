@@ -1,7 +1,9 @@
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
+import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
 import 'package:map/core/session/auth_session.dart';
 
 /// 푸시·거점 한도 — 지갑 + 기본 플랜 기준
@@ -34,8 +36,12 @@ abstract final class PushPlanEnforcement {
   }
 
   static int get maxBasePointsSync {
-    final wallet = AuthSession.instance.currentUser?.corporateProfile?.pushWallet;
-    return wallet?.totalLocationSlots ?? PushPackageCatalog.baseLocationSlots;
+    final wallet =
+        AuthSession.instance.currentUser?.corporateProfile?.pushWallet;
+    return PushWalletCreditPolicy.effectiveMaxExposurePoints(
+      wallet: wallet ?? const EmployerPushWallet(),
+      currentPointsLength: 1,
+    );
   }
 
   static List<PushRadiusTier> get allowedRadiusTiers => [
@@ -72,9 +78,9 @@ abstract final class PushPlanEnforcement {
 
   static String planLimitSummary() =>
       '${PushPackageCatalog.defaultPlanLabel} · '
-      '반경 ${PushPackageCatalog.pushRadiusLabel} · '
+      '${PushPackageCatalog.planFreeRadiusSummary} · '
       '일 ${PushPackageCatalog.dailyFreePush}회 · '
-      '패키지 ${PushPackageCatalog.krwSuffix(packageUnitPriceKrw)}';
+      '지역 푸시권 ${PushPackageCatalog.krwSuffix(packageUnitPriceKrw)}';
 
   static String pushCountSummary({required int usedToday}) {
     final wallet =
@@ -83,10 +89,10 @@ abstract final class PushPlanEnforcement {
     final remaining = (limit - usedToday).clamp(0, limit);
     final credits = wallet?.packageCredits ?? 0;
     if (remaining > 0) {
-      return '오늘 무료 $usedToday/$limit · 패키지 $credits회 · '
-          '초과 시 패키지 구매';
+      return '오늘 무료 $usedToday/$limit · 지역 푸시권 $credits회 · '
+          '초과 시 지역 푸시권 구매';
     }
-    return '오늘 무료 소진 · 패키지 $credits회 · '
+    return '오늘 무료 소진 · 지역 푸시권 $credits회 · '
         '${PushPackageCatalog.krwSuffix(packageUnitPriceKrw)}부터 구매';
   }
 }

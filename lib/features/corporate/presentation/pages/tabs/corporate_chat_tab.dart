@@ -135,7 +135,7 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
                     const SizedBox(height: 6),
                     Text(
                       '계정·사업자 검증 상태를 확인해 주세요. '
-                      '공고 노출·모집 패키지는 채용 알림 확장용입니다.',
+                      '지역 푸시권은 채용 알림 확장용입니다.',
                       style: TextStyle(
                         fontSize: 13,
                         height: 1.45,

@@ -20,7 +20,14 @@ class SeekerJobPostCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CorporateJobPostCard(post: post, onTap: onTap),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onTap,
+            child: CorporateJobPostCard(post: post),
+          ),
+        ),
         if (post.registeredBy != null) ...[
           const SizedBox(height: 6),
           Padding(

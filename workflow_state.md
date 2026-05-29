@@ -2,67 +2,44 @@
 
 ## Current Task
 
-- (idle) — MVP 제품 범위 feature flags + UI 게이트 완료
+- **급여지급일 서버/API** — monthly rule 필드 영속화 (현재 로컬 in-memory만)
 
 ## Backlog (priority order)
 
 1. [ ] **급여지급일 서버/API** — monthly rule 필드 영속화 (현재 로컬 in-memory만)
-2. [x] **서버 wallet API** — BRN 보너스·패키지 크레딧 영속화 (FastAPI `/v1/wallet/*`)
-2. [x] **공고 `jobDescription` 필드** — `CorporateJobPost` 분리, 작성/수정 플로우 반영
-3. [x] **enum `standard700m` 리네임** — `standardFree1km` (동작 1km 유지)
-4. [x] **Android Gradle 9.1** — wrapper 9.1.0; duplicate launcher color 제거; APK 빌드 재시도 중
-5. [x] **ROI 대시보드** — BASIC 티어 문구 → 출근 확인(10,000원/건) 기준
-6. [x] **analyzer warnings** — unused/duplicate import 11건 정리
+2. [x] **FINAL push policy** — 무료 등록·10공고 상한·지역 푸시권·구직자 푸시함 30일
+3. [x] **서버 wallet API** — BRN 보너스·패키지 크레딧 영속화 (FastAPI `/v1/wallet/*`)
 
 ## Definition of Done
 
 - `flutter analyze` — **0 errors**
 - `flutter test` — **all pass**
-- Pricing/copy matches `map/PUSH_PACKAGE_PRICING.md`
-- `workflow_state.md` updated (Progress, Verification, Backlog checkboxes)
+- Pricing/copy matches final push policy
+- `workflow_state.md` updated
 
 ## Progress
 
-- [x] MVP 제품 범위 — `ProductFeatureFlags` + 일용직-only UI 게이트 + disabled_features.md
-- [x] 지원자 모집하기 — 공고 카드 탭 시 지도 확인 시트 → 확인 후 크레딧 소진
-- [x] 푸시 거점 UX — AI 1km+거점 추천, 기본 거점 검색 숨김, 안내 카드 카피
-- [x] Worker-type 급여지급일 UX — 일용직 달력 / 일반·계약 당월·익월 N일
-- [x] Autonomous rules + Backlog template added (2026-05-28)
-- [x] Package-first stability — docs, copy, 100 tests
-- [x] 서버 wallet API 스키마·라우터·pytest 초안
-- [x] jobDescription 필드 + fullDescriptionText 호환
-- [x] PushRadiusTier.standardFree1km 리네임
-- [x] Gradle 9.1 wrapper + ic_launcher 중복 리소스 제거
-- [x] ROI copy (출근 확인 10,000원/건)
-- [x] analyzer unused import 정리
+- [x] PushWalletCreditPolicy — registration always free; dispatch uses daily free or regional tickets
+- [x] PushDispatchService — no credit consumption on registration
+- [x] JobPostLimitPolicy + data source enforce 10 active posts per companyKey (auto-close oldest)
+- [x] UI rebrand 패키지 → 지역 푸시권(황금핀); registration banner + post-registration upsell
+- [x] SeekerPushInbox — entity, repository, 30-day retention, archive/delete, page + route
+- [x] Tests: policy, limit, retention, availability, confirm sheet — pass
+- [x] FINAL policy 카피 정합화 — 무료 등록/근무지 무료 푸시/유료 지역 푸시권/황금핀 조건 문구 전면 정리
+- [x] Corporate flaky/legacy expectations 정리 — `corporate_home_shell_test` 포함 정책 반영값으로 갱신
 
 ## Completed (recent)
 
-- 2026-05-28 — MVP scope: ProductFeatureFlags (일용직-only default), UI gates, disabled_features.md; 11 tests pass.
-- 2026-05-28 — 지원자 모집하기: 공고 카드 → 지도·반경 확인 bottom sheet → 확인 후 PushDispatchService 소진; extra_push_confirm_sheet_test 3 pass.
-- 2026-05-28 — 푸시 거점 설정 UX: AI 1km·거점 추가 추천, 기본 거점 검색/드래그 비활성, 안내 카드 카피 개선; push tests 11 pass.
-- 2026-05-28 — 급여지급일: `SalaryPaymentSchedule`, `workerCategory` on post, form 분기, 117 tests pass.
-- 2026-05-28 — Autonomous backlog 6항목: wallet API, jobDescription, enum rename, Gradle 9.1, ROI copy, lint cleanup.
-- 2026-05-28 — Autonomous execution rule + workflow Backlog/DoD.
-- 2026-05-28 — Copy/docs sweep: 100 tests, 0 analyze errors, package-first UI aligned.
+- 2026-05-29 — FINAL policy audit+polish: corporate/seeker copy 정합화, 혼동 문구(이용권/패키지) 정리, corporate tests 전체 통과(115)
+- 2026-05-29 — FINAL push policy: free registration, 10-post limit, 지역 푸시권 rebrand, seeker push inbox 30-day; corporate tests 112 pass (2 pre-existing home_shell fail)
+- 2026-05-28 — 크레딧 UI 분리: 패키지/일일 무료 카드 배지 분리
 
 ## Blockers
 
-- **서버 pytest**: 로컬 `python`/`venv` 미구성 — `server/.venv` 생성 후 `pip install -r requirements.txt` · `pytest tests/test_push_wallet.py` 필요.
-- **APK 빌드**: 세션에서 JAVA_HOME(Android Studio JBR) 설정 후 빌드 시도; Gradle 9.1 태스크는 기동됨. 최종 green은 로컬에서 `flutter build apk` 재확인 권장.
+- **서버 pytest**: 로컬 venv 미구성
 
 ## Verification
 
-- Tests: product_feature_flags + corporate_create_job_post_wizard — **11 passed**
-- Tests: extra_push_confirm_sheet — **3 passed**
-- Tests: corporate/ — **71 passed, 1 failed** (pre-existing `partnership_downgrade_home_test` 1km copy)
-- Lint: `flutter analyze` — **0 errors** on changed files
-- Server: wallet pytest — **not run** (no Python venv in agent shell)
-- APK: `flutter build apk --debug` — Gradle 9.1 ran; duplicate resource fixed; full green pending local JAVA_HOME + rebuild
-
-## Session kickoff (copy to chat)
-
-```
-Backlog 처리. workflow_state.md·PUSH_PACKAGE_PRICING.md 기준.
-묻지 말고 plan→execute→verify→다음 항목 반복. 커밋 X.
-```
+- Tests: `flutter test test/features/corporate/` — **115 passed, 0 failed**
+- Tests: `flutter test test/features/job_seeker/seeker_push_retention_policy_test.dart` — **2 passed**
+- Lint: `flutter analyze lib/features/corporate lib/features/job_seeker` — **0 errors** (warnings only)

@@ -1,4 +1,4 @@
-/// 푸시·거점 패키지 요금 카탈로그 (2026 — 추가구매 우선)
+/// 지역 푸시권 요금 카탈로그 (황금핀 = 100회 팩 구매자 전용)
 abstract final class PushPackageCatalog {
   // ── 기본 플랜 (무료) ──
   static const defaultPlanLabel = '기본 플랜';
@@ -12,9 +12,9 @@ abstract final class PushPackageCatalog {
   // ── 단품 ──
   static const singlePackagePriceKrw = 5000;
   static const singlePackageId = 'single';
-  static const singlePackageLabel = '공고 노출·모집 패키지';
+  static const singlePackageLabel = '지역 푸시권';
   static const singlePackageDescription =
-      '노출 지역 및 범위를 지정하고 공고 알림을 보냅니다.';
+      '추가 모집지역 푸시 1회 · 근무지 1km 기본 포함';
 
   static const packageCreditValidDays = 365;
 
@@ -43,7 +43,7 @@ abstract final class PushPackageCatalog {
       discountPercent: 30,
       marketingLine: '30% 할인',
       extraBenefitLines: [
-        '지도 프리미엄 핀(◆) — 모든 채용 공고에 골드 핀으로 눈에 띄게 노출',
+        '100회 팩 구매 시 모든 공고에 황금핀(◆)으로 지도 노출',
         '지도를 축소해도 일반 공고와 색·크기가 확실히 구분됩니다',
       ],
     ),
@@ -73,10 +73,14 @@ abstract final class PushPackageCatalog {
         (m) => '${m[1]},',
       );
 
+  static String get freePushRadiusLabel => '1km';
+
   static String get pushRadiusLabel => '1km';
 
+  static String get planFreeRadiusSummary => '무료 1km';
+
   static String bundleCardDetailLine(int priceKrw) =>
-      '${formatKrw(priceKrw)}원 / 반경1km / 노출지역 선택가능';
+      '${formatKrw(priceKrw)}원 / 반경1km / 지역 푸시권 1회';
 
   static String krwSuffix(int amount) => '${formatKrw(amount)}원';
 }

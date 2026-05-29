@@ -62,7 +62,7 @@ class _CorporateBranchManagementPageState
           title: const Text('지점 한도 초과'),
           content: Text(
             '현재 지점 한도(${BranchPlanLimits.limitLabel(tier)})에 도달했습니다.\n'
-            '공고 노출·모집 패키지를 구매해 지점을 추가하시겠습니까?',
+            '지역 푸시권을 구매해 지점을 추가하시겠습니까?',
           ),
           actions: [
             TextButton(
@@ -71,7 +71,7 @@ class _CorporateBranchManagementPageState
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('패키지 상점'),
+              child: const Text('지역 푸시권 상점'),
             ),
           ],
         ),

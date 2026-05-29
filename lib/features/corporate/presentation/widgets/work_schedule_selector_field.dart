@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/widgets/korean_calendar.dart';
 import 'package:map/core/widgets/scroll_time_picker.dart';
 import 'package:map/features/corporate/domain/entities/work_schedule_spec.dart';
 import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
@@ -901,31 +902,12 @@ class _VerticalScheduleCalendar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
-
     return ListView(
       controller: scrollController,
       physics: const ClampingScrollPhysics(),
       primary: false,
       children: [
-        Row(
-          children: weekdays
-              .map(
-                (w) => Expanded(
-                  child: Center(
-                    child: Text(
-                      w,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-        ),
+        const KoreanCalendarWeekdayHeader(),
         const SizedBox(height: 8),
         if (spec.mode == WorkScheduleMode.rotatingShift)
           Padding(
@@ -1028,7 +1010,7 @@ class _ScheduleMonthGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final first = DateTime(month.year, month.month, 1);
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    final leading = (first.weekday + 6) % 7;
+    final leading = KoreanCalendarLayout.leadingBlankDays(first);
 
     return GridView.builder(
       shrinkWrap: true,
@@ -1123,7 +1105,7 @@ class _ScheduleMonthGrid extends StatelessWidget {
                             ? AppColors.primary
                             : slot == ShiftSlotKind.off && !isExcludedCustom
                                 ? AppColors.textSecondary.withValues(alpha: 0.55)
-                                : AppColors.textPrimary,
+                                : KoreanCalendarLayout.dayTextColor(date),
                   ),
                 ),
                 if (isWorkDay)

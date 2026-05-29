@@ -24,7 +24,7 @@ Future<void> showPartnershipUpsellDialog(
             if (showTierCards) ...[
               const SizedBox(height: 16),
               const Text(
-                '공고 노출·모집 패키지',
+                '유료 지역 푸시권',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
@@ -49,7 +49,7 @@ Future<void> showPartnershipUpsellDialog(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
           ),
-          child: const Text('패키지 구매하기'),
+          child: const Text('지역 푸시권 구매'),
         ),
       ],
     ),

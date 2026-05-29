@@ -3,10 +3,9 @@ import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
-import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/presentation/widgets/create_job_post/partnership_tier_cards.dart';
 
-/// 푸시·패키지 공식 안내 채팅 상세
+/// 푸시 정책 공식 안내 채팅 상세
 class PartnershipNoticeChatPage extends StatelessWidget {
   const PartnershipNoticeChatPage({
     super.key,
@@ -61,7 +60,7 @@ class PartnershipNoticeChatPage extends StatelessWidget {
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          '푸시·패키지 안내',
+                          '푸시 정책 안내',
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
@@ -95,9 +94,10 @@ class PartnershipNoticeChatPage extends StatelessWidget {
           const PartnershipTierCards(),
           const SizedBox(height: 16),
           Text(
-            '※ 기본 플랜: 반경 1km · 하루 1회 · 사업자 보너스 ${PushPackageCatalog.signupBonusPushes}회\n'
-            '※ 패키지: 5,000원 = 노출 범위 1 + 모집 1회 (1km) · 번들 할인\n'
-            '※ 추가 노출·모집 → 패키지 구매',
+            '※ 공고 등록: 완전 무료 · 사업자번호당 동시 노출 최대 10개\n'
+            '※ 무료 푸시: 근무지 1km · 하루 1회\n'
+            '※ 유료 지역 푸시권: 5,000원/회 · 10회 45,000원 · 30회 120,000원 · 100회 350,000원\n'
+            '※ 황금핀(◆): 100회 팩 구매자 전용',
             style: TextStyle(
               fontSize: 12,
               height: 1.45,

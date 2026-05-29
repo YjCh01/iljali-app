@@ -13,7 +13,9 @@ import 'package:map/features/corporate/presentation/widgets/payment/payment_meth
 
 /// 푸시·거점 패키지 상점 (단품 + 번들)
 class PushPackageShopPage extends StatefulWidget {
-  const PushPackageShopPage({super.key});
+  const PushPackageShopPage({super.key, this.initialOfferId});
+
+  final String? initialOfferId;
 
   @override
   State<PushPackageShopPage> createState() => _PushPackageShopPageState();
@@ -23,7 +25,7 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
   final _purchaseService = PushPackagePurchaseService();
   final _walletService = PushWalletService();
 
-  PushPackageBundleOffer _selected = PushPackageCatalog.allOffers.first;
+  late PushPackageBundleOffer _selected;
   PaymentMethod _method = PaymentMethodCatalog.defaultMethod;
   int _singleQuantity = 1;
   bool _processing = false;
@@ -33,6 +35,8 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
   @override
   void initState() {
     super.initState();
+    _selected = PushPackageCatalog.findById(widget.initialOfferId ?? '') ??
+        PushPackageCatalog.allOffers.first;
     _loadWallet();
   }
 
@@ -72,7 +76,10 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.message ?? '충전 완료'),
+          content: Text(
+            result.message ??
+                '지역 푸시권 $_checkoutQuantity회가 충전되었습니다. 바로 모집할 수 있어요.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -112,7 +119,7 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
         elevation: 0,
         leading: const AppBackButton(),
         automaticallyImplyLeading: false,
-        title: const Text('공고 노출·모집 패키지'),
+        title: const Text('지역 푸시권'),
       ),
       body: Column(
         children: [
@@ -121,14 +128,14 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
               padding: const EdgeInsets.all(20),
               children: [
                 const Text(
-                  '공고 노출·모집 패키지',
+                  '지역 푸시권',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '패키지 1개 = 공고 노출 범위 1곳 + 지원자 모집하기 1회 (1km). '
-                  '기본 플랜은 ${PushPackageCatalog.pushRadiusLabel} · '
-                  '하루 ${PushPackageCatalog.dailyFreePush}회입니다.',
+                  '지역 푸시권 1회 = 추가 모집지역 푸시 1곳 (1km). '
+                  '근무지 ${PushPackageCatalog.pushRadiusLabel}는 기본 포함 · '
+                  '하루 ${PushPackageCatalog.dailyFreePush}회 무료 푸시 · 공고 등록 무료.',
                   style: TextStyle(
                     fontSize: 14,
                     height: 1.45,
@@ -175,7 +182,7 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
                       const SizedBox(height: 4),
                       Text(
                         '공고는 채용 완료까지 지도에 핀으로 노출됩니다. '
-                        '100회 팩 구매 시 모든 공고가 노란 핀(◆)으로 표시됩니다.',
+                        '100회 팩 구매 시 모든 공고가 황금핀(◆)으로 표시됩니다.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 12,

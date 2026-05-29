@@ -10,8 +10,9 @@ class AttendanceEscalationService {
   static Future<void> runEscalationPass(BuildContext context) async {
     if (!context.mounted) return;
     final repo = await LocalHiringRepository.create();
+    await repo.autoConfirmSilentEmployers();
     final overdue = await repo.escalateOverdueCommissions();
-    if (!context.mounted || overdue.isEmpty) return;
+    if (!context.mounted) return;
 
     for (final item in overdue) {
       _showEscalation(context, item);
@@ -22,7 +23,7 @@ class AttendanceEscalationService {
     final level = item.escalationLevel;
     final message = switch (level) {
       1 =>
-        '「${item.seekerName}」 출근 확인 후 수수료 결제가 지연되고 있습니다. 근태 탭에서 결제해 주세요.',
+        '「${item.seekerName}」 상호 출근 확인 후 수수료 결제가 지연되고 있습니다. 근태 탭에서 결제해 주세요.',
       2 =>
         '수수료 미결제 알림 (2회): ${item.seekerName} · ${CommissionFormatter(item.commissionAmountKrw ?? CommissionCalculator.defaultKrw())}',
       _ =>

@@ -27,9 +27,18 @@ async def verify_business(body: VerifyBusinessRequest, db: Session = Depends(get
     if len(brn) != 10:
         raise HTTPException(status_code=400, detail="사업자등록번호 10자리가 필요합니다.")
 
-    lookup = await nts.verify_business(brn, body.company_name)
+    lookup = await nts.verify_business(
+        brn,
+        body.company_name,
+        representative_name=body.representative_name,
+        opening_date=body.opening_date,
+    )
     if not lookup.valid:
-        raise HTTPException(status_code=422, detail="국세청 조회 결과 유효하지 않은 사업자입니다.")
+        raise HTTPException(
+            status_code=422,
+            detail=lookup.failure_message
+            or "국세청 조회 결과 유효하지 않은 사업자입니다.",
+        )
 
     flagged = industry_requires_review(lookup.industry_name)
     status = "adminReviewRequired" if flagged else "verified"

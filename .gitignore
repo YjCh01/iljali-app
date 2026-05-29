@@ -31,6 +31,9 @@ migrate_working_dir/
 .pub/
 /build/
 
+# Windows build bootstrap (downloaded by 일자리_MVP_실행.bat)
+/tool/nuget/nuget.exe
+
 # Symbolication related
 app.*.symbols
 

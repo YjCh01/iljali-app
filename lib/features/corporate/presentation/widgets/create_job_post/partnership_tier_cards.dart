@@ -96,7 +96,7 @@ class PartnershipTierCards extends StatelessWidget {
 
                 ? '현재 ${plan.label}이 적용됩니다. '
 
-                    '추가 공고 노출·지원자 모집은 패키지 구매로 확장하세요.'
+                    '추가 모집지역 푸시는 지역 푸시권으로 확장하세요.'
 
                 : PremiumPartnershipPlans.pushStrategyNote,
 
@@ -192,7 +192,7 @@ class PartnershipTierCards extends StatelessWidget {
 
             child: const Text(
 
-              '공고 노출·모집 패키지 보기',
+              '지역 푸시권 보기',
 
               style: TextStyle(fontWeight: FontWeight.w700),
 

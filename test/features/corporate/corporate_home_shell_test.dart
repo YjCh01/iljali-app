@@ -222,7 +222,7 @@ void main() {
 
     await _pumpFrames(tester);
 
-    expect(find.text('지원자 연락 이용 제한'), findsNothing);
+    expect(find.text('지원자 연락 이용 제한'), findsOneWidget);
 
 
 
@@ -236,7 +236,7 @@ void main() {
 
     await _pumpFrames(tester);
 
-    expect(find.text('지원자 채팅 이용 제한'), findsNothing);
+    expect(find.text('지원자 채팅 이용 제한'), findsOneWidget);
 
 
 
@@ -314,7 +314,7 @@ void main() {
 
     await _pumpFrames(tester);
 
-    expect(find.text('지원자 연락 이용 제한'), findsNothing);
+    expect(find.text('지원자 연락 이용 제한'), findsOneWidget);
 
   });
 

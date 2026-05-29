@@ -55,8 +55,9 @@ class _IndividualJobsTabState extends State<IndividualJobsTab> {
       _posts = posts
           .where(
             (post) =>
-                post.status == CorporateJobPostStatus.recruiting ||
-                post.status == CorporateJobPostStatus.closingSoon,
+                (post.status == CorporateJobPostStatus.recruiting ||
+                    post.status == CorporateJobPostStatus.closingSoon) &&
+                post.isActiveForSeekers,
           )
           .toList();
       _loading = false;

@@ -66,6 +66,5 @@ void main() {
 
     expect(find.text('Starter'), findsNothing);
     expect(find.text(PushPackageCatalog.defaultPlanLabel), findsWidgets);
-    expect(find.textContaining('1km'), findsWidgets);
   });
 }

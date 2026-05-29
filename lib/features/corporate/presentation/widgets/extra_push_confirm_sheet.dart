@@ -9,10 +9,23 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
+import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
+import 'package:map/features/corporate/presentation/widgets/exposure_zone_add_row.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 
-/// 지원자 모집하기 — 위치·반경 확인 후 발송
+const _kZoneListMaxHeight = 200.0;
+const _kMapHeightExpanded = 220.0;
+const _kMapHeightCollapsed = 340.0;
+
+enum ExtraPushSheetMode {
+  /// 공고관리 — 지역만 저장 (발송 없음)
+  configureZones,
+  /// @deprecated 발송 확인용 — 공고관리에서는 [configureZones] + 즉시 발송 분리
+  dispatch,
+}
+
+/// 지원자 모집하기 — 위치·반경 확인 후 발송 / 모집지역 설정
 class ExtraPushConfirmResult {
   const ExtraPushConfirmResult({
     required this.coordinate,
@@ -31,6 +44,7 @@ Future<ExtraPushConfirmResult?> showExtraPushConfirmSheet(
   BuildContext context, {
   required CorporateJobPost post,
   required int availablePushCredits,
+  ExtraPushSheetMode mode = ExtraPushSheetMode.dispatch,
 }) {
   return showModalBottomSheet<ExtraPushConfirmResult>(
     context: context,
@@ -42,6 +56,7 @@ Future<ExtraPushConfirmResult?> showExtraPushConfirmSheet(
     builder: (context) => _ExtraPushConfirmSheet(
       post: post,
       availablePushCredits: availablePushCredits,
+      mode: mode,
     ),
   );
 }
@@ -50,10 +65,12 @@ class _ExtraPushConfirmSheet extends StatefulWidget {
   const _ExtraPushConfirmSheet({
     required this.post,
     required this.availablePushCredits,
+    required this.mode,
   });
 
   final CorporateJobPost post;
   final int availablePushCredits;
+  final ExtraPushSheetMode mode;
 
   @override
   State<_ExtraPushConfirmSheet> createState() => _ExtraPushConfirmSheetState();
@@ -70,11 +87,39 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
   EmployerPushWallet? _wallet;
   bool _submitting = false;
   bool _showPurchasedHint = false;
+  bool _zoneListExpanded = false;
+  bool _mapPointerActive = false;
+
+  int get _recruitZoneCount =>
+      PushWalletCreditPolicy.recruitmentZoneCountFromPoints(_points);
+
+  int get _remainingSlots =>
+      (_maxPoints - _points.length).clamp(0, _maxPoints);
+
+  int get _configureRemainingAddSlots =>
+      PushWalletCreditPolicy.configureRemainingAddSlots(
+        slotRemaining: _remainingSlots,
+        availableCredits: _availableCredits,
+        recruitZoneCount: _recruitZoneCount,
+      );
 
   @override
   void initState() {
     super.initState();
-    _points = List.from(widget.post.notificationSettings!.basePoints);
+    final settings = widget.post.notificationSettings;
+    if (settings != null && settings.basePoints.isNotEmpty) {
+      _points = List.from(settings.basePoints);
+    } else {
+      _points = [
+        PushNotificationBasePoint(
+          id: 'workplace',
+          coordinate: defaultPushMapCenter(),
+          addressLabel: widget.post.warehouseName,
+          radiusTier: PushRadiusTier.standardFree1km,
+          isPrimary: true,
+        ),
+      ];
+    }
     _initialPoints = List.from(_points);
     _activeIndex = 0;
     _availableCredits = widget.availablePushCredits;
@@ -82,13 +127,26 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     _refreshWallet();
   }
 
-  int get _maxPoints =>
-      _wallet?.totalLocationSlots ?? _points.length.clamp(1, 999);
+  bool get _isConfigureMode =>
+      widget.mode == ExtraPushSheetMode.configureZones;
 
-  PushCreditVisualTheme get _visualTheme {
-    if (_activeIndex > 0) return PushCreditVisualTheme.package;
-    return PushCreditVisualTheme.fromNextPushConsume(_wallet);
+  int get _maxPoints {
+    final wallet = _wallet ?? const EmployerPushWallet();
+    if (_isConfigureMode) {
+      return PushWalletCreditPolicy.configureModeMaxPoints(
+        pointsLength: _points.length,
+        availableCredits: _availableCredits,
+        wallet: wallet,
+      );
+    }
+    return PushWalletCreditPolicy.effectiveMaxExposurePoints(
+      wallet: wallet,
+      currentPointsLength: _points.length,
+    );
   }
+
+  PushCreditVisualTheme get _visualTheme =>
+      PushCreditVisualTheme.forRecruitPoint(_activeIndex);
 
   bool get _pointsChanged =>
       _points.length != _initialPoints.length ||
@@ -142,17 +200,80 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     );
   }
 
-  void _fillPointsToWalletSlots({bool selectNewRecruitment = false}) {
-    final before = _points.length;
-    while (_points.length < _maxPoints) {
+  void _appendRecruitmentPointAfterPurchase() {
+    if (_points.length >= _maxPoints) return;
+    setState(() {
       _points.add(_createRecruitmentPoint());
-    }
-    if (selectNewRecruitment && _points.length > before) {
-      _activeIndex = before.clamp(1, _points.length - 1);
-      if (_points.length == 2) _activeIndex = 1;
+      _activeIndex = _points.length - 1;
       _syncActiveFromPoint(_activeIndex);
       _showPurchasedHint = true;
+    });
+  }
+
+  Future<bool> _consumeCreditForNewZone() async {
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (profile == null) return false;
+    final result =
+        await PushWalletService().tryConsumeRecruitmentCredit(profile);
+    if (!result.success) return false;
+    await _refreshWallet();
+    return true;
+  }
+
+  Future<void> _addRecruitmentZone() async {
+    if (_submitting) return;
+    _syncPointAtActiveIndex();
+    if (_configureRemainingAddSlots <= 0 || _availableCredits <= 0) {
+      await _openPackageShop();
+      return;
     }
+    if (_points.length >= _maxPoints) {
+      await _openPackageShop();
+      return;
+    }
+    setState(() => _submitting = true);
+    final consumed = await _consumeCreditForNewZone();
+    if (!mounted) return;
+    if (!consumed) {
+      setState(() => _submitting = false);
+      await _openPackageShop();
+      return;
+    }
+    setState(() {
+      _submitting = false;
+      _points.add(_createRecruitmentPoint());
+      _activeIndex = _points.length - 1;
+      _syncActiveFromPoint(_activeIndex);
+    });
+  }
+
+  Future<void> _removeRecruitmentZone(int index) async {
+    if (_submitting || index <= 0 || index >= _points.length) return;
+    _syncPointAtActiveIndex();
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    setState(() => _submitting = true);
+    if (profile != null) {
+      await PushWalletService().refundRecruitmentCredit(profile);
+      await _refreshWallet();
+    }
+    if (!mounted) return;
+    setState(() {
+      _submitting = false;
+      _points.removeAt(index);
+      if (_activeIndex >= _points.length) {
+        _activeIndex = _points.length - 1;
+      } else if (_activeIndex > index) {
+        _activeIndex -= 1;
+      }
+      _syncActiveFromPoint(_activeIndex);
+    });
+  }
+
+  String get _configureMapHint {
+    if (_activeIndex == 0) {
+      return '근무지는 고정입니다. 모집지역 칩을 선택해 추가·위치를 지정하세요.';
+    }
+    return '${ExposurePointLabels.title(_activeIndex)} — 지도를 움직여 위치를 지정하세요.';
   }
 
   Future<void> _refreshWallet() async {
@@ -162,14 +283,13 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     if (!mounted) return;
     setState(() {
       _wallet = wallet;
-      _availableCredits = wallet.availablePushCredits;
-      _fillPointsToWalletSlots();
+      _availableCredits = wallet.packageRecruitCredits;
     });
   }
 
   Future<void> _openPackageShop() async {
     if (_submitting) return;
-    final slotsBefore = _wallet?.totalLocationSlots ?? _points.length;
+    final creditsBefore = _wallet?.packageRecruitCredits ?? 0;
     final purchased = await Navigator.of(context).pushNamed<bool>(
       AppRoutes.corporatePushPackageShop,
     );
@@ -180,19 +300,23 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     if (!mounted) return;
     setState(() {
       _wallet = wallet;
-      _availableCredits = wallet.availablePushCredits;
-      final gainedSlot = wallet.totalLocationSlots > slotsBefore;
-      _fillPointsToWalletSlots(
-        selectNewRecruitment: purchased == true && gainedSlot,
-      );
-      if (purchased == true && !gainedSlot && _points.length > 1) {
-        _activeIndex = 1;
-        _syncActiveFromPoint(_activeIndex);
-        _showPurchasedHint = true;
-      } else if (purchased == true && wallet.packageCredits > 0) {
+      _availableCredits = wallet.packageRecruitCredits;
+      if (purchased == true &&
+          wallet.packageRecruitCredits <= creditsBefore &&
+          wallet.packageRecruitCredits > 0) {
         _showPurchasedHint = true;
       }
     });
+    if (purchased == true && wallet.packageRecruitCredits > creditsBefore) {
+      await _addRecruitmentZoneAfterPurchase();
+    }
+  }
+
+  Future<void> _addRecruitmentZoneAfterPurchase() async {
+    if (_points.length >= _maxPoints) return;
+    final consumed = await _consumeCreditForNewZone();
+    if (!mounted || !consumed) return;
+    _appendRecruitmentPointAfterPurchase();
   }
 
   List<PushRadiusMapOverlayPoint> get _mapOverlays => [
@@ -203,6 +327,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
               radiusMeters: _points[i].radiusMeters,
               label: ExposurePointLabels.title(i),
               pointIndex: i,
+              visualTheme: PushCreditVisualTheme.forRecruitPoint(i),
             ),
       ];
 
@@ -215,9 +340,34 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
         coordinate: _center,
         radiusTier: _radiusTier,
         activePointIndex: _activeIndex,
-        updatedBasePoints: _pointsChanged ? List.unmodifiable(_points) : null,
+        updatedBasePoints: _isConfigureMode || _pointsChanged
+            ? List.unmodifiable(_points)
+            : null,
       ),
     );
+  }
+
+  int get _creditsRequired => PushWalletCreditPolicy.extraPushBillableCredits(
+        before: _initialPoints,
+        after: _points,
+        activePointIndex: _activeIndex,
+      );
+
+  bool get _canConfirmDispatch {
+    final paid = _wallet?.paidRecruitCreditsAvailable ?? 0;
+    if (_creditsRequired > 0) {
+      return paid >= _creditsRequired;
+    }
+    if (_activeIndex == 0) {
+      return (_wallet?.dailyFreePostingAvailable ?? false) ||
+          _availableCredits > 0;
+    }
+    return paid > 0;
+  }
+
+  bool get _canConfirm {
+    if (_isConfigureMode) return _points.isNotEmpty;
+    return _canConfirmDispatch;
   }
 
   @override
@@ -229,10 +379,27 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
       _activeIndex,
       _points[_activeIndex],
     );
+    final canConfirm = _canConfirm;
+    final creditsRequired = _creditsRequired;
+    final headerCredits = _isConfigureMode
+        ? _availableCredits
+        : (_wallet?.packageRecruitCredits ?? _availableCredits);
+    final hasCredits = _isConfigureMode
+        ? headerCredits > 0
+        : (_wallet?.dailyFreePostingAvailable ?? false) || headerCredits > 0;
+    final showCreditWarning = !_isConfigureMode && !canConfirm;
+    final mapHeight = _isConfigureMode
+        ? _kMapHeightCollapsed
+        : _points.length > 1 && _zoneListExpanded
+            ? _kMapHeightExpanded
+            : _kMapHeightCollapsed;
 
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxHeight),
       child: SingleChildScrollView(
+        physics: _mapPointerActive
+            ? const NeverScrollableScrollPhysics()
+            : const ClampingScrollPhysics(),
         child: Padding(
           padding: EdgeInsets.only(
             left: 20,
@@ -262,9 +429,9 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '지원자 모집하기',
-                          style: TextStyle(
+                        Text(
+                          _isConfigureMode ? '모집지역 설정' : '지원자 모집하기',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                             color: AppColors.textPrimary,
@@ -285,35 +452,116 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                       ],
                     ),
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: theme.accentLight.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '보유 $_availableCredits회',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: theme.accent,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: hasCredits
+                              ? theme.accentLight.withValues(alpha: 0.35)
+                              : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: hasCredits
+                                ? theme.accent.withValues(alpha: 0.25)
+                                : Colors.red.shade200,
+                          ),
+                        ),
+                        child: Text(
+                          hasCredits
+                              ? '보유 $headerCredits회'
+                              : '보유 0회',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: hasCredits
+                                ? theme.accent
+                                : Colors.red.shade700,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (_wallet != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _wallet!.recruitCreditsDetailLabel,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary
+                                .withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                _activeIndex == 0
-                    ? '근무지 주변에서 발송할지, 아래에서 모집지역을 선택하세요.'
-                    : '지도를 움직여 모집지역 위치를 지정한 뒤 발송해 주세요.',
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.45,
-                  color: AppColors.textSecondary.withValues(alpha: 0.95),
+              if (!_isConfigureMode) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _points.length > 1
+                      ? '지도의 연한 영역을 탭하거나, 발송 지역 목록에서 선택하세요.'
+                      : _activeIndex == 0
+                          ? '근무지 주변에서 발송합니다.'
+                          : '지도를 움직여 모집지역 위치를 지정한 뒤 발송해 주세요.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.45,
+                    color: AppColors.textSecondary.withValues(alpha: 0.95),
+                  ),
                 ),
-              ),
+              ],
+              if (showCreditWarning) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 18,
+                        color: Colors.red.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          creditsRequired > 0
+                              ? '모집지역 푸시 $creditsRequired회 필요 · '
+                                  '유료 이용권 ${_wallet?.paidRecruitCreditsAvailable ?? 0}회 보유'
+                              : '오늘 무료 근무지 푸시를 사용할 수 없습니다.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.4,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.red.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (!_isConfigureMode && creditsRequired > 0) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '이번 발송 시 모집지역 이용권 $creditsRequired회가 차감됩니다.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                    color: theme.accent,
+                  ),
+                ),
+              ],
               if (_showPurchasedHint) ...[
                 const SizedBox(height: 10),
                 Container(
@@ -339,8 +587,8 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                       Expanded(
                         child: Text(
                           _points.length > 1
-                              ? '패키지가 충전되었습니다. 모집지역을 선택해 바로 발송해 보세요.'
-                              : '패키지가 충전되었습니다. 보유 횟수가 늘었습니다.',
+                              ? '지역 푸시권이 충전되었습니다. 모집지역을 선택해 바로 발송해 보세요.'
+                              : '지역 푸시권이 충전되었습니다. 보유 횟수가 늘었습니다.',
                           style: TextStyle(
                             fontSize: 11,
                             height: 1.4,
@@ -353,7 +601,9 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                   ),
                 ),
               ],
-              if (theme.showBasicPassNotice && _activeIndex == 0) ...[
+              if (theme.showBasicPassNotice &&
+                  _activeIndex == 0 &&
+                  !_isConfigureMode) ...[
                 const SizedBox(height: 10),
                 BasicPassNoticeBanner(
                   backgroundColor: theme.accentLight.withValues(alpha: 0.22),
@@ -361,55 +611,69 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                   iconColor: theme.accent,
                 ),
               ],
-              if (_points.length > 1) ...[
+              if (_isConfigureMode) ...[
                 const SizedBox(height: 12),
-                SizedBox(
-                  height: 36,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _points.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final selected = index == _activeIndex;
-                      final chipTheme = index == 0
-                          ? PushCreditVisualTheme.fromNextPushConsume(_wallet)
-                          : PushCreditVisualTheme.package;
-                      return ChoiceChip(
-                        label: Text(
-                          ExposurePointLabels.compactLine(
-                            index,
-                            _points[index],
-                          ),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: selected
-                                ? chipTheme.actionForeground
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                        selected: selected,
-                        onSelected: _submitting
-                            ? null
-                            : (_) => _selectPoint(index),
-                        selectedColor: chipTheme.actionBackground,
-                        backgroundColor: AppColors.background,
-                        side: BorderSide(
-                          color: selected
-                              ? chipTheme.accent.withValues(alpha: 0.45)
-                              : AppColors.searchBarBorder,
-                        ),
-                        showCheckmark: false,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                      );
-                    },
+                _ConfigureZoneSummary(
+                  recruitZoneCount: _recruitZoneCount,
+                  postingCredits: _availableCredits,
+                  remainingAddSlots: _configureRemainingAddSlots,
+                ),
+                const SizedBox(height: 10),
+                _RecruitmentZoneRowList(
+                  points: _points,
+                  activeIndex: _activeIndex,
+                  maxSlots: _maxPoints,
+                  remainingAddSlots: _configureRemainingAddSlots,
+                  submitting: _submitting,
+                  onSelect: _selectPoint,
+                  onAdd: _addRecruitmentZone,
+                  onRemove: _removeRecruitmentZone,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _configureMapHint,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.45,
+                    fontWeight: FontWeight.w600,
+                    color: _visualTheme.accent.withValues(alpha: 0.95),
                   ),
+                ),
+              ] else if (_points.length > 1) ...[
+                const SizedBox(height: 12),
+                _RecruitmentZoneList(
+                  points: _points,
+                  activeIndex: _activeIndex,
+                  wallet: _wallet,
+                  submitting: _submitting,
+                  expanded: _zoneListExpanded,
+                  onExpandedChanged: (expanded) {
+                    setState(() => _zoneListExpanded = expanded);
+                  },
+                  onSelect: _selectPoint,
                 ),
               ],
               const SizedBox(height: 14),
-              SizedBox(
-                height: 240,
-                child: PushRadiusMapPicker(
+              Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (_) {
+                  if (!_mapPointerActive) {
+                    setState(() => _mapPointerActive = true);
+                  }
+                },
+                onPointerUp: (_) {
+                  if (_mapPointerActive) {
+                    setState(() => _mapPointerActive = false);
+                  }
+                },
+                onPointerCancel: (_) {
+                  if (_mapPointerActive) {
+                    setState(() => _mapPointerActive = false);
+                  }
+                },
+                child: SizedBox(
+                  height: mapHeight,
+                  child: PushRadiusMapPicker(
                   key: ValueKey('recruit_map_$_activeIndex'),
                   center: _center,
                   radiusMeters: _radiusTier.radiusMeters,
@@ -422,6 +686,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                     setState(() => _center = coordinate);
                   },
                 ),
+              ),
               ),
               const SizedBox(height: 12),
               PushRadiusKmSlider(
@@ -438,7 +703,8 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.textSecondary.withValues(alpha: 0.85),
+                  fontWeight: FontWeight.w600,
+                  color: theme.accent.withValues(alpha: 0.92),
                 ),
               ),
               const SizedBox(height: 14),
@@ -472,7 +738,8 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                   Expanded(
                     flex: 2,
                     child: FilledButton(
-                      onPressed: _submitting ? null : _confirm,
+                      onPressed:
+                          _submitting || !canConfirm ? null : _confirm,
                       style: FilledButton.styleFrom(
                         backgroundColor: theme.actionBackground,
                         foregroundColor: theme.actionForeground,
@@ -490,9 +757,9 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                                 color: theme.actionForeground,
                               ),
                             )
-                          : const Text(
-                              '지원자 모집하기',
-                              style: TextStyle(
+                          : Text(
+                              _isConfigureMode ? '저장' : '지원자 모집하기',
+                              style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -504,6 +771,534 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ConfigureZoneSummary extends StatelessWidget {
+  const _ConfigureZoneSummary({
+    required this.recruitZoneCount,
+    required this.postingCredits,
+    required this.remainingAddSlots,
+  });
+
+  static const _fluoro = Color(0xFFCCFF00);
+
+  final int recruitZoneCount;
+  final int postingCredits;
+  final int remainingAddSlots;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: _fluoro.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF9AE600)),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.notifications_active_rounded,
+                size: 16,
+                color: Color(0xFF1B5E20),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  postingCredits > 0
+                      ? '지역 푸시권 $postingCredits회'
+                      : '지역 푸시권 없음',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1B5E20),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '근무지 1 · 모집 $recruitZoneCount · '
+          '추가 가능 ${remainingAddSlots > 0 ? '$remainingAddSlots곳' : '없음'}',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSecondary.withValues(alpha: 0.95),
+          ),
+        ),
+        if (recruitZoneCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '모집지역 추가 시 지역 푸시권 1회가 즉시 사용됩니다.',
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.4,
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 모집지역 설정 — 스크롤 목록 + 하단 고정 「+」
+class _RecruitmentZoneRowList extends StatefulWidget {
+  const _RecruitmentZoneRowList({
+    required this.points,
+    required this.activeIndex,
+    required this.maxSlots,
+    required this.remainingAddSlots,
+    required this.submitting,
+    required this.onSelect,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  static const rowHeight = 46.0;
+  static const maxVisibleRows = 4;
+  static const maxScrollHeight = rowHeight * maxVisibleRows;
+  static const listRadius = 12.0;
+
+  final List<PushNotificationBasePoint> points;
+  final int activeIndex;
+  final int maxSlots;
+  final int remainingAddSlots;
+  final bool submitting;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemove;
+
+  @override
+  State<_RecruitmentZoneRowList> createState() =>
+      _RecruitmentZoneRowListState();
+}
+
+class _RecruitmentZoneRowListState extends State<_RecruitmentZoneRowList> {
+  final _scrollController = ScrollController();
+  int _previousCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousCount = widget.points.length;
+  }
+
+  @override
+  void didUpdateWidget(covariant _RecruitmentZoneRowList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.points.length > _previousCount) {
+      _previousCount = widget.points.length;
+      _scrollToEnd();
+    } else {
+      _previousCount = widget.points.length;
+    }
+  }
+
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canAdd =
+        widget.remainingAddSlots > 0 && widget.points.length < widget.maxSlots;
+    final scrollHeight = math.min(
+      _RecruitmentZoneRowList.rowHeight * widget.points.length,
+      _RecruitmentZoneRowList.maxScrollHeight,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          '모집 지역',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(_RecruitmentZoneRowList.listRadius),
+            border: Border.all(color: AppColors.searchBarBorder),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: scrollHeight,
+                child: ListView.separated(
+                  controller: _scrollController,
+                  padding: EdgeInsets.zero,
+                  clipBehavior: Clip.hardEdge,
+                  itemCount: widget.points.length,
+                  separatorBuilder: (_, __) => Divider(
+                    height: 1,
+                    thickness: 1,
+                    color:
+                        AppColors.searchBarBorder.withValues(alpha: 0.85),
+                  ),
+                  itemBuilder: (context, index) {
+                    return _ZoneRow(
+                      index: index,
+                      point: widget.points[index],
+                      selected: index == widget.activeIndex,
+                      isFirst: index == 0,
+                      submitting: widget.submitting,
+                      onTap: () => widget.onSelect(index),
+                      onRemove:
+                          index > 0 ? () => widget.onRemove(index) : null,
+                    );
+                  },
+                ),
+              ),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: AppColors.searchBarBorder.withValues(alpha: 0.85),
+              ),
+              ExposureZoneAddRow(
+                remainingCredits: widget.remainingAddSlots,
+                rowHeight: _RecruitmentZoneRowList.rowHeight,
+                listRadius: _RecruitmentZoneRowList.listRadius,
+                onTap: canAdd && !widget.submitting ? widget.onAdd : null,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ZoneRow extends StatelessWidget {
+  const _ZoneRow({
+    required this.index,
+    required this.point,
+    required this.selected,
+    required this.isFirst,
+    required this.submitting,
+    required this.onTap,
+    this.onRemove,
+  });
+
+  final int index;
+  final PushNotificationBasePoint point;
+  final bool selected;
+  final bool isFirst;
+  final bool submitting;
+  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PushCreditVisualTheme.forRecruitPoint(index);
+    final isWorkplace = index == 0;
+    final subtitle = ExposurePointLabels.zoneRowSubtitle(index);
+    final rowRadius = isFirst
+        ? const BorderRadius.vertical(
+            top: Radius.circular(_RecruitmentZoneRowList.listRadius),
+          )
+        : BorderRadius.zero;
+
+    return Material(
+      color: selected
+          ? theme.accentLight.withValues(alpha: 0.32)
+          : AppColors.surface,
+      borderRadius: rowRadius,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: submitting ? null : onTap,
+        borderRadius: rowRadius,
+        child: SizedBox(
+          height: _RecruitmentZoneRowList.rowHeight,
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: selected ? theme.accent : Colors.transparent,
+                  borderRadius: isFirst && selected
+                      ? const BorderRadius.only(
+                          topLeft: Radius.circular(
+                            _RecruitmentZoneRowList.listRadius,
+                          ),
+                        )
+                      : BorderRadius.zero,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                isWorkplace
+                    ? Icons.storefront_outlined
+                    : Icons.location_on_outlined,
+                size: 18,
+                color: theme.accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ExposurePointLabels.title(index),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: selected ? theme.accent : AppColors.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary.withValues(alpha: 0.92),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    size: 18,
+                    color: theme.accent,
+                  ),
+                ),
+              if (onRemove != null)
+                IconButton(
+                  onPressed: submitting ? null : onRemove,
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: AppColors.textSecondary.withValues(alpha: 0.75),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                )
+              else
+                const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 발송 지역 — 접기/펼치기 (발송 모드 전용)
+class _RecruitmentZoneList extends StatelessWidget {
+  const _RecruitmentZoneList({
+    required this.points,
+    required this.activeIndex,
+    required this.wallet,
+    required this.submitting,
+    required this.expanded,
+    required this.onExpandedChanged,
+    required this.onSelect,
+  });
+
+  final List<PushNotificationBasePoint> points;
+  final int activeIndex;
+  final EmployerPushWallet? wallet;
+  final bool submitting;
+  final bool expanded;
+  final ValueChanged<bool> onExpandedChanged;
+  final ValueChanged<int> onSelect;
+
+  static const double _listMaxHeight = _kZoneListMaxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxSlots = wallet == null
+        ? points.length
+        : PushWalletCreditPolicy.effectiveMaxExposurePoints(
+            wallet: wallet!,
+            currentPointsLength: points.length,
+          );
+    final activeLabel = ExposurePointLabels.compactLine(
+      activeIndex,
+      points[activeIndex],
+    );
+    final listMaxHeight = points.length > 5
+        ? _listMaxHeight
+        : math.min(_listMaxHeight, 44.0 * points.length);
+
+    final activeTheme = PushCreditVisualTheme.forRecruitPoint(activeIndex);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.searchBarBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: submitting ? null : () => onExpandedChanged(!expanded),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(12, 10, 12, expanded ? 6 : 10),
+                child: Row(
+                  children: [
+                    const Text(
+                      '발송 지역',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        activeLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: activeTheme.accent,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${points.length}/$maxSlots곳',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary.withValues(alpha: 0.9),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      expanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 22,
+                      color: AppColors.textSecondary.withValues(alpha: 0.85),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (expanded)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: listMaxHeight),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: points.length,
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  color: AppColors.searchBarBorder.withValues(alpha: 0.7),
+                ),
+                itemBuilder: (context, index) {
+                  final selected = index == activeIndex;
+                  final tileTheme = PushCreditVisualTheme.forRecruitPoint(index);
+                  return Material(
+                    color: selected
+                        ? tileTheme.accentLight.withValues(alpha: 0.28)
+                        : Colors.transparent,
+                    child: InkWell(
+                      onTap: submitting ? null : () => onSelect(index),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              index == 0
+                                  ? Icons.storefront_outlined
+                                  : Icons.location_on_outlined,
+                              size: 20,
+                              color: selected
+                                  ? tileTheme.accent
+                                  : AppColors.textSecondary
+                                      .withValues(alpha: 0.85),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    ExposurePointLabels.title(index),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: selected
+                                          ? tileTheme.accent
+                                          : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    ExposurePointLabels.zoneRowSubtitle(index),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textSecondary
+                                          .withValues(alpha: 0.9),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (selected)
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: tileTheme.accent,
+                                size: 20,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -543,7 +1338,7 @@ class _PackageShopLinkCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      '이용권 및 패키지 구매',
+                      '지역 푸시권 구매',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -552,7 +1347,7 @@ class _PackageShopLinkCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '노출 범위·모집 횟수를 늘리려면 패키지를 구매하세요.',
+                      '추가 모집지역 푸시를 늘리려면 지역 푸시권을 구매하세요.',
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.35,

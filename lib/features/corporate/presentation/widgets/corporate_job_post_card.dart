@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/features/corporate/domain/utils/extra_push_availability.dart';
+import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 
 /// 공고 관리 — 압축 정보 카드
@@ -7,24 +9,35 @@ class CorporateJobPostCard extends StatelessWidget {
   const CorporateJobPostCard({
     super.key,
     required this.post,
-    this.onTap,
+    this.onView,
     this.onEdit,
     this.onDelete,
-    this.onExtraPush,
+    this.onConfigureExposure,
+    this.onRecruit,
+    this.onOpenShop,
     this.onApplicantsTap,
-    this.availablePushCredits,
+    this.extraPushAvailability,
+    this.creditsDisplay,
   });
 
   final CorporateJobPost post;
-  final VoidCallback? onTap;
+  final VoidCallback? onView;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
-  final VoidCallback? onExtraPush;
+  final VoidCallback? onConfigureExposure;
+  final VoidCallback? onRecruit;
+  final VoidCallback? onOpenShop;
   final VoidCallback? onApplicantsTap;
-  final int? availablePushCredits;
+  final ExtraPushAvailability? extraPushAvailability;
+  final JobPostCardCreditsDisplay? creditsDisplay;
 
   bool get _hasActions =>
-      onEdit != null || onDelete != null || onExtraPush != null;
+      onView != null ||
+      onEdit != null ||
+      onDelete != null ||
+      onConfigureExposure != null ||
+      onRecruit != null ||
+      onOpenShop != null;
 
   @override
   Widget build(BuildContext context) {
@@ -100,30 +113,66 @@ class CorporateJobPostCard extends StatelessWidget {
                 const SizedBox(height: 14),
           Row(
             children: [
-              _MetaChip(
-                icon: Icons.people_outline_rounded,
-                label: '지원 ${post.applicantCount}명',
-                highlighted: post.applicantCount > 0,
-                onTap: post.applicantCount > 0 ? onApplicantsTap : null,
+              Flexible(
+                child: _MetaChip(
+                  icon: Icons.people_outline_rounded,
+                  label: '지원 ${post.applicantCount}명',
+                  highlighted: post.applicantCount > 0,
+                  onTap: post.applicantCount > 0 ? onApplicantsTap : null,
+                ),
               ),
               const SizedBox(width: 8),
-              _MetaChip(
-                icon: Icons.calendar_today_outlined,
-                label: _formatDate(post.postedAt),
+              Flexible(
+                child: _MetaChip(
+                  icon: Icons.calendar_today_outlined,
+                  label: _formatDate(post.postedAt),
+                ),
               ),
+              if (creditsDisplay != null && creditsDisplay!.showChip) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _PushCreditRemainChip(display: creditsDisplay!),
+                  ),
+                ),
+              ],
             ],
           ),
           if (_hasActions) ...[
             const SizedBox(height: 14),
             const Divider(height: 1),
             const SizedBox(height: 10),
-            _ActionRow(
+            if (extraPushAvailability != null &&
+                !extraPushAvailability!.canDispatchRecruit) ...[
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  extraPushAvailability!.subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                    color: AppColors.primary.withValues(alpha: 0.95),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            _ActionGrid(
+              onView: onView,
               onEdit: onEdit,
               onDelete: onDelete,
-              onExtraPush: onExtraPush,
-              extraPushEnabled:
-                  post.notificationSettings?.hasConfiguredBase ?? false,
-              availablePushCredits: availablePushCredits,
+              onConfigureExposure: onConfigureExposure,
+              onRecruit: onRecruit,
+              onOpenShop: onOpenShop,
+              extraPushAvailability: extraPushAvailability,
             ),
           ],
         ],
@@ -145,13 +194,7 @@ class CorporateJobPostCard extends StatelessWidget {
             ),
           ],
         ),
-        child: onTap == null
-            ? content
-            : InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(18),
-                child: content,
-              ),
+        child: content,
       ),
     );
   }
@@ -277,57 +320,90 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
+class _ActionGrid extends StatelessWidget {
+  const _ActionGrid({
+    this.onView,
     this.onEdit,
     this.onDelete,
-    this.onExtraPush,
-    required this.extraPushEnabled,
-    this.availablePushCredits,
+    this.onConfigureExposure,
+    this.onRecruit,
+    this.onOpenShop,
+    this.extraPushAvailability,
   });
 
+  final VoidCallback? onView;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
-  final VoidCallback? onExtraPush;
-  final bool extraPushEnabled;
-  final int? availablePushCredits;
+  final VoidCallback? onConfigureExposure;
+  final VoidCallback? onRecruit;
+  final VoidCallback? onOpenShop;
+  final ExtraPushAvailability? extraPushAvailability;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final canRecruit = extraPushAvailability?.canDispatchRecruit ?? false;
+
+    return Column(
       children: [
-        if (onEdit != null)
-          Expanded(
-            child: _ActionButton(
-              label: '공고수정',
-              icon: Icons.edit_outlined,
-              onPressed: onEdit,
+        Row(
+          children: [
+            Expanded(
+              child: _ActionButton(
+                label: '공고보기',
+                icon: Icons.visibility_outlined,
+                onPressed: onView,
+              ),
             ),
-          ),
-        if (onEdit != null && (onDelete != null || onExtraPush != null))
-          const SizedBox(width: 8),
-        if (onDelete != null)
-          Expanded(
-            child: _ActionButton(
-              label: '공고삭제',
-              icon: Icons.delete_outline_rounded,
-              onPressed: onDelete,
-              destructive: true,
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionButton(
+                label: '공고수정',
+                icon: Icons.edit_outlined,
+                onPressed: onEdit,
+              ),
             ),
-          ),
-        if (onDelete != null && onExtraPush != null) const SizedBox(width: 8),
-        if (onExtraPush != null)
-          Expanded(
-            child: _ActionButton(
-              label: '지원자 모집하기',
-              subtitle: availablePushCredits != null
-                  ? '보유 $availablePushCredits회'
-                  : null,
-              icon: Icons.notifications_active_outlined,
-              onPressed: extraPushEnabled ? onExtraPush : null,
-              emphasized: true,
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionButton(
+                label: '공고삭제',
+                icon: Icons.delete_outline_rounded,
+                onPressed: onDelete,
+                destructive: true,
+              ),
             ),
-          ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionButton(
+                label: '모집지역 설정',
+                icon: Icons.map_outlined,
+                onPressed: onConfigureExposure,
+                actionable: true,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionButton(
+                label: '모집하기',
+                icon: Icons.notifications_active_outlined,
+                onPressed: canRecruit ? onRecruit : null,
+                emphasized: canRecruit,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionButton(
+                label: '지역 푸시권 충전',
+                icon: Icons.shopping_bag_outlined,
+                onPressed: onOpenShop,
+                actionable: true,
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -338,17 +414,17 @@ class _ActionButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onPressed,
-    this.subtitle,
     this.destructive = false,
     this.emphasized = false,
+    this.actionable = false,
   });
 
   final String label;
-  final String? subtitle;
   final IconData icon;
   final VoidCallback? onPressed;
   final bool destructive;
   final bool emphasized;
+  final bool actionable;
 
   @override
   Widget build(BuildContext context) {
@@ -359,7 +435,9 @@ class _ActionButton extends StatelessWidget {
             ? const Color(0xFFC62828)
             : emphasized
                 ? AppColors.primary
-                : AppColors.textPrimary;
+                : actionable
+                    ? AppColors.primary
+                    : AppColors.textPrimary;
 
     return OutlinedButton(
       onPressed: onPressed,
@@ -367,13 +445,13 @@ class _ActionButton extends StatelessWidget {
         foregroundColor: foreground,
         side: BorderSide(
           color: enabled
-              ? (emphasized
+              ? (emphasized || actionable
                   ? AppColors.primary.withValues(alpha: 0.45)
                   : AppColors.searchBarBorder)
               : AppColors.searchBarBorder.withValues(alpha: 0.6),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        minimumSize: const Size(0, 52),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -389,20 +467,67 @@ class _ActionButton extends StatelessWidget {
               fontWeight: FontWeight.w700,
               color: foreground,
             ),
+            textAlign: TextAlign.center,
           ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 1),
-            Text(
-              subtitle!,
+        ],
+      ),
+    );
+  }
+}
+
+class _PushCreditRemainChip extends StatelessWidget {
+  const _PushCreditRemainChip({required this.display});
+
+  static const _fluoro = Color(0xFFCCFF00);
+  static const _fluoroBorder = Color(0xFF9AE600);
+
+  final JobPostCardCreditsDisplay display;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasCredits = display.showChip;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: hasCredits ? _fluoro : AppColors.background,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: hasCredits ? _fluoroBorder : AppColors.searchBarBorder,
+          width: hasCredits ? 1.5 : 1,
+        ),
+        boxShadow: hasCredits
+            ? [
+                BoxShadow(
+                  color: _fluoro.withValues(alpha: 0.45),
+                  blurRadius: 8,
+                  offset: const Offset(0, 1),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.notifications_active_rounded,
+            size: 14,
+            color: hasCredits ? const Color(0xFF1B5E20) : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              display.chipLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: emphasized && enabled
-                    ? AppColors.primary.withValues(alpha: 0.85)
-                    : foreground.withValues(alpha: 0.75),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: hasCredits
+                    ? const Color(0xFF1B5E20)
+                    : AppColors.textSecondary.withValues(alpha: 0.95),
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -445,14 +570,18 @@ class _MetaChip extends StatelessWidget {
             color: highlighted ? AppColors.primary : AppColors.textSecondary,
           ),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: highlighted
-                  ? AppColors.primary
-                  : AppColors.textSecondary.withValues(alpha: 0.95),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: highlighted
+                    ? AppColors.primary
+                    : AppColors.textSecondary.withValues(alpha: 0.95),
+              ),
             ),
           ),
           if (highlighted && onTap != null) ...[

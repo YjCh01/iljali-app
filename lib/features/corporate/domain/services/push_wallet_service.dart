@@ -51,6 +51,12 @@ class PushWalletService {
       wallet = _migrateLegacySubscription(profile, wallet);
     }
 
+    if (wallet.locationSlotsFromPackages != wallet.packageCredits) {
+      wallet = wallet.copyWith(
+        locationSlotsFromPackages: wallet.packageCredits,
+      );
+    }
+
     if (profile.pushWallet == null ||
         profile.pushWallet!.signupBonusRemaining != wallet.signupBonusRemaining ||
         profile.pushWallet!.packageCredits != wallet.packageCredits ||
@@ -109,8 +115,7 @@ class PushWalletService {
     final credits = offer.packageCount * qty;
     final updated = wallet.copyWith(
       packageCredits: wallet.packageCredits + credits,
-      locationSlotsFromPackages:
-          wallet.locationSlotsFromPackages + credits,
+      locationSlotsFromPackages: wallet.packageCredits + credits,
       lifetimePackagesPurchased:
           wallet.lifetimePackagesPurchased + credits,
       purchased100PackBundle:
@@ -162,8 +167,88 @@ class PushWalletService {
     }
 
     return const PushConsumeResult.fail(
-      '알림 크레딧이 없습니다. 공고 노출·모집 패키지를 구매해 주세요.',
+      '지역 푸시권이 없습니다. 지역 푸시권을 구매해 주세요.',
     );
+  }
+
+  /// 근무지 푸시 — 당일 무료 1회만
+  Future<PushConsumeResult> tryConsumeDailyFreeWorkplacePush(
+    CorporateMemberProfile profile,
+  ) async {
+    final wallet = await loadWallet(profile);
+    final today = _dayKey();
+    if (wallet.lastFreePushDayKey == today) {
+      return const PushConsumeResult.fail(
+        '오늘 무료 근무지 푸시를 이미 사용했습니다.',
+      );
+    }
+    final updated = wallet.copyWith(lastFreePushDayKey: today);
+    await _persist(profile, updated);
+    return PushConsumeResult(
+      success: true,
+      source: PushConsumeSource.dailyFree,
+      radiusMeters: PushPackageCatalog.freePushRadiusM,
+    );
+  }
+
+  /// 모집지역 푸시 — 패키지 발송권만 (일일 무료·보너스 사용 안 함)
+  Future<PushConsumeResult> tryConsumeRecruitmentCredit(
+    CorporateMemberProfile profile,
+  ) async {
+    final wallet = await loadWallet(profile);
+    if (wallet.packageCredits > 0) {
+      final nextCredits = wallet.packageCredits - 1;
+      final updated = wallet.copyWith(
+        packageCredits: nextCredits,
+        locationSlotsFromPackages: nextCredits,
+      );
+      await _persist(profile, updated);
+      return PushConsumeResult(
+        success: true,
+        source: PushConsumeSource.packageCredit,
+        radiusMeters: PushPackageCatalog.packagePushRadiusM,
+      );
+    }
+    return const PushConsumeResult.fail(
+      '지역 푸시권이 부족합니다. 구매하면 즉시 충전됩니다.',
+    );
+  }
+
+  Future<PushMultiConsumeResult> tryConsumeRecruitmentCredits(
+    CorporateMemberProfile profile,
+    int count,
+  ) async {
+    if (count <= 0) {
+      return const PushMultiConsumeResult.success(consumed: 0);
+    }
+    var current = profile;
+    var consumed = 0;
+    for (var i = 0; i < count; i++) {
+      final result = await tryConsumeRecruitmentCredit(current);
+      if (!result.success) {
+        return PushMultiConsumeResult.fail(
+          result.message ??
+              '모집지역 푸시 이용권이 부족합니다. (필요 ${count}회 · 사용 ${consumed}회)',
+        );
+      }
+      consumed++;
+      current = AuthSession.instance.currentUser?.corporateProfile ?? current;
+    }
+    return PushMultiConsumeResult.success(consumed: consumed);
+  }
+
+  /// 모집지역 삭제 시 — 사용하지 않은 지역 푸시권 1회 복원
+  Future<void> refundRecruitmentCredit(
+    CorporateMemberProfile profile, {
+    int count = 1,
+  }) async {
+    if (count <= 0) return;
+    final wallet = await loadWallet(profile);
+    final updated = wallet.copyWith(
+      packageCredits: wallet.packageCredits + count,
+      locationSlotsFromPackages: wallet.packageCredits + count,
+    );
+    await _persist(profile, updated);
   }
 
   Future<int> maxLocationSlots(CorporateMemberProfile profile) async {
@@ -194,11 +279,10 @@ class PushWalletService {
   }
 
   static String walletSummary(EmployerPushWallet wallet) {
-    final freeToday = wallet.lastFreePushDayKey == _dayKey() ? 0 : 1;
-    return '패키지 ${wallet.packageCredits}회 · '
+    final freeToday = wallet.dailyFreePostingAvailable ? 1 : 0;
+    return '지역 푸시권 ${wallet.packageCredits}회 · '
         '노출 범위 ${wallet.totalLocationSlots}곳 · '
-        '오늘 무료 $freeToday/${PushPackageCatalog.dailyFreePush} · '
-        '보너스 ${_effectiveBonusStatic(wallet)}회';
+        '오늘 무료 $freeToday/${PushPackageCatalog.dailyFreePush}';
   }
 
   /// 추가푸시 버튼 — 사용 가능 횟수 (무료·보너스·패키지 합산)

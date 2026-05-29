@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/job_seeker/data/repositories/seeker_push_inbox_repository.dart';
+import 'package:map/features/job_seeker/domain/entities/seeker_push_notification.dart';
 import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 
 /// 공고 등록 완료 후 푸시 알림 전송 진행·완료 화면
@@ -42,6 +45,7 @@ class _CorporateJobPostPushDispatchPageState
             _completed = true;
             _displayReach = _targetReach;
           });
+          _recordSeekerPushDelivery();
         }
       });
     _controller.forward();
@@ -62,6 +66,25 @@ class _CorporateJobPostPushDispatchPageState
 
   void _confirm() {
     Navigator.of(context).pop(true);
+  }
+
+  Future<void> _recordSeekerPushDelivery() async {
+    final title = widget.args.jobTitle;
+    if (title == null || title.isEmpty) return;
+    final repo = await SeekerPushInboxRepository.create();
+    final id = widget.args.jobPostId ??
+        'push_${DateTime.now().millisecondsSinceEpoch}';
+    await repo.recordPush(
+      SeekerPushNotification(
+        id: id,
+        title: title,
+        body:
+            '${widget.args.companyName ?? '채용 공고'} · ${PushPackageCatalog.pushRadiusLabel} 반경 모집 알림',
+        companyName: widget.args.companyName ?? '채용 기업',
+        jobPostId: widget.args.jobPostId,
+        receivedAt: DateTime.now(),
+      ),
+    );
   }
 
   @override

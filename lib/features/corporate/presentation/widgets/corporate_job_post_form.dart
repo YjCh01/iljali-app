@@ -13,8 +13,6 @@ import 'package:map/features/corporate/domain/entities/salary_payment_schedule.d
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
-
-import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
 
 import 'package:map/core/constants/labor_constants.dart';
@@ -385,9 +383,8 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
           child: Text(
 
-            '무료·보너스 푸시 ${PushPackageCatalog.pushRadiusLabel} · '
-
-            '추가 노출 범위·지원자 모집하기는 패키지 ${PushPlanEnforcement.extraPushPriceKrw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}원/회',
+            '공고 등록 완전 무료(사업자번호당 동시 활성 최대 10개) · 근무지 1km 무료 푸시 일 1회 · '
+            '추가 모집지역은 지역 푸시권 ${PushPlanEnforcement.extraPushPriceKrw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}원/회',
 
             style: TextStyle(
 
@@ -1279,9 +1276,9 @@ class _PushNotificationField extends StatelessWidget {
 
                       configured
 
-                          ? '탭하여 노출 범위 수정 · 초과 모집은 등록 시 추가 구매'
+                          ? '탭하여 노출 범위 수정 · 모집지역 추가 시 지역 푸시권 1회/곳'
 
-                          : '반경은 플랜별 · 횟수는 기본+추가 구매',
+                          : '근무지 1km 무료 푸시 일 1회 · 추가 지역은 지역 푸시권',
 
                       style: TextStyle(
 

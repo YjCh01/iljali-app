@@ -4,6 +4,7 @@ import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/hiring/presentation/widgets/seeker_attendance_lock_dialog.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/job_seeker/data/repositories/job_application_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/job_application.dart';
@@ -252,6 +253,12 @@ Future<bool> showJobApplyDialog(
   final user = AuthSession.instance.currentUser;
   final repo = await JobApplicationRepository.create(user?.email);
   final hiringRepo = await LocalHiringRepository.create();
+
+  if (user != null &&
+      !await ensureSeekerAttendanceAccess(context, user.email)) {
+    return false;
+  }
+  if (!context.mounted) return false;
 
   if (user != null &&
       await hiringRepo.hasApplied(pin.post.id, user.email)) {

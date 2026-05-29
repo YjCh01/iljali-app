@@ -5,6 +5,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     nts_api_key: str = ""
+    nts_validate_api_url: str = (
+        "https://api.odcloud.kr/api/nts-businessman/v1/validate"
+    )
+    nts_status_api_url: str = (
+        "https://api.odcloud.kr/api/nts-businessman/v1/status"
+    )
     nts_api_url: str = "https://api.odcloud.kr/api/nts-businessman/v1/status"
     toss_secret_key: str = ""
     clova_ocr_invoke_url: str = ""

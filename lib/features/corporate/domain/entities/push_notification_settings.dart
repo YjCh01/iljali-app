@@ -36,7 +36,7 @@ extension PushRadiusTierX on PushRadiusTier {
         PushRadiusTier.standardFree1km =>
           PushPackageCatalog.pushRadiusLabel,
         PushRadiusTier.standard1km =>
-          '${PushPackageCatalog.pushRadiusLabel} (패키지 크레딧)',
+          '${PushPackageCatalog.pushRadiusLabel} (지역 푸시권)',
         PushRadiusTier.extended3km => '3km',
         PushRadiusTier.extended5km => '5km',
         PushRadiusTier.extended7km => '7km',
@@ -62,10 +62,10 @@ extension PushRadiusTierX on PushRadiusTier {
   String get description => switch (this) {
         PushRadiusTier.radius0km => '지도 위치만 저장하고 알림 반경은 설정하지 않습니다.',
         PushRadiusTier.standardFree1km =>
-            '기본 플랜 — ${PushPackageCatalog.pushRadiusLabel} · 하루 ${PushPackageCatalog.dailyFreePush}회.',
+            '기본 플랜 — ${PushPackageCatalog.planFreeRadiusSummary} · 하루 ${PushPackageCatalog.dailyFreePush}회.',
         PushRadiusTier.standard1km =>
-            '패키지 알림 — 노출 범위 기준 1km. 더 넓은 커버는 공고 노출 범위 추가(패키지).',
-        _ => '레거시 반경 — 패키지 노출 범위 사용을 권장합니다.',
+            '지역 푸시권 푸시 — 모집지역 기준 1km. 추가 모집지역은 푸시권이 필요합니다.',
+        _ => '레거시 반경 — 근무지 1km/모집지역 1km 정책 사용을 권장합니다.',
       };
 
   bool get isPaid => false;
@@ -144,6 +144,18 @@ abstract final class ExposurePointLabels {
         _ => '모집지역 $index',
       };
 
+  /// 목록·시트 행 부제 — 근무지(무료) / 모집지역(지역 푸시권)
+  static String zoneRowSubtitle(int index) => switch (index) {
+        0 => '무료 · 1km · 근무지 주변',
+        _ => '노출지역 · 1km',
+      };
+
+  /// 하단 「+」 행 — 잔여 지역 푸시권
+  static String addZoneButtonLabel(int remainingAdds) {
+    if (remainingAdds <= 0) return '추가 슬롯·지역 푸시권 없음';
+    return '모집지역 추가 (잔여 지역 푸시권 : $remainingAdds)';
+  }
+
   /// UI용 반경 — 「반경 주변」 중복 없음
   static String radiusUi(PushRadiusTier tier) {
     final label = tier.nearbyDisplayLabel;
@@ -153,9 +165,9 @@ abstract final class ExposurePointLabels {
 
   static String slotCount(int current, int max) => '$current/$max곳';
 
-  /// 카드·목록용 — 「근무지 · 주변」「모집지역 1 · 주변」
+  /// 카드·목록용 — 「근무지 · 무료 · 1km · 근무지 주변」
   static String compactLine(int index, PushNotificationBasePoint point) {
-    return '${title(index)} · ${radiusUi(point.radiusTier)}';
+    return '${title(index)} · ${zoneRowSubtitle(index)}';
   }
 }
 
@@ -204,7 +216,7 @@ extension DesignatedPointTierX on DesignatedPointTier {
   int get priceKrw => 0;
 
   String get description => switch (this) {
-        DesignatedPointTier.onePoint => '기본 노출 범위 1곳 · 패키지로 추가.',
+        DesignatedPointTier.onePoint => '기본 노출 범위 1곳 · 지역 푸시권으로 추가.',
         DesignatedPointTier.twoPoints => '노출 범위 2곳.',
         DesignatedPointTier.fivePoints => '노출 범위 5곳.',
         DesignatedPointTier.unlimited => '노출 범위 무제한.',
@@ -259,7 +271,7 @@ class PushPaymentBundle {
 
   String get productSummary {
     if (isExtraPush) {
-      return '공고 노출·모집 패키지 1회';
+      return '지역 푸시권 1회';
     }
     return '푸시 ${radiusTier.shortLabel} · ${pointTier.shortLabel} (요금제 포함)';
   }
@@ -327,7 +339,7 @@ class JobPostNotificationSettings {
     return exposurePointLabels.join(' · ');
   }
 
-  /// 카드·상세 — 근무지 반경 내 / 모집 지역 N · 주소 · 주변
+  /// 카드·상세 — 근무지 / 모집지역 N + 고정 부제
   List<String> get exposurePointLabels => [
         for (var i = 0; i < basePoints.length; i++)
           ExposurePointLabels.compactLine(i, basePoints[i]),

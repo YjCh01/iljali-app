@@ -143,7 +143,7 @@ class RoiPdfService {
           pw.SizedBox(height: 16),
           pw.Text(
             '본 문서는 일자리 앱 ROI 대시보드에서 자동 생성되었습니다. '
-            '푸시·패키지 비용과 출근 확인 수수료(10,000원/건 기준) 절감 효과를 내부 보고용으로 활용하세요.',
+            '지역 푸시권 비용과 출근 확인 수수료(10,000원/건 기준) 절감 효과를 내부 보고용으로 활용하세요.',
             style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey600),
           ),
         ],

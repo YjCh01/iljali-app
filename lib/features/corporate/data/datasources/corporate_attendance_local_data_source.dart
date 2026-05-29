@@ -17,6 +17,7 @@ class CorporateAttendanceLocalDataSourceImpl
     final all = await repo.fetchAll();
     final records = all
         .where((item) =>
+            item.status == HiringApplicationStatus.scheduled ||
             item.status == HiringApplicationStatus.checkedIn ||
             item.status == HiringApplicationStatus.commissionPaid)
         .map(_mapRecord)
@@ -29,6 +30,12 @@ class CorporateAttendanceLocalDataSourceImpl
     final checkInLabel = checkIn != null
         ? '${checkIn.hour.toString().padLeft(2, '0')}:${checkIn.minute.toString().padLeft(2, '0')}'
         : '-';
+
+    final awaitingEmployer = app.awaitingEmployerConfirm;
+    final awaitingSeeker = app.awaitingSeekerCheckIn;
+    final canEmployerConfirm = app.status == HiringApplicationStatus.scheduled &&
+        !app.employerConfirmed &&
+        !app.isMutuallyConfirmed;
 
     return CorporateAttendanceRecord(
       id: app.id,
@@ -44,6 +51,9 @@ class CorporateAttendanceLocalDataSourceImpl
       commissionAmountKrw: app.commissionAmountKrw,
       commissionPaid: app.status == HiringApplicationStatus.commissionPaid,
       escalationLevel: app.escalationLevel,
+      awaitingEmployerConfirm: awaitingEmployer,
+      awaitingSeekerCheckIn: awaitingSeeker,
+      canEmployerConfirm: canEmployerConfirm,
     );
   }
 
@@ -51,8 +61,17 @@ class CorporateAttendanceLocalDataSourceImpl
     if (app.status == HiringApplicationStatus.commissionPaid) {
       return CorporateAttendanceStatus.onTime;
     }
+    if (app.awaitingEmployerConfirm) {
+      return CorporateAttendanceStatus.awaitingEmployerConfirm;
+    }
+    if (app.awaitingSeekerCheckIn) {
+      return CorporateAttendanceStatus.awaitingSeekerCheckIn;
+    }
     if (app.needsCommissionPayment) {
       return CorporateAttendanceStatus.pendingCommission;
+    }
+    if (app.isMutuallyConfirmed) {
+      return CorporateAttendanceStatus.onTime;
     }
     return CorporateAttendanceStatus.onTime;
   }

@@ -28,4 +28,5 @@ abstract final class AppRoutes {
   static const String corporateRoiDashboard = '/corporate/roi-dashboard';
   static const String corporatePermanentWorkers = '/corporate/permanent-workers';
   static const String seekerHealthInsurance = '/seeker/health-insurance';
+  static const String seekerPushInbox = '/seeker/push-inbox';
 }

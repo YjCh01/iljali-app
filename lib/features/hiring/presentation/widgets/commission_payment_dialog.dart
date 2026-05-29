@@ -87,16 +87,26 @@ class _CommissionPaymentDialogState extends State<CommissionPaymentDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '${app.seekerName}님 출근이 확인되었습니다.',
+              '${app.seekerName}님과 상호 출근 확인이 완료되었습니다.',
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text('공고: ${app.postTitle}'),
             if (app.checkedInAt != null)
               Text(
-                '출근 시각: ${app.checkedInAt!.hour.toString().padLeft(2, '0')}:'
+                '구직자 출근: ${app.checkedInAt!.hour.toString().padLeft(2, '0')}:'
                 '${app.checkedInAt!.minute.toString().padLeft(2, '0')}',
               ),
+            if (app.employerConfirmedAt != null)
+              Text(
+                '기업 확인: ${app.employerConfirmedAt!.hour.toString().padLeft(2, '0')}:'
+                '${app.employerConfirmedAt!.minute.toString().padLeft(2, '0')}',
+              ),
+            const SizedBox(height: 8),
+            const Text(
+              '상호 확인 후에만 성공 수수료(일용직 출근 확인)가 청구됩니다.',
+              style: TextStyle(fontSize: 12, height: 1.4),
+            ),
             const SizedBox(height: 12),
             Container(
               width: double.infinity,

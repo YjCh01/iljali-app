@@ -45,8 +45,8 @@ class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
         CorporateChatRoom(
           id: 'chat_official_partnership',
           applicantName: '일자리 운영팀',
-          jobTitle: '푸시·패키지 안내',
-          lastMessage: '기본 플랜 1km · 패키지 · 일용직·상시직 수수료 안내',
+          jobTitle: '푸시 정책 안내',
+          lastMessage: '공고 등록 무료 · 근무지 1km 무료 푸시 · 지역 푸시권 안내',
           updatedAtLabel: label,
           unreadCount: 1,
           kind: CorporateChatRoomKind.officialNotice,

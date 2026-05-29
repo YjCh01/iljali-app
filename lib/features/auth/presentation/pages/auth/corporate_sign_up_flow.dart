@@ -13,8 +13,12 @@ import 'package:map/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:map/core/compliance/business_entity_type.dart';
 import 'package:map/core/compliance/outsourcing_policy.dart';
+import 'package:map/core/compliance/domain/business_verification_request.dart';
 import 'package:map/core/compliance/services/business_verification_service.dart';
+import 'package:map/core/compliance/services/mock_nts_business_api_service.dart';
+import 'package:map/core/compliance/services/nts_service_factory.dart';
 import 'package:map/core/compliance/verified_business_record.dart';
+import 'package:map/features/auth/domain/usecases/corporate_sign_up_verification_gate.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/data/repositories/corporate_account_registry.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
@@ -47,6 +51,8 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   final _passwordConfirmController = TextEditingController();
   final _companyController = TextEditingController();
   final _businessRegController = TextEditingController();
+  final _representativeController = TextEditingController();
+  final _openingDateController = TextEditingController();
   final _departmentController = TextEditingController();
   final _contactPersonController = TextEditingController();
 
@@ -61,6 +67,8 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   String? _passwordConfirmError;
   String? _companyError;
   String? _businessRegError;
+  String? _representativeError;
+  String? _openingDateError;
   String? _departmentError;
   String? _contactError;
   String? _verificationError;
@@ -70,6 +78,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   bool _policyAccepted = false;
   bool _verifying = false;
   VerifiedBusinessRecord? _verificationRecord;
+  final _verificationGate = const CorporateSignUpVerificationGate();
 
   CorporateMemberProfile? _assignedProfile;
 
@@ -82,6 +91,8 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
     _passwordConfirmController.dispose();
     _companyController.dispose();
     _businessRegController.dispose();
+    _representativeController.dispose();
+    _openingDateController.dispose();
     _departmentController.dispose();
     _contactPersonController.dispose();
     super.dispose();
@@ -147,18 +158,36 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
 
   void _continueFromCompany() {
     final company = _companyController.text.trim();
-    final businessReg = _businessRegController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final request = BusinessVerificationRequest(
+      businessRegistrationNumber: _businessRegController.text,
+      representativeName: _representativeController.text,
+      openingDate: _openingDateController.text,
+      companyName: company,
+    );
     setState(() {
       _companyError = company.isEmpty ? '회사명을 입력해 주세요.' : null;
-      _businessRegError = businessReg.length != 10
+      _businessRegError = request.normalizedBrn.length != 10
           ? '사업자등록번호 10자리를 입력해 주세요.'
           : null;
+      _representativeError =
+          request.representativeName.trim().isEmpty ? '대표자명을 입력해 주세요.' : null;
+      _openingDateError = request.normalizedOpeningDate.length != 8
+          ? '개업일자를 YYYYMMDD 형식(8자리)으로 입력해 주세요.'
+          : null;
     });
-    if (_companyError != null || _businessRegError != null) {
-      _snack(_companyError ?? _businessRegError!);
+    final fieldError = request.validate();
+    if (_companyError != null ||
+        _businessRegError != null ||
+        _representativeError != null ||
+        _openingDateError != null ||
+        fieldError != null) {
+      _snack(fieldError ?? _companyError ?? _businessRegError ?? _representativeError ?? _openingDateError!);
       return;
     }
-    setState(() => _step = _CorporateSignUpStep.verification);
+    setState(() {
+      _verificationRecord = null;
+      _step = _CorporateSignUpStep.verification;
+    });
   }
 
   void _mockUploadCertificate() {
@@ -188,14 +217,22 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   }
 
   Future<void> _runBusinessVerification() async {
-    if (_certificateImageRef == null) {
-      setState(() => _verificationError = '사업자등록증을 업로드해 주세요.');
-      _snack('사업자등록증 업로드가 필요합니다.');
-      return;
-    }
     if (!_policyAccepted) {
       setState(() => _verificationError = '이용 제한 약관에 동의해 주세요.');
       _snack('아웃소싱·인력공급 이용 제한 약관에 동의해 주세요.');
+      return;
+    }
+
+    final request = BusinessVerificationRequest(
+      businessRegistrationNumber: _businessRegController.text,
+      representativeName: _representativeController.text,
+      openingDate: _openingDateController.text,
+      companyName: _companyController.text.trim(),
+    );
+    final fieldError = request.validate();
+    if (fieldError != null) {
+      setState(() => _verificationError = fieldError);
+      _snack(fieldError);
       return;
     }
 
@@ -206,22 +243,20 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
 
     try {
       final service = BusinessVerificationService();
-      final record = await service.verifyWithCertificate(
-        businessRegistrationNumber: _businessRegController.text,
-        companyName: _companyController.text.trim(),
+      final record = await service.verifyBusinessIdentity(
+        request: request,
         entityType: _entityType,
-        certificateImageRef: _certificateImageRef!,
+        certificateImageRef: _certificateImageRef,
       );
       if (!mounted) return;
       setState(() {
         _verificationRecord = record;
         _verifying = false;
-        _step = _CorporateSignUpStep.handler;
       });
       if (record.requiresAdminReview) {
-        _snack('업종 검토 대상입니다. Enterprise 가입·관리자 승인 후 연락 기능이 활성화됩니다.');
+        _snack('업종 검토 대상입니다. 관리자 승인 후 일부 기능이 제한될 수 있습니다.');
       } else {
-        _snack('사업자 검증이 완료되었습니다.');
+        _snack('국세청 사업자 확인이 완료되었습니다.');
       }
     } on BusinessVerificationException catch (e) {
       if (!mounted) return;
@@ -249,6 +284,16 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   }
 
   Future<void> _assignHandlerCode() async {
+    if (!_verificationGate.canProceedToHandler(
+      hasVerifiedRecord: _verificationRecord != null,
+    )) {
+      final message = _verificationGate.handlerBlockedMessage(
+        hasVerifiedRecord: _verificationRecord != null,
+      );
+      _snack(message ?? '사업자 확인이 필요합니다.');
+      setState(() => _step = _CorporateSignUpStep.verification);
+      return;
+    }
     final department = _departmentController.text.trim();
     final contact = _contactPersonController.text.trim();
     setState(() {
@@ -298,6 +343,17 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
     final profile = _assignedProfile;
     if (profile == null) return;
 
+    if (!_verificationGate.canCompleteSignUp(
+      hasVerifiedRecord: _verificationRecord != null,
+      hasAssignedProfile: true,
+    )) {
+      final message = _verificationGate.completeBlockedMessage(
+        hasVerifiedRecord: _verificationRecord != null,
+        hasAssignedProfile: true,
+      );
+      _snack(message ?? '가입을 완료할 수 없습니다.');
+      return;
+    }
     await AuthSession.instance.signIn(
       AuthUser(
         name: _nameController.text.trim(),
@@ -546,7 +602,8 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         ),
         const SizedBox(height: 8),
         Text(
-          '회사명과 사업자등록번호를 입력해 주세요.',
+          '회사명·사업자등록번호·대표자명·개업연월일을 입력해 주세요. '
+          '국세청(공공데이터) 진위확인에 사용됩니다.',
           style: TextStyle(
             fontSize: 14,
             color: AppColors.textSecondary.withValues(alpha: 0.95),
@@ -567,14 +624,50 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
           controller: _businessRegController,
           keyboardType: TextInputType.number,
           maxLength: 12,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _continueFromCompany(),
+          textInputAction: TextInputAction.next,
           errorText: _businessRegError,
           inputFormatters: [
             FilteringTextInputFormatter.digitsOnly,
             LengthLimitingTextInputFormatter(10),
           ],
         ),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '대표자명',
+          hint: '홍길동',
+          controller: _representativeController,
+          keyboardType: TextInputType.name,
+          textInputAction: TextInputAction.next,
+          errorText: _representativeError,
+        ),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '개업일자',
+          hint: '20200115 (YYYYMMDD)',
+          controller: _openingDateController,
+          keyboardType: TextInputType.number,
+          maxLength: 8,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _continueFromCompany(),
+          errorText: _openingDateError,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(8),
+          ],
+        ),
+        if (NtsServiceFactory.isMockMode) ...[
+          const SizedBox(height: 12),
+          Text(
+            '개발 모드: ${MockNtsBusinessApiService.devBrn} · '
+            '${MockNtsBusinessApiService.devOpeningDate} · '
+            '${MockNtsBusinessApiService.devRepresentativeName}',
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              color: AppColors.textSecondary.withValues(alpha: 0.85),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         AuthPrimaryButton(
           label: '다음 — 사업자 검증',
@@ -599,7 +692,8 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         ),
         const SizedBox(height: 8),
         Text(
-          '사업자등록증 업로드 후 OCR·국세청 API로 실제 사업자·업종을 확인합니다.',
+          '입력하신 정보로 국세청(공공데이터포털) 사업자등록번호 진위확인을 진행합니다. '
+          '홈택스 로그인 없이 대표자명·개업연월일을 대조합니다.',
           style: TextStyle(
             fontSize: 14,
             height: 1.4,
@@ -638,7 +732,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
           icon: const Icon(Icons.upload_file_outlined),
           label: Text(
             _certificateImageRef == null
-                ? '사업자등록증 업로드 (필수)'
+                ? '사업자등록증 업로드 (선택)'
                 : '업로드 완료 — 다시 선택',
           ),
         ),
@@ -729,9 +823,9 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         const SizedBox(height: 20),
         AuthPrimaryButton(
           label: _verifying
-              ? 'OCR·국세청 검증 중...'
+              ? '국세청 확인 중...'
               : record == null
-                  ? '검증 후 다음'
+                  ? '국세청 확인 후 다음'
                   : '다음 — 담당자 정보',
           onPressed: _verifying ? () {} : _continueFromVerification,
         ),

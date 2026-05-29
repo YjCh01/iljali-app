@@ -45,8 +45,8 @@ void main() {
     final wallet = await service.loadWallet(profile);
 
     expect(wallet.signupBonusRemaining, PushPackageCatalog.signupBonusPushes);
-    expect(wallet.availablePushCredits, 6);
-    expect(wallet.jobPostRegistrationQuotaMax, 6);
+    expect(wallet.availablePushCredits, 1);
+    expect(wallet.jobPostRegistrationQuotaMax, 1);
     expect(
       AuthSession.instance.currentUser?.corporateProfile?.pushWallet
           ?.signupBonusRemaining,
@@ -90,17 +90,17 @@ void main() {
 
     expect(wallet.packageCredits, 0);
     expect(wallet.locationSlotsFromPackages, 0);
-    expect(wallet.availablePushCredits, 6);
-    expect(wallet.jobPostRegistrationQuotaMax, 6);
+    expect(wallet.availablePushCredits, 1);
+    expect(wallet.jobPostRegistrationQuotaMax, 1);
   });
 
-  test('jobPostRegistrationQuotaMax stays 6 while signup bonus active', () {
+  test('jobPostRegistrationQuotaMax is daily free plus package credits', () {
     const wallet = EmployerPushWallet(
-      signupBonusRemaining: 2,
+      packageCredits: 3,
     );
 
-    expect(wallet.availablePushCredits, 3);
-    expect(wallet.jobPostRegistrationQuotaMax, 6);
+    expect(wallet.availablePushCredits, 4);
+    expect(wallet.jobPostRegistrationQuotaMax, 4);
   });
 
   test('addPurchase applies single package quantity to wallet', () async {

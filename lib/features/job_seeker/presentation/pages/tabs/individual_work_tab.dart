@@ -69,9 +69,11 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
   }
 
   String _statusLabel(HiringApplication shift) {
+    if (shift.awaitingEmployerConfirm) return '기업 확인 대기 중';
+    if (shift.awaitingSeekerCheckIn) return '출근 체크 필요';
     return switch (shift.status) {
       HiringApplicationStatus.scheduled => '출근 예정',
-      HiringApplicationStatus.checkedIn => '출근 완료',
+      HiringApplicationStatus.checkedIn => '상호 확인 완료',
       HiringApplicationStatus.commissionPaid => '정산 완료',
       _ => shift.status.label,
     };
@@ -154,7 +156,8 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
               (shift) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: CorporateSurfaceCard(
-                  onTap: shift.status == HiringApplicationStatus.scheduled
+                  onTap: shift.status == HiringApplicationStatus.scheduled &&
+                          !shift.seekerCheckedIn
                       ? () => _openCheckIn(shift)
                       : null,
                   child: Row(
@@ -224,10 +227,20 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
                             ),
                           ),
                           if (shift.status ==
-                              HiringApplicationStatus.scheduled)
+                                  HiringApplicationStatus.scheduled &&
+                              !shift.seekerCheckedIn)
                             TextButton(
                               onPressed: () => _openCheckIn(shift),
                               child: const Text('출근'),
+                            ),
+                          if (shift.awaitingEmployerConfirm)
+                            Text(
+                              '기업 확인 대기',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary
+                                    .withValues(alpha: 0.9),
+                              ),
                             ),
                           FutureBuilder<bool>(
                             future: _canRateEmployer(shift),

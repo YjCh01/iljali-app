@@ -25,9 +25,9 @@ void main() {
 
     test('planLimitSummary mentions free plan and package', () {
       final summary = PushPlanEnforcement.planLimitSummary();
-      expect(summary, contains('반경'));
+      expect(summary, contains('1km'));
       expect(summary, contains('일 1회'));
-      expect(summary, contains('패키지'));
+      expect(summary, contains('지역 푸시권'));
     });
   });
 

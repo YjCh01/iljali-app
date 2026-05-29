@@ -31,9 +31,24 @@ class EmployerPushWallet {
   int get totalLocationSlots =>
       PushPackageCatalog.baseLocationSlots + locationSlotsFromPackages;
 
+  /// 지원자 모집하기(푸시) — 당일 무료 + 패키지 발송권 (보너스는 등록권으로 사용 안 함)
   int get availablePushCredits {
-    final bonus = _effectiveSignupBonus;
-    return packageCredits + bonus + _dailyFreeRemaining;
+    return packageCredits + _dailyFreeRemaining;
+  }
+
+  /// UI용 — 패키지 크레딧만 (유료 구매분)
+  int get packageRecruitCredits => packageCredits;
+
+  String get recruitCreditsDetailLabel {
+    if (!hasUsablePush) {
+      return '오늘 무료·지역 푸시권 모두 소진 · 지역 푸시권 구매 시 즉시 충전';
+    }
+    final parts = <String>[];
+    if (_dailyFreeRemaining > 0) {
+      parts.add('근무지 무료 푸시 1회/일(1km)');
+    }
+    if (packageCredits > 0) parts.add('지역 푸시권 $packageCredits');
+    return parts.join(' · ');
   }
 
   int get _dailyFreeRemaining {
@@ -50,15 +65,16 @@ class EmployerPushWallet {
 
   bool get hasUsablePush => availablePushCredits > 0;
 
-  /// 공고 등록(푸시) 표시용 최대 — 보너스 5장 풀 + 당일 1장 + 패키지
-  int get jobPostRegistrationQuotaMax {
-    final signupCap = _effectiveSignupBonus > 0
-        ? PushPackageCatalog.signupBonusPushes
-        : 0;
-    return packageCredits + signupCap + PushPackageCatalog.dailyFreePush;
-  }
+  /// 모집지역·유료 근무지 푸시 — 패키지 발송권만 (일일 무료 제외)
+  int get paidRecruitCreditsAvailable => packageCredits;
+
+  /// 공고 등록 표시용 — 당일 무료 1 + 패키지 발송권
+  int get jobPostRegistrationQuotaMax =>
+      packageCredits + PushPackageCatalog.dailyFreePush;
 
   int get jobPostRegistrationQuotaRemaining => availablePushCredits;
+
+  bool get dailyFreePostingAvailable => _dailyFreeRemaining > 0;
 
   EmployerPushWallet copyWith({
     int? packageCredits,
@@ -154,4 +170,24 @@ class PushConsumeResult {
   final String? message;
 
   bool get usedPackageCredit => source == PushConsumeSource.packageCredit;
+}
+
+class PushMultiConsumeResult {
+  const PushMultiConsumeResult({
+    required this.success,
+    required this.consumed,
+    this.message,
+  });
+
+  const PushMultiConsumeResult.success({required this.consumed})
+      : success = true,
+        message = null;
+
+  const PushMultiConsumeResult.fail(this.message)
+      : success = false,
+        consumed = 0;
+
+  final bool success;
+  final int consumed;
+  final String? message;
 }

@@ -19,9 +19,11 @@ void main() {
       expect(PartnershipPlanDefaults.activePlan, PremiumPartnershipTier.basic);
     });
 
-    test('PremiumPartnershipPlans.buildChatNoticeBody mentions packages', () {
+    test('PremiumPartnershipPlans.buildChatNoticeBody matches push policy', () {
       final body = PremiumPartnershipPlans.buildChatNoticeBody();
-      expect(body, contains('공고 노출·모집 패키지'));
+      expect(body, contains('공고 등록'));
+      expect(body, contains('근무지 1km'));
+      expect(body, contains('유료 지역 푸시권'));
       expect(body, contains('1km'));
     });
   });

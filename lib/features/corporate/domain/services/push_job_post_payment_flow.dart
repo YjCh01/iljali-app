@@ -22,7 +22,7 @@ class PushJobPostPaymentResult {
     this.extraPushFeeKrw = 0,
 
     this.dispatchRadiusTier,
-
+    this.recruitmentPushCount = 0,
   });
 
 
@@ -34,12 +34,13 @@ class PushJobPostPaymentResult {
   final int extraPushFeeKrw;
 
   final PushRadiusTier? dispatchRadiusTier;
+  final int recruitmentPushCount;
 
 }
 
 
 
-/// 공고 등록·수정 시 푸시 크레딧 소진·패키지 결제
+/// 공고 등록 무료 · 모집하기 시 지역 푸시권/일일 무료 소진
 
 class PushJobPostPaymentFlow {
   PushJobPostPaymentFlow({PushDispatchService? dispatchService})
@@ -70,6 +71,7 @@ class PushJobPostPaymentFlow {
     var extraPushFeeKrw = 0;
 
     PushRadiusTier? dispatchRadiusTier;
+    var recruitmentPushCount = 0;
 
 
 
@@ -77,12 +79,10 @@ class PushJobPostPaymentFlow {
 
     if (settings?.hasConfiguredBase == true && activeProfile != null) {
 
-      final prepared = await _dispatchService.prepare(
-
+      final prepared = await _dispatchService.prepareRegistrationPush(
         context: context,
-
         profile: activeProfile,
-
+        settings: settings!,
       );
 
       if (!context.mounted) return null;
@@ -92,6 +92,7 @@ class PushJobPostPaymentFlow {
       dispatchRadiusTier = prepared.radiusTier;
       extraPushFeeKrw = prepared.paymentKrw;
       paymentRecord = prepared.paymentRecord;
+      recruitmentPushCount = prepared.recruitmentPushCount;
 
     }
 
@@ -146,6 +147,7 @@ class PushJobPostPaymentFlow {
       extraPushFeeKrw: extraPushFeeKrw,
 
       dispatchRadiusTier: dispatchRadiusTier,
+      recruitmentPushCount: recruitmentPushCount,
 
     );
 

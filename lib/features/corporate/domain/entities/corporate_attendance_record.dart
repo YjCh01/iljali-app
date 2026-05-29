@@ -12,6 +12,9 @@ class CorporateAttendanceRecord {
     this.commissionAmountKrw,
     this.commissionPaid = false,
     this.escalationLevel = 0,
+    this.awaitingEmployerConfirm = false,
+    this.awaitingSeekerCheckIn = false,
+    this.canEmployerConfirm = false,
   });
 
   final String id;
@@ -25,6 +28,9 @@ class CorporateAttendanceRecord {
   final int? commissionAmountKrw;
   final bool commissionPaid;
   final int escalationLevel;
+  final bool awaitingEmployerConfirm;
+  final bool awaitingSeekerCheckIn;
+  final bool canEmployerConfirm;
 
   bool get needsCommissionPayment =>
       status == CorporateAttendanceStatus.pendingCommission &&
@@ -37,6 +43,8 @@ enum CorporateAttendanceStatus {
   earlyLeave,
   absent,
   pendingCommission,
+  awaitingEmployerConfirm,
+  awaitingSeekerCheckIn,
 }
 
 extension CorporateAttendanceStatusX on CorporateAttendanceStatus {
@@ -46,5 +54,7 @@ extension CorporateAttendanceStatusX on CorporateAttendanceStatus {
         CorporateAttendanceStatus.earlyLeave => '조퇴',
         CorporateAttendanceStatus.absent => '결근',
         CorporateAttendanceStatus.pendingCommission => '수수료 결제 대기',
+        CorporateAttendanceStatus.awaitingEmployerConfirm => '기업 확인 대기',
+        CorporateAttendanceStatus.awaitingSeekerCheckIn => '구직자 출근 대기',
       };
 }

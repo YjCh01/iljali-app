@@ -31,6 +31,7 @@ import 'package:map/features/corporate/presentation/pages/push_notification_base
 import 'package:map/features/corporate/presentation/pages/workplace_address_search_page.dart';
 import 'package:map/features/home/presentation/pages/role_based_home_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/health_insurance_verification_page.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_push_inbox_page.dart';
 import 'package:map/features/listings/presentation/pages/create_listing_page.dart';
 import 'package:map/features/map_dashboard/presentation/pages/warehouse_search_page.dart';
 
@@ -182,9 +183,10 @@ class MapApp extends StatelessWidget {
           builder: (_) => const PushPackageShopPage(),
         );
       case AppRoutes.corporatePushPackageShop:
+        final initialOfferId = settings.arguments as String?;
         return MaterialPageRoute<bool>(
           settings: settings,
-          builder: (_) => const PushPackageShopPage(),
+          builder: (_) => PushPackageShopPage(initialOfferId: initialOfferId),
         );
       case AppRoutes.adminCompliance:
         return MaterialPageRoute<void>(
@@ -218,6 +220,11 @@ class MapApp extends StatelessWidget {
         return MaterialPageRoute<void>(
           settings: settings,
           builder: (_) => const HealthInsuranceVerificationPage(),
+        );
+      case AppRoutes.seekerPushInbox:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const SeekerPushInboxPage(),
         );
       case AppRoutes.corporatePushDispatch:
         final raw = settings.arguments;

@@ -123,7 +123,7 @@ class _ShiftCheckInPageState extends State<ShiftCheckInPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            '출근이 기록되었습니다. 기업 담당자에게 수수료 결제 안내가 전달됩니다.',
+            '출근이 기록되었습니다. 기업 담당자의 출근 확인을 기다려 주세요.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
