@@ -37,6 +37,9 @@ class RemotePaymentsGatewayService implements PaymentGatewayService {
           'buyer_email': request.buyerEmail,
           'buyer_name': request.buyerName,
           'company_key': request.companyKey,
+          if (request.billingKey != null) 'billing_key': request.billingKey,
+          if (request.savedPaymentMethodId != null)
+            'saved_method_id': request.savedPaymentMethodId,
         }),
       );
 
@@ -59,6 +62,41 @@ class RemotePaymentsGatewayService implements PaymentGatewayService {
       );
     } on Object {
       return _fallback.requestPayment(request);
+    }
+  }
+
+  /// checkout WebView success 후 서버에서 토스 승인 확인
+  Future<PaymentResult> confirmViaServer({
+    required String paymentKey,
+    required String orderId,
+    required int amountKrw,
+  }) async {
+    if (_baseUrl.isEmpty) {
+      return PaymentResult.ok('REMOTE-LOCAL-$orderId');
+    }
+
+    try {
+      final response = await _client.post(
+        Uri.parse('$_baseUrl/v1/payments/confirm'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'payment_key': paymentKey,
+          'order_id': orderId,
+          'amount_krw': amountKrw,
+        }),
+      );
+
+      if (response.statusCode >= 400) {
+        return PaymentResult.fail('결제 승인 실패');
+      }
+      final map = jsonDecode(response.body) as Map<String, dynamic>;
+      return PaymentResult(
+        success: map['success'] as bool? ?? false,
+        transactionId: map['transaction_id'] as String?,
+        mock: map['mock'] as bool? ?? false,
+      );
+    } on Object {
+      return PaymentResult.fail('결제 승인 통신 오류');
     }
   }
 }

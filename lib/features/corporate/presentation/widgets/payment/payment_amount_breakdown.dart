@@ -21,74 +21,81 @@ String formatKrw(int amount) => amount.toString().replaceAllMapped(
       (m) => '${m[1]},',
     );
 
-/// 하단 고정 결제 금액 요약 — 총 결제금액 + 상세 내역
+/// 하단 고정 결제 금액 요약 — 총 결제금액 + 상세 내역 (+ 결제 버튼)
 class PaymentAmountBreakdown extends StatelessWidget {
   const PaymentAmountBreakdown({
     super.key,
     required this.lines,
     required this.totalKrw,
     this.totalLabel = '총 결제금액',
+    this.action,
   });
 
   final List<PaymentBreakdownLine> lines;
   final int totalKrw;
   final String totalLabel;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    final formattedTotal = formatKrw(totalKrw);
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
+    return Material(
+      color: AppColors.surface,
       child: SafeArea(
         top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final line in lines) ...[
-              _BreakdownRow(line: line),
-              const SizedBox(height: 8),
-            ],
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 4),
-              child: Divider(height: 1, color: AppColors.searchBarBorder),
+        left: false,
+        right: false,
+        child: Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(
+              top: BorderSide(color: AppColors.searchBarBorder),
             ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Text(
-                    totalLabel,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final line in lines) ...[
+                _BreakdownRow(line: line),
+                const SizedBox(height: 8),
+              ],
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Divider(height: 1, color: AppColors.searchBarBorder),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Text(
+                      totalLabel,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  '$formattedTotal원',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    height: 1.1,
+                  Text(
+                    '${formatKrw(totalKrw)}원',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      height: 1.1,
+                    ),
                   ),
-                ),
+                ],
+              ),
+              if (action != null) ...[
+                const SizedBox(height: 14),
+                action!,
               ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

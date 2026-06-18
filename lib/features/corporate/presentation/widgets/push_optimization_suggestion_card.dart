@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/services/push_optimization_service.dart';
 
-/// 푸시 AI 추천 카드
+/// PUSH AI 추천 카드
 class PushOptimizationSuggestionCard extends StatelessWidget {
   const PushOptimizationSuggestionCard({
     super.key,

@@ -18,15 +18,15 @@ void main() {
       expect(ProductFeatureFlags.isEnterpriseOutsourcingEnabled, isTrue);
     });
 
-    test('allowedWorkerCategories is daily only', () {
+    test('allowedWorkerCategories includes daily and shortTerm', () {
       expect(
         ProductFeatureFlags.allowedWorkerCategories,
-        equals([WorkerCategory.daily]),
+        equals([WorkerCategory.daily, WorkerCategory.shortTerm]),
       );
     });
 
-    test('defaultWorkerCategory is daily when general disabled', () {
-      expect(ProductFeatureFlags.defaultWorkerCategory, WorkerCategory.daily);
+    test('defaultWorkerCategory is shortTerm when general disabled', () {
+      expect(ProductFeatureFlags.defaultWorkerCategory, WorkerCategory.shortTerm);
     });
 
     test('disabledFeatures registry is not empty', () {

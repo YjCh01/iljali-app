@@ -20,6 +20,7 @@ import 'package:map/features/corporate/domain/entities/corporate_applicant.dart'
 
 import 'package:map/features/corporate/domain/usecases/get_corporate_applicants_usecase.dart';
 
+import 'package:map/features/corporate/presentation/pages/corporate_applicant_resume_page.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_applicant_card.dart';
 
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
@@ -318,9 +319,11 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
             final applicant = visible[applicantIndex];
 
             return CorporateApplicantCard(
-
               applicant: applicant,
-
+              onTap: () {
+                final id = applicant.applicationId ?? applicant.id;
+                openCorporateApplicantResume(context, applicationId: id);
+              },
               onChat: applicant.status == CorporateApplicantStatus.pending ||
 
                       applicant.status == CorporateApplicantStatus.chatting

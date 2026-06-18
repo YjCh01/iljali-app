@@ -2,12 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/utils/naver_map_platform.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
-
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_unavailable_placeholder.dart';
 
 /// 지도에 표시할 비활성(기존) 거점
 class PushRadiusMapOverlayPoint {
@@ -17,6 +19,7 @@ class PushRadiusMapOverlayPoint {
     required this.label,
     required this.pointIndex,
     this.visualTheme,
+    this.draft = false,
   });
 
   final GeoCoordinate coordinate;
@@ -24,9 +27,22 @@ class PushRadiusMapOverlayPoint {
   final String label;
   final int pointIndex;
   final PushCreditVisualTheme? visualTheme;
+  /// 미노출(저장만) 정류장 — 지도에서 흐리게
+  final bool draft;
 }
 
-/// 푸시 거점 설정용 지도 피커 (Windows/Web MVP — 추후 Naver Map 연동)
+/// 셔틀 노선 경로 — 복수 노선 지원
+class PushRadiusMapPolyline {
+  const PushRadiusMapPolyline({
+    required this.points,
+    required this.color,
+  });
+
+  final List<GeoCoordinate> points;
+  final Color color;
+}
+
+/// PUSH·셔틀 거점/정류장 지도 — Naver Map(모바일) + MVP 그리드(Windows/Web)
 class PushRadiusMapPicker extends StatefulWidget {
   const PushRadiusMapPicker({
     super.key,
@@ -39,6 +55,11 @@ class PushRadiusMapPicker extends StatefulWidget {
     this.centerEditable = true,
     this.onExistingPointTap,
     this.visualTheme,
+    /// 통근버스·셔틀 정류장 — 반경 0일 때 「위치만」 뱃지 숨김
+    this.hideZeroRadiusLabel = false,
+    this.polylinePoints = const [],
+    this.polylineColor,
+    this.polylines = const [],
   });
 
   final GeoCoordinate center;
@@ -52,6 +73,12 @@ class PushRadiusMapPicker extends StatefulWidget {
   final bool centerEditable;
   final ValueChanged<int>? onExistingPointTap;
   final PushCreditVisualTheme? visualTheme;
+  final bool hideZeroRadiusLabel;
+  /// 셔틀 노선 경로 — 활성화된 정류장 3곳 이상일 때
+  final List<GeoCoordinate> polylinePoints;
+  final Color? polylineColor;
+  /// 복수 노선 경로 (지정 시 [polylinePoints]보다 우선)
+  final List<PushRadiusMapPolyline> polylines;
   @override
   State<PushRadiusMapPicker> createState() => _PushRadiusMapPickerState();
 }
@@ -62,22 +89,29 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
   static const _zoomStep = 0.8;
 
   late GeoCoordinate _center;
+  late GeoCoordinate _viewCenter;
   late double _mapZoom;
   Offset _dragOffset = Offset.zero;
   double _scaleStartZoom = 14;
+  bool _isDragging = false;
+
+  GeoCoordinate get _renderCenter =>
+      widget.centerEditable ? _center : _viewCenter;
 
   @override
   void initState() {
     super.initState();
     _center = widget.center;
+    _viewCenter = widget.center;
     _mapZoom = widget.mapZoom;
   }
 
   @override
   void didUpdateWidget(PushRadiusMapPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.center != widget.center) {
+    if (!_isDragging && oldWidget.center != widget.center) {
       _center = widget.center;
+      _viewCenter = widget.center;
       _dragOffset = Offset.zero;
     }
     if (oldWidget.mapZoom != widget.mapZoom) {
@@ -87,6 +121,11 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
 
   void _onScaleStart(ScaleStartDetails details) {
     _scaleStartZoom = _mapZoom;
+    _isDragging = true;
+  }
+
+  void _onScaleEnd(ScaleEndDetails details) {
+    _isDragging = false;
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
@@ -96,7 +135,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                 math.log(details.scale) / math.ln2)
             .clamp(_minZoom, _maxZoom);
       }
-      if (widget.centerEditable && details.focalPointDelta != Offset.zero) {
+      if (details.focalPointDelta != Offset.zero) {
         _applyPanDelta(details.focalPointDelta);
       }
     });
@@ -105,11 +144,17 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
   void _applyPanDelta(Offset delta) {
     _dragOffset += delta;
     final scale = _metersPerPixel();
-    _center = GeoCoordinate(
-      latitude: _center.latitude - delta.dy * scale / 111320,
-      longitude: _center.longitude + delta.dx * scale / (111320 * 0.88),
+    final next = GeoCoordinate(
+      latitude: _renderCenter.latitude - delta.dy * scale / 111320,
+      longitude: _renderCenter.longitude + delta.dx * scale / (111320 * 0.88),
     );
-    widget.onCenterChanged(_center);
+    if (widget.centerEditable) {
+      _center = next;
+      _viewCenter = next;
+      widget.onCenterChanged(_center);
+    } else {
+      _viewCenter = next;
+    }
   }
 
   void _nudgeZoom(double delta) {
@@ -143,17 +188,65 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
     return Offset(dx, dy);
   }
 
+  /// null이면 반경 뱃지·라벨 접미사를 표시하지 않음
+  String? _radiusLabelFor(int radiusMeters) {
+    if (radiusMeters <= 0) {
+      return widget.hideZeroRadiusLabel ? null : '위치만';
+    }
+    if (radiusMeters <= PushPackageCatalog.packagePushRadiusM) {
+      return '주변';
+    }
+    return '반경 ${radiusMeters ~/ 1000}km';
+  }
+
+  bool get _showsCenterPin =>
+      widget.centerEditable ||
+      widget.radiusMeters > 0 ||
+      (widget.existingPoints.isEmpty && widget.polylines.isEmpty);
+
+  List<PushRadiusMapPolyline> get _effectivePolylines {
+    if (widget.polylines.isNotEmpty) return widget.polylines;
+    if (widget.polylinePoints.length >= 2) {
+      return [
+        PushRadiusMapPolyline(
+          points: widget.polylinePoints,
+          color: widget.polylineColor ?? AppColors.primary,
+        ),
+      ];
+    }
+    return const [];
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (NaverMapPlatform.shouldShowMap) {
+      return _PushRadiusNaverMapPicker(
+        center: widget.center,
+        radiusMeters: widget.radiusMeters,
+        onCenterChanged: widget.onCenterChanged,
+        existingPoints: widget.existingPoints,
+        activePointLabel: widget.activePointLabel,
+        mapZoom: widget.mapZoom,
+        centerEditable: widget.centerEditable,
+        onExistingPointTap: widget.onExistingPointTap,
+        visualTheme: widget.visualTheme,
+        hideZeroRadiusLabel: widget.hideZeroRadiusLabel,
+        polylinePoints: widget.polylinePoints,
+        polylineColor: widget.polylineColor,
+        polylines: _effectivePolylines,
+        showsCenterPin: _showsCenterPin,
+        radiusLabelFor: _radiusLabelFor,
+      );
+    }
+
+    return _buildMockMap(context);
+  }
+
+  Widget _buildMockMap(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         final activeRadiusPx = _radiusPixels(size.shortestSide, widget.radiusMeters);
-        final activeLabel = widget.radiusMeters <= 0
-            ? '위치만'
-            : widget.radiusMeters <= PushPackageCatalog.packagePushRadiusM
-                ? '주변'
-                : '반경 ${widget.radiusMeters ~/ 1000}km';
         final hasExisting = widget.existingPoints.isNotEmpty;
         final activeTheme = widget.visualTheme ?? PushCreditVisualTheme.basic;
         // 다중 지역일 때 지도 배경·컨트롤은 고정 — 선택 중인 거점만 activeTheme 색
@@ -171,6 +264,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
               behavior: HitTestBehavior.opaque,
               onScaleStart: _onScaleStart,
               onScaleUpdate: _onScaleUpdate,
+              onScaleEnd: _onScaleEnd,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -180,25 +274,24 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                     zoom: _mapZoom,
                     accentLight: chromeTheme.accentLight,
                     gridBackground: chromeTheme.mapGridBackground,
+                    polylinePoints: widget.polylinePoints,
+                    polylineColor: widget.polylineColor ?? activeTheme.accent,
+                    polylines: _effectivePolylines,
+                    viewCenter: _renderCenter,
+                    geoOffset: _geoOffset,
                   ),
                 ),
                 // 기존 거점 — 연한 영역 + 작은 핀
                 for (final existing in widget.existingPoints)
                   Center(
                     child: Transform.translate(
-                      offset: _geoOffset(existing.coordinate, _center),
+                      offset: _geoOffset(existing.coordinate, _renderCenter),
                       child: _ExistingPointMarker(
                         radiusPx: _radiusPixels(
                           size.shortestSide,
                           existing.radiusMeters,
                         ),
                         label: existing.label,
-                        radiusLabel: existing.radiusMeters <= 0
-                            ? '위치만'
-                            : existing.radiusMeters <=
-                                    PushPackageCatalog.packagePushRadiusM
-                                ? '주변'
-                                : '${existing.radiusMeters ~/ 1000}km',
                         tappable: widget.onExistingPointTap != null,
                         onTap: widget.onExistingPointTap == null
                             ? null
@@ -210,6 +303,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                                   existing.pointIndex,
                                 ))
                             .accent,
+                        muted: existing.draft,
                       ),
                     ),
                   ),
@@ -231,154 +325,24 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                       ),
                     ),
                   ),
-                Center(
-                  child: IgnorePointer(
-                    child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.add_location_alt_rounded,
-                        color: activeTheme.accent,
-                        size: 40,
-                        shadows: [
-                          Shadow(
-                            color: Colors.white.withValues(alpha: 0.95),
-                            blurRadius: 8,
-                          ),
-                        ],
-                      ),
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: activeTheme.accent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          activeLabel,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      if (widget.activePointLabel != null &&
-                          widget.activePointLabel!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface.withValues(alpha: 0.95),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: activeTheme.accent.withValues(alpha: 0.45),
-                            ),
-                          ),
-                          child: Text(
-                            widget.activePointLabel!,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: activeTheme.accent,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-                if (hasExisting)
-                  Positioned(
-                    left: 12,
-                    top: 12,
-                    right: 12,
+                if (_showsCenterPin)
+                  Center(
                     child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: AppColors.surface.withValues(alpha: 0.94),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: chromeTheme.accentLight.withValues(alpha: 0.55),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.layers_outlined,
-                                size: 16,
-                                color: chromeTheme.accent.withValues(alpha: 0.85),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  widget.centerEditable
-                                      ? '연한 영역 · 다른 지역 ${widget.existingPoints.length}곳 · '
-                                          '탭해 전환 · 지도 이동 · 두 손가락으로 확대/축소'
-                                      : '연한 영역 · 다른 지역 ${widget.existingPoints.length}곳 · '
-                                          '탭해 전환 · 확대/축소 가능',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    height: 1.3,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textSecondary
-                                        .withValues(alpha: 0.95),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: _CenterPinBadge(
+                        accent: activeTheme.accent,
+                        pointLabel: widget.activePointLabel,
                       ),
                     ),
                   ),
                 Positioned(
                   right: 12,
-                  top: hasExisting ? 52 : 12,
+                  top: 12,
                   child: _MapZoomButtons(
                     canZoomIn: _mapZoom < _maxZoom,
                     canZoomOut: _mapZoom > _minZoom,
                     onZoomIn: () => _nudgeZoom(_zoomStep),
                     onZoomOut: () => _nudgeZoom(-_zoomStep),
                     accent: chromeTheme.accent,
-                  ),
-                ),
-                Positioned(
-                  left: 12,
-                  bottom: 12,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: AppColors.surface.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        child: Text(
-                          '${_center.latitude.toStringAsFixed(5)}, '
-                          '${_center.longitude.toStringAsFixed(5)}',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
                   ),
                 ),
               ],
@@ -443,18 +407,18 @@ class _ExistingPointMarker extends StatelessWidget {
   const _ExistingPointMarker({
     required this.radiusPx,
     required this.label,
-    required this.radiusLabel,
     this.tappable = false,
     this.onTap,
     this.accent = AppColors.primary,
+    this.muted = false,
   });
 
   final double radiusPx;
   final String label;
-  final String radiusLabel;
   final bool tappable;
   final VoidCallback? onTap;
   final Color accent;
+  final bool muted;
 
   static const _tapTargetSize = 52.0;
 
@@ -462,7 +426,9 @@ class _ExistingPointMarker extends StatelessWidget {
   Widget build(BuildContext context) {
     final pinIcon = Icon(
       Icons.location_on_outlined,
-      color: accent.withValues(alpha: 0.45),
+      color: (muted ? AppColors.textSecondary : accent).withValues(
+        alpha: muted ? 0.45 : 0.75,
+      ),
       size: 26,
     );
     final pinLabel = Container(
@@ -476,7 +442,7 @@ class _ExistingPointMarker extends StatelessWidget {
         ),
       ),
       child: Text(
-        '$label · $radiusLabel',
+        label,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.center,
@@ -672,12 +638,22 @@ class _MapGridPainter extends CustomPainter {
     required this.zoom,
     this.accentLight = AppColors.primaryLight,
     this.gridBackground = const Color(0xFFE8E4F8),
+    this.polylinePoints = const [],
+    this.polylineColor = AppColors.primary,
+    this.polylines = const [],
+    required this.viewCenter,
+    required this.geoOffset,
   });
 
   final Offset offset;
   final double zoom;
   final Color accentLight;
   final Color gridBackground;
+  final List<GeoCoordinate> polylinePoints;
+  final Color polylineColor;
+  final List<PushRadiusMapPolyline> polylines;
+  final GeoCoordinate viewCenter;
+  final Offset Function(GeoCoordinate target, GeoCoordinate viewCenter) geoOffset;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -709,6 +685,49 @@ class _MapGridPainter extends CustomPainter {
       Offset(size.width * 0.28, size.height),
       road,
     );
+
+    if (polylines.isNotEmpty) {
+      for (var i = 0; i < polylines.length; i++) {
+        _drawPolyline(canvas, size, polylines[i]);
+      }
+    } else if (polylinePoints.length >= 2) {
+      _drawPolyline(
+        canvas,
+        size,
+        PushRadiusMapPolyline(points: polylinePoints, color: polylineColor),
+      );
+    }
+  }
+
+  void _drawPolyline(Canvas canvas, Size size, PushRadiusMapPolyline line) {
+    if (line.points.length < 2) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final path = Path();
+    for (var i = 0; i < line.points.length; i++) {
+      final point = center + geoOffset(line.points[i], viewCenter);
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = line.color.withValues(alpha: 0.35)
+        ..strokeWidth = 8
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = line.color
+        ..strokeWidth = 4
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   @override
@@ -716,8 +735,375 @@ class _MapGridPainter extends CustomPainter {
       oldDelegate.offset != offset ||
       oldDelegate.zoom != zoom ||
       oldDelegate.accentLight != accentLight ||
-      oldDelegate.gridBackground != gridBackground;
+      oldDelegate.gridBackground != gridBackground ||
+      oldDelegate.polylinePoints != polylinePoints ||
+      oldDelegate.polylineColor != polylineColor ||
+      oldDelegate.polylines != polylines ||
+      oldDelegate.viewCenter != viewCenter;
 }
 
 GeoCoordinate defaultPushMapCenter() =>
     const GeoCoordinate(latitude: 37.5128, longitude: 127.0471);
+
+class _CenterPinBadge extends StatelessWidget {
+  const _CenterPinBadge({
+    required this.accent,
+    this.pointLabel,
+  });
+
+  final Color accent;
+  final String? pointLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.location_on_rounded,
+          color: accent,
+          size: 40,
+          shadows: [
+            Shadow(
+              color: Colors.white.withValues(alpha: 0.95),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        if (pointLabel != null && pointLabel!.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.surface.withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: accent.withValues(alpha: 0.45)),
+            ),
+            child: Text(
+              pointLabel!,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: accent,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Naver Map 기반 PUSH·셔틀 지도 (Android/iOS)
+class _PushRadiusNaverMapPicker extends StatefulWidget {
+  const _PushRadiusNaverMapPicker({
+    required this.center,
+    required this.radiusMeters,
+    required this.onCenterChanged,
+    required this.existingPoints,
+    required this.activePointLabel,
+    required this.mapZoom,
+    required this.centerEditable,
+    required this.onExistingPointTap,
+    required this.visualTheme,
+    required this.hideZeroRadiusLabel,
+    required this.polylinePoints,
+    required this.polylineColor,
+    required this.polylines,
+    required this.showsCenterPin,
+    required this.radiusLabelFor,
+  });
+
+  final GeoCoordinate center;
+  final int radiusMeters;
+  final ValueChanged<GeoCoordinate> onCenterChanged;
+  final List<PushRadiusMapOverlayPoint> existingPoints;
+  final String? activePointLabel;
+  final double mapZoom;
+  final bool centerEditable;
+  final ValueChanged<int>? onExistingPointTap;
+  final PushCreditVisualTheme? visualTheme;
+  final bool hideZeroRadiusLabel;
+  final List<GeoCoordinate> polylinePoints;
+  final Color? polylineColor;
+  final List<PushRadiusMapPolyline> polylines;
+  final bool showsCenterPin;
+  final String? Function(int radiusMeters) radiusLabelFor;
+
+  @override
+  State<_PushRadiusNaverMapPicker> createState() =>
+      _PushRadiusNaverMapPickerState();
+}
+
+class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
+  static const _minZoom = 10.0;
+  static const _maxZoom = 18.0;
+  static const _zoomStep = 0.8;
+
+  NaverMapController? _controller;
+  GeoCoordinate? _lastReportedCenter;
+  bool _mapReady = false;
+
+  PushCreditVisualTheme get _activeTheme =>
+      widget.visualTheme ?? PushCreditVisualTheme.basic;
+
+  PushCreditVisualTheme get _chromeTheme => widget.existingPoints.isNotEmpty
+      ? PushCreditVisualTheme.package
+      : _activeTheme;
+
+  @override
+  void didUpdateWidget(_PushRadiusNaverMapPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_mapReady) return;
+
+    final centerChanged = oldWidget.center != widget.center;
+    final overlaysChanged = oldWidget.existingPoints != widget.existingPoints ||
+        oldWidget.radiusMeters != widget.radiusMeters ||
+        oldWidget.polylinePoints != widget.polylinePoints ||
+        oldWidget.polylineColor != widget.polylineColor ||
+        oldWidget.polylines != widget.polylines ||
+        oldWidget.visualTheme != widget.visualTheme;
+
+    if (overlaysChanged) {
+      _syncOverlays();
+    }
+
+    if (centerChanged && widget.centerEditable) {
+      _moveCameraTo(widget.center, animate: false);
+      _lastReportedCenter = widget.center;
+    } else if (centerChanged && !widget.centerEditable) {
+      _moveCameraTo(widget.center, animate: true);
+    }
+  }
+
+  Future<void> _moveCameraTo(
+    GeoCoordinate coordinate, {
+    required bool animate,
+  }) async {
+    final controller = _controller;
+    if (controller == null) return;
+    final update = NCameraUpdate.withParams(
+      target: NLatLng(coordinate.latitude, coordinate.longitude),
+      zoom: widget.mapZoom,
+    );
+    if (!animate) {
+      update.setAnimation(animation: NCameraAnimation.none);
+    }
+    await controller.updateCamera(update);
+  }
+
+  Future<void> _handleMapReady(NaverMapController controller) async {
+    _controller = controller;
+    _lastReportedCenter = widget.center;
+    await _syncOverlays();
+    if (!mounted) return;
+    setState(() => _mapReady = true);
+  }
+
+  Future<void> _handleCameraIdle() async {
+    if (!widget.centerEditable) return;
+    final controller = _controller;
+    if (controller == null) return;
+
+    final camera = await controller.getCameraPosition();
+    final next = GeoCoordinate(
+      latitude: camera.target.latitude,
+      longitude: camera.target.longitude,
+    );
+    if (_lastReportedCenter != null &&
+        _sameCoordinate(_lastReportedCenter!, next)) {
+      return;
+    }
+    _lastReportedCenter = next;
+    widget.onCenterChanged(next);
+    await _syncOverlays();
+  }
+
+  bool _sameCoordinate(GeoCoordinate a, GeoCoordinate b) {
+    return (a.latitude - b.latitude).abs() < 0.000001 &&
+        (a.longitude - b.longitude).abs() < 0.000001;
+  }
+
+  Future<void> _nudgeZoom(double delta) async {
+    final controller = _controller;
+    if (controller == null) return;
+    final camera = await controller.getCameraPosition();
+    final nextZoom = (camera.zoom + delta).clamp(_minZoom, _maxZoom);
+    if (nextZoom == camera.zoom) return;
+    final update = NCameraUpdate.withParams(zoom: nextZoom);
+    update.setAnimation(
+      animation: NCameraAnimation.easing,
+      duration: const Duration(milliseconds: 200),
+    );
+    await controller.updateCamera(update);
+  }
+
+  Future<void> _syncOverlays() async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    await controller.clearOverlays(type: NOverlayType.circleOverlay);
+    await controller.clearOverlays(type: NOverlayType.marker);
+    await controller.clearOverlays(type: NOverlayType.pathOverlay);
+
+    final overlays = _buildOverlays();
+    if (overlays.isNotEmpty) {
+      controller.addOverlayAll(overlays);
+    }
+  }
+
+  Set<NAddableOverlay> _buildOverlays() {
+    final overlays = <NAddableOverlay>{};
+    final activeTheme = _activeTheme;
+
+    for (final point in widget.existingPoints) {
+      final accent = (point.visualTheme ??
+              PushCreditVisualTheme.forRecruitPoint(point.pointIndex))
+          .accent;
+      final alpha = point.draft ? 0.45 : 1.0;
+      final tint = accent.withValues(alpha: alpha);
+
+      if (point.radiusMeters > 0) {
+        overlays.add(
+          NCircleOverlay(
+            id: 'push_existing_circle_${point.pointIndex}',
+            center: NLatLng(
+              point.coordinate.latitude,
+              point.coordinate.longitude,
+            ),
+            radius: point.radiusMeters.toDouble(),
+            color: tint.withValues(alpha: 0.12),
+            outlineColor: tint.withValues(alpha: 0.55),
+            outlineWidth: 2,
+          ),
+        );
+      }
+
+      final captionText = point.label;
+
+      final marker = NMarker(
+        id: 'push_existing_marker_${point.pointIndex}',
+        position: NLatLng(
+          point.coordinate.latitude,
+          point.coordinate.longitude,
+        ),
+        iconTintColor: tint,
+        size: const Size(28, 28),
+        caption: NOverlayCaption(
+          text: captionText,
+          color: Colors.white,
+          haloColor: tint.withValues(alpha: 0.85),
+          textSize: 11,
+        ),
+        isHideCollidedCaptions: true,
+      );
+      if (widget.onExistingPointTap != null) {
+        final index = point.pointIndex;
+        marker.setOnTapListener((_) => widget.onExistingPointTap!(index));
+      }
+      overlays.add(marker);
+    }
+
+    if (widget.radiusMeters > 0) {
+      overlays.add(
+        NCircleOverlay(
+          id: 'push_active_circle',
+          center: NLatLng(widget.center.latitude, widget.center.longitude),
+          radius: widget.radiusMeters.toDouble(),
+          color: activeTheme.accent.withValues(alpha: 0.16),
+          outlineColor: activeTheme.accent,
+          outlineWidth: 2.5,
+        ),
+      );
+    }
+
+    final routePolylines = widget.polylines.isNotEmpty
+        ? widget.polylines
+        : (widget.polylinePoints.length >= 2
+            ? [
+                PushRadiusMapPolyline(
+                  points: widget.polylinePoints,
+                  color: widget.polylineColor ?? activeTheme.accent,
+                ),
+              ]
+            : const <PushRadiusMapPolyline>[]);
+
+    for (var i = 0; i < routePolylines.length; i++) {
+      final line = routePolylines[i];
+      if (line.points.length < 2) continue;
+      overlays.add(
+        NPathOverlay(
+          id: 'push_route_polyline_$i',
+          coords: line.points
+              .map((c) => NLatLng(c.latitude, c.longitude))
+              .toList(),
+          width: 5,
+          color: line.color,
+          outlineColor: Colors.white,
+          outlineWidth: 2,
+        ),
+      );
+    }
+
+    return overlays;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!NaverMapPlatform.shouldShowMap) {
+      return const MapUnavailablePlaceholder();
+    }
+
+    final safeAreaPadding = MediaQuery.paddingOf(context);
+    final chromeTheme = _chromeTheme;
+    final activeTheme = _activeTheme;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          NaverMap(
+            forceGesture: true,
+            options: NaverMapViewOptions(
+              contentPadding: safeAreaPadding,
+              initialCameraPosition: NCameraPosition(
+                target: NLatLng(widget.center.latitude, widget.center.longitude),
+                zoom: widget.mapZoom,
+              ),
+              minZoom: _minZoom,
+              maxZoom: _maxZoom,
+              scaleBarEnable: false,
+              locationButtonEnable: false,
+              compassEnable: false,
+              rotationGesturesEnable: false,
+              tiltGesturesEnable: false,
+            ),
+            onMapReady: _handleMapReady,
+            onCameraIdle: _handleCameraIdle,
+          ),
+          if (widget.showsCenterPin)
+            Center(
+              child: IgnorePointer(
+                child: _CenterPinBadge(
+                  accent: activeTheme.accent,
+                  pointLabel: widget.activePointLabel,
+                ),
+              ),
+            ),
+          Positioned(
+            right: 12,
+            top: 12,
+            child: _MapZoomButtons(
+              canZoomIn: _mapReady,
+              canZoomOut: _mapReady,
+              onZoomIn: () => _nudgeZoom(_zoomStep),
+              onZoomOut: () => _nudgeZoom(-_zoomStep),
+              accent: chromeTheme.accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

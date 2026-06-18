@@ -1,4 +1,4 @@
-/// 구직자 수신 푸시 — 받은함·보관함
+﻿/// 구직자 수신 PUSH — 받은함·보관함
 enum SeekerPushInboxFolder {
   inbox,
   archive,
@@ -6,7 +6,7 @@ enum SeekerPushInboxFolder {
 
 extension SeekerPushInboxFolderX on SeekerPushInboxFolder {
   String get label => switch (this) {
-        SeekerPushInboxFolder.inbox => '받은 푸시',
+        SeekerPushInboxFolder.inbox => '받은 PUSH',
         SeekerPushInboxFolder.archive => '보관함',
       };
 }

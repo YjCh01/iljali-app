@@ -47,13 +47,17 @@ class MapZoomControlBar extends StatelessWidget {
                   icon: const Icon(Icons.remove_rounded),
                 ),
                 Expanded(
-                  child: Slider(
-                    value: zoom,
-                    min: minZoom,
-                    max: maxZoom,
-                    divisions: divisions > 0 ? divisions : 1,
-                    label: zoom.toStringAsFixed(1),
-                    onChanged: onZoomChanged,
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      showValueIndicator: ShowValueIndicator.never,
+                    ),
+                    child: Slider(
+                      value: zoom,
+                      min: minZoom,
+                      max: maxZoom,
+                      divisions: divisions > 0 ? divisions : 1,
+                      onChanged: onZoomChanged,
+                    ),
                   ),
                 ),
                 IconButton.filledTonal(

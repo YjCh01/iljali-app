@@ -8,8 +8,11 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  var seedCounter = 0;
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    seedCounter = 0;
   });
 
   Future<LocalHiringRepository> repo() => LocalHiringRepository.create();
@@ -19,8 +22,9 @@ void main() {
     String email = 'seeker@test.com',
     DateTime? workDate,
   }) async {
+    seedCounter++;
     final app = await repository.submitApplication(
-      postId: 'post_${DateTime.now().microsecondsSinceEpoch}',
+      postId: 'post_$seedCounter',
       postTitle: '일용 모집',
       companyName: '(주)일자리',
       seekerEmail: email,
@@ -54,7 +58,8 @@ void main() {
     );
   });
 
-  test('mutual confirm after seeker then employer enables commission', () async {
+  test('mutual confirm after seeker then employer enables commission',
+      () async {
     final repository = await repo();
     final id = await seedScheduled(repository: repository);
 
@@ -63,6 +68,7 @@ void main() {
 
     expect(mutual.isMutuallyConfirmed, isTrue);
     expect(mutual.status, HiringApplicationStatus.checkedIn);
+    expect(mutual.commissionAmountKrw, 15000);
     expect(mutual.needsCommissionPayment, isTrue);
 
     final paid = await repository.markCommissionPaid(id);
@@ -70,7 +76,8 @@ void main() {
     expect(paid.commissionPaidAt, isNotNull);
   });
 
-  test('mutual confirm after employer then seeker enables commission', () async {
+  test('mutual confirm after employer then seeker enables commission',
+      () async {
     final repository = await repo();
     final id = await seedScheduled(repository: repository);
 
@@ -81,7 +88,8 @@ void main() {
     expect(mutual.needsCommissionPayment, isTrue);
   });
 
-  test('auto-confirms employer after 48h silence', () async {
+  test('does not auto-confirm employer after silence (mutual confirm required)',
+      () async {
     final repository = await repo();
     final id = await seedScheduled(repository: repository);
 
@@ -95,9 +103,11 @@ void main() {
     final patchedRepo = await repo();
 
     final autoConfirmed = await patchedRepo.autoConfirmSilentEmployers();
-    expect(autoConfirmed, hasLength(1));
-    expect(autoConfirmed.first.isMutuallyConfirmed, isTrue);
-    expect(autoConfirmed.first.needsCommissionPayment, isTrue);
+    expect(autoConfirmed, isEmpty);
+
+    final stillPending = await patchedRepo.findById(id);
+    expect(stillPending!.isMutuallyConfirmed, isFalse);
+    expect(stillPending.needsCommissionPayment, isFalse);
   });
 
   test('seeker gate allows one overdue missed shift', () async {

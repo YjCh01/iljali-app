@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:map/core/constants/app_colors.dart';
-import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/hiring/insurance_auth_flow_helper.dart';
 import 'package:map/core/hiring/insurance_auth_provider.dart';
 import 'package:map/core/hiring/insurance_verification_log.dart';
@@ -166,19 +165,9 @@ class _HealthInsuranceVerificationPageState
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  AppStrings.permanentCommissionNote,
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.45,
-                    color: AppColors.primary.withValues(alpha: 0.9),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
                   remote
                       ? '간편인증 후 CODEF/Hyphen으로 자격득실확인서를 조회합니다. '
-                          '사업장명이 채용 회사와 일치해야 30일 주기 수수료 청구가 진행됩니다.'
+                          '사업장명이 채용 회사와 일치해야 합니다.'
                       : '간편인증(네이버·카카오·토스·PASS)으로 재직을 확인합니다. '
                           '서버 연동 시 자격득실확인서가 자동 조회됩니다.',
                   style: TextStyle(

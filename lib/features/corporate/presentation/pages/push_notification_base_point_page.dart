@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,20 +7,22 @@ import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/core/widgets/transient_snack_bar.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/corporate/domain/usecases/search_workplace_address_usecase.dart';
-import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
-import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
+import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
+import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/exposure_zone_add_row.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_service_action_style.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 
-/// 푸시 알림 거점 설정 — 반경(플랜별 거리) + 지정 포인트
+/// PUSH 알림 거점 설정 — 반경(플랜별 거리) + 지정 포인트
 class PushNotificationBasePointPage extends StatefulWidget {
   const PushNotificationBasePointPage({
     super.key,
@@ -38,6 +40,8 @@ class PushNotificationBasePointPage extends StatefulWidget {
 
 class _PushNotificationBasePointPageState
     extends State<PushNotificationBasePointPage> with WidgetsBindingObserver {
+  static const _previewRecruitmentPinCap = 10;
+
   final _search = SearchWorkplaceAddressUseCase();
   final _searchController = TextEditingController();
 
@@ -55,6 +59,10 @@ class _PushNotificationBasePointPageState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      clearSnackBarQueue(context);
+    });
     final settings = widget.initialSettings;
     if (settings != null && settings.basePoints.isNotEmpty) {
       _points = List.from(settings.basePoints);
@@ -67,7 +75,7 @@ class _PushNotificationBasePointPageState
     } else if (widget.workplaceHint?.coordinate != null) {
       _center = widget.workplaceHint!.coordinate!;
       _addressLabel = widget.workplaceHint!.roadAddress;
-      _radiusTier = PushRadiusTier.standard1km;
+      _radiusTier = PushRadiusTier.standardFree1km;
       _pointTier = DesignatedPointTier.onePoint;
       _points = [
         PushNotificationBasePoint(
@@ -81,7 +89,7 @@ class _PushNotificationBasePointPageState
     } else {
       _center = defaultPushMapCenter();
       _addressLabel = '강남·역삼 일대';
-      _radiusTier = PushRadiusTier.standard1km;
+      _radiusTier = PushRadiusTier.standardFree1km;
       _pointTier = DesignatedPointTier.onePoint;
       _points = [
         PushNotificationBasePoint(
@@ -120,7 +128,8 @@ class _PushNotificationBasePointPageState
         !allowedKm.contains(_radiusTier.radiusKm)) {
       _radiusTier = PushRadiusOptions.fromKm(allowedKm.last);
     }
-    while (_points.length > _maxPoints) {
+    final hardCap = _previewRecruitmentPinCap + PushPackageCatalog.baseLocationSlots;
+    while (_points.length > hardCap) {
       _points.removeLast();
     }
     for (var i = 0; i < _points.length; i++) {
@@ -134,10 +143,10 @@ class _PushNotificationBasePointPageState
     }
   }
 
-  /// 지역 푸시권 구매 후 반경·거점 한도를 지갑 기준으로 일괄 반영
+  /// 일자리 알림핀 구매 후 반경·거점 한도를 지갑 기준으로 일괄 반영
   void _applyWalletDefaults() {
     _pointTier = PushPlanEnforcement.maxPointTier;
-    _radiusTier = PushPlanEnforcement.defaultFreeRadiusTier;
+    _radiusTier = PushPlanEnforcement.defaultRadiusTier;
     for (var i = 0; i < _points.length; i++) {
       _points[i] = _points[i].copyWith(radiusTier: _radiusTier);
     }
@@ -154,6 +163,7 @@ class _PushNotificationBasePointPageState
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
+    ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
     super.dispose();
   }
 
@@ -203,26 +213,26 @@ class _PushNotificationBasePointPageState
     );
   }
 
-  int get _availableCredits =>
-      AuthSession.instance.currentUser?.corporateProfile?.pushWallet
-          ?.packageRecruitCredits ??
-      0;
+  int get _remainingAddSlots {
+    final recruitCount = PushWalletCreditPolicy.recruitmentZoneCountFromPoints(
+      _points,
+    );
+    return (_previewRecruitmentPinCap - recruitCount)
+        .clamp(0, _previewRecruitmentPinCap);
+  }
 
-  int get _remainingAddSlots => PushWalletCreditPolicy.configureRemainingAddSlots(
-        slotRemaining:
-            (_maxPoints - _points.length).clamp(0, _maxPoints),
-        availableCredits: _availableCredits,
-        recruitZoneCount:
-            PushWalletCreditPolicy.recruitmentZoneCountFromPoints(_points),
-      );
-
-  /// 기본 거점(사업장)은 이동 불가 — 지역 푸시권으로 추가 거점 슬롯이 있을 때만 검색·이동
+  /// 근무지(0번)는 고정 — 노출 중 알림핀은 위치 수정 불가
   bool get _canEditActivePointLocation =>
-      _maxPoints > 1 && _activePointIndex > 0;
+      _activePointIndex > 0 && !_isPinExposureLocked(_activePointIndex);
+
+  bool _isPinExposureLocked(int index) {
+    if (index <= 0 || index >= _points.length) return false;
+    return _points[index].isExposureLocked;
+  }
 
   /// [_addPoint]와 동일 — setState 밖에서 호출 가능
   void _addPointInternal() {
-    if (_points.length >= _maxPoints) return;
+    if (_remainingAddSlots <= 0) return;
     final base = _points.first.coordinate;
     final n = _points.length;
     final angle = (n - 1) * 0.9;
@@ -245,10 +255,13 @@ class _PushNotificationBasePointPageState
 
   void _syncActivePointToList() {
     if (_points.isEmpty) return;
+    final tier = _activePointIndex == 0
+        ? PushRadiusTier.standardFree1km
+        : _radiusTier;
     _points[_activePointIndex] = _points[_activePointIndex].copyWith(
       coordinate: _center,
       addressLabel: _addressLabel,
-      radiusTier: _radiusTier,
+      radiusTier: tier,
     );
   }
 
@@ -278,11 +291,9 @@ class _PushNotificationBasePointPageState
   }
 
   void _selectRadius(PushRadiusTier tier) {
+    if (_activePointIndex == 0) return;
     if (!PushPlanEnforcement.isRadiusAllowed(tier)) {
-      _showPlanUpsell(
-        '${tier.label}은(는) ${PushPackageCatalog.defaultPlanLabel} 한도를 초과합니다. '
-        '추가 공고 노출 범위는 지역 푸시권이 필요합니다.',
-      );
+      _showPlanUpsell('이 반경은 일자리 알림핀에서 이용할 수 있습니다.');
       return;
     }
     setState(() {
@@ -292,11 +303,13 @@ class _PushNotificationBasePointPageState
   }
 
   Future<void> _openPushPackageShop() async {
-    final purchased = await Navigator.of(context).pushNamed<bool?>(
+    clearSnackBarQueue(context);
+    await Navigator.of(context).pushNamed<bool?>(
       AppRoutes.corporatePushPackageShop,
     );
     if (!mounted) return;
-    _refreshPlanLimitsAsync(afterUpgrade: purchased == true);
+    clearSnackBarQueue(context);
+    await _refreshPlanLimitsAsync();
   }
 
   void _selectPointTab(int index) {
@@ -309,29 +322,12 @@ class _PushNotificationBasePointPageState
   }
 
   void _addPoint() {
-    if (_remainingAddSlots <= 0) return;
-    if (_points.length >= _maxPoints) return;
-    _syncActivePointToList();
-    unawaited(_addPointWithCredit());
-  }
-
-  Future<void> _addPointWithCredit() async {
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-    if (profile == null) return;
-    if (_availableCredits <= 0) {
-      await _openPushPackageShop();
+    if (_remainingAddSlots <= 0) {
+      _showPlanUpsell(
+        '일자리 알림핀은 최대 $_previewRecruitmentPinCap개까지 미리 배치할 수 있습니다.',
+      );
       return;
     }
-    final result =
-        await PushWalletService().tryConsumeRecruitmentCredit(profile);
-    if (!mounted) return;
-    if (!result.success) {
-      await _openPushPackageShop();
-      return;
-    }
-    await _ensureWalletLoaded();
-    if (!mounted) return;
-    if (_remainingAddSlots <= 0 || _points.length >= _maxPoints) return;
     _syncActivePointToList();
     setState(_addPointInternal);
   }
@@ -343,9 +339,18 @@ class _PushNotificationBasePointPageState
 
   Future<void> _removePointWithRefund(int index) async {
     if (index <= 0 || index >= _points.length) return;
+    if (_isPinExposureLocked(index)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('노출 중인 알림핀은 삭제할 수 없습니다. 노출 종료 후 다시 시도해 주세요.'),
+        ),
+      );
+      return;
+    }
     _syncActivePointToList();
+    final point = _points[index];
     final profile = AuthSession.instance.currentUser?.corporateProfile;
-    if (profile != null) {
+    if (profile != null && point.exposureActivated) {
       await PushWalletService().refundRecruitmentCredit(profile);
       await _ensureWalletLoaded();
     }
@@ -362,31 +367,24 @@ class _PushNotificationBasePointPageState
   }
 
   void _onAddZoneFromRow() {
-    if (_remainingAddSlots <= 0) return;
-    if (_points.length >= _maxPoints) {
-      _showPlanUpsell(
-        _maxPoints <= 1
-            ? '추가 공고 노출 범위는 지역 푸시권 구매 후 이용할 수 있습니다.'
-            : '설정 가능한 공고 노출 범위 $_maxPoints곳을 모두 사용 중입니다.',
-      );
-      return;
-    }
     _addPoint();
   }
 
   void _confirm() {
     _syncActivePointToList();
     _clampAllToPlan();
-    final maxPoints = _maxPoints;
+    final unpaidCount = [
+      for (var i = 1; i < _points.length; i++)
+        if (!_points[i].isExposureLocked) i,
+    ].length;
+    ScaffoldMessenger.of(context).clearSnackBars();
     Navigator.of(context).pop(
       JobPostNotificationSettings(
-        basePoints: List.unmodifiable(_points.take(maxPoints).toList()),
-        pushCountLimit: PushPlanEnforcement.dailyPushLimit,
-        maxBasePointsAllowed: maxPoints,
-        paymentCompleted: _points.length <= PushPackageCatalog.baseLocationSlots,
+        basePoints: List.unmodifiable(_points),
+        maxBasePointsAllowed: _points.length,
+        paymentCompleted: unpaidCount == 0 && _points.length > 1,
         designatedPointTier: _pointTier,
-        spotPaymentCompleted:
-            _points.length <= PushPackageCatalog.baseLocationSlots,
+        spotPaymentCompleted: unpaidCount == 0 && _points.length > 1,
       ),
     );
   }
@@ -395,19 +393,16 @@ class _PushNotificationBasePointPageState
     final goShop = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('지역 푸시권 필요'),
-        content: Text(
-          '$message\n\n'
-          '지역 푸시권으로 모집지역 추가 및 추가 모집 발송을 진행할 수 있습니다.',
-        ),
+        title: const Text('일자리 알림핀'),
+        content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('확인'),
+            child: const Text('취소'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('지역 푸시권 보기'),
+            child: const Text('이용권 충전'),
           ),
         ],
       ),
@@ -416,15 +411,8 @@ class _PushNotificationBasePointPageState
     await _openPushPackageShop();
   }
 
-  PushCreditVisualTheme get _visualTheme {
-    final wallet =
-        AuthSession.instance.currentUser?.corporateProfile?.pushWallet;
-    return PushCreditVisualTheme.fromWallet(wallet);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final walletTheme = _visualTheme;
     final activeTheme =
         PushCreditVisualTheme.forRecruitPoint(_activePointIndex);
     return Scaffold(
@@ -435,7 +423,7 @@ class _PushNotificationBasePointPageState
         elevation: 0,
         leading: const AppBackButton(),
         automaticallyImplyLeading: false,
-        title: const Text('공고 노출 범위 설정'),
+        title: const Text('일자리 알림핀 설정'),
       ),
       body: !_walletReady
           ? const Center(child: CircularProgressIndicator())
@@ -500,26 +488,63 @@ class _PushNotificationBasePointPageState
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    _points.length > 1
-                        ? '${ExposurePointLabels.zoneRowSubtitle(_activePointIndex)} · '
-                            '지역 푸시권 $_availableCredits회'
-                        : ExposurePointLabels.zoneRowSubtitle(_activePointIndex),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary.withValues(alpha: 0.9),
+                  if (ExposurePointLabels
+                      .zoneRowSubtitle(_activePointIndex)
+                      .isNotEmpty)
+                    Text(
+                      ExposurePointLabels.zoneRowSubtitle(_activePointIndex),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary.withValues(alpha: 0.9),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  PushRadiusKmSlider(
-                    selectedKm: _radiusTier.radiusKm,
-                    allowedKmSteps: PushPlanEnforcement.allowedSliderKmSteps,
-                    accentColor: activeTheme.accent,
-                    suppressCenterLabel: true,
-                    onChanged: (km) =>
-                        _selectRadius(PushRadiusOptions.fromKm(km)),
-                  ),
+                  if (_activePointIndex > 0 && _isPinExposureLocked(_activePointIndex)) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.textSecondary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.searchBarBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.lock_clock_outlined,
+                            size: 18,
+                            color: AppColors.textSecondary.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '노출 중인 알림핀은 위치를 수정할 수 없습니다. '
+                              '${_points[_activePointIndex].exposureExpiresAt == null ? 'D+1 23:59:59까지' : ShuttleExposurePolicy.remainingLabel(_points[_activePointIndex].exposureExpiresAt!)} · 새 핀만 추가 가능',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: AppColors.textSecondary
+                                    .withValues(alpha: 0.92),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (_activePointIndex > 0) ...[
+                    const SizedBox(height: 6),
+                    PushRadiusKmSlider(
+                      selectedKm: _radiusTier.radiusKm,
+                      allowedKmSteps: PushPlanEnforcement.allowedSliderKmSteps,
+                      accentColor: activeTheme.accent,
+                      suppressCenterLabel: true,
+                      onChanged: (km) =>
+                          _selectRadius(PushRadiusOptions.fromKm(km)),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   if (_canEditActivePointLocation) ...[
                     TextField(
@@ -598,38 +623,13 @@ class _PushNotificationBasePointPageState
                       ),
                     ),
                   ],
-                  if (walletTheme.showBasicPassNotice) ...[
-                    const SizedBox(height: 12),
-                    BasicPassNoticeBanner(
-                      backgroundColor:
-                          walletTheme.accentLight.withValues(alpha: 0.22),
-                      borderColor: walletTheme.accent.withValues(alpha: 0.35),
-                      iconColor: walletTheme.accent,
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  _PushPackagePlanBanner(
-                    pointCount: _points.length,
-                    packageCredits: _availableCredits,
-                    radiusUiLabel: ExposurePointLabels.zoneRowSubtitle(
-                      _activePointIndex > 0 ? _activePointIndex : 0,
-                    ),
-                    onOpenShop: _openPushPackageShop,
-                  ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: _confirm,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: walletTheme.actionBackground,
-                      foregroundColor: walletTheme.actionForeground,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Text(
-                      _confirmLabel,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: CorporateServiceActionStyle.setupFilled(),
+                    child: const Text(
+                      '설정 완료',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ],
@@ -639,14 +639,6 @@ class _PushNotificationBasePointPageState
         ],
       ),
     );
-  }
-
-  String get _confirmLabel {
-    final credits = _availableCredits;
-    if (_points.length <= 1) {
-      return '근무지만 · 지역 푸시권 $credits회 · 설정 완료';
-    }
-    return '노출 ${_points.length}곳 · 지역 푸시권 $credits회 · 설정 완료';
   }
 
   List<PushRadiusMapOverlayPoint> get _existingMapOverlays {
@@ -731,7 +723,7 @@ class _ExposureZoneRowListState extends State<_ExposureZoneRowList> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '모집 지역',
+          '설정 목록',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
@@ -765,14 +757,18 @@ class _ExposureZoneRowListState extends State<_ExposureZoneRowList> {
                     color: AppColors.searchBarBorder.withValues(alpha: 0.85),
                   ),
                   itemBuilder: (context, index) {
+                    final point = widget.points[index];
+                    final locked = index > 0 && point.isExposureLocked;
                     return _ExposureZoneRow(
                       index: index,
-                      point: widget.points[index],
+                      point: point,
                       selected: index == widget.activeIndex,
                       isFirst: index == 0,
+                      locked: locked,
                       onTap: () => widget.onSelect(index),
-                      onRemove:
-                          index > 0 ? () => widget.onRemove(index) : null,
+                      onRemove: index > 0 && !locked
+                          ? () => widget.onRemove(index)
+                          : null,
                     );
                   },
                 ),
@@ -803,6 +799,7 @@ class _ExposureZoneRow extends StatelessWidget {
     required this.selected,
     required this.isFirst,
     required this.onTap,
+    this.locked = false,
     this.onRemove,
   });
 
@@ -810,6 +807,7 @@ class _ExposureZoneRow extends StatelessWidget {
   final PushNotificationBasePoint point;
   final bool selected;
   final bool isFirst;
+  final bool locked;
   final VoidCallback onTap;
   final VoidCallback? onRemove;
 
@@ -817,7 +815,9 @@ class _ExposureZoneRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PushCreditVisualTheme.forRecruitPoint(index);
     final isWorkplace = index == 0;
-    final subtitle = ExposurePointLabels.zoneRowSubtitle(index);
+    final subtitle = locked
+        ? '노출 중 · ${point.exposureExpiresAt == null ? 'D+1 23:59:59까지' : ShuttleExposurePolicy.remainingLabel(point.exposureExpiresAt!)}'
+        : ExposurePointLabels.zoneRowSubtitle(index);
     final rowRadius = isFirst
         ? const BorderRadius.vertical(
             top: Radius.circular(_ExposureZoneRowList.listRadius),
@@ -825,9 +825,11 @@ class _ExposureZoneRow extends StatelessWidget {
         : BorderRadius.zero;
 
     return Material(
-      color: selected
-          ? theme.accentLight.withValues(alpha: 0.32)
-          : AppColors.surface,
+      color: locked
+          ? AppColors.textSecondary.withValues(alpha: 0.08)
+          : selected
+              ? theme.accentLight.withValues(alpha: 0.32)
+              : AppColors.surface,
       borderRadius: rowRadius,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -856,7 +858,9 @@ class _ExposureZoneRow extends StatelessWidget {
                     ? Icons.storefront_outlined
                     : Icons.location_on_outlined,
                 size: 18,
-                color: theme.accent,
+                color: locked
+                    ? AppColors.textSecondary.withValues(alpha: 0.55)
+                    : theme.accent,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -869,23 +873,39 @@ class _ExposureZoneRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
-                        color: selected ? theme.accent : AppColors.textPrimary,
+                        color: locked
+                            ? AppColors.textSecondary.withValues(alpha: 0.7)
+                            : selected
+                                ? theme.accent
+                                : AppColors.textPrimary,
                       ),
                     ),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textSecondary.withValues(alpha: 0.92),
+                    if (subtitle.isNotEmpty)
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: locked
+                              ? AppColors.textSecondary.withValues(alpha: 0.8)
+                              : AppColors.textSecondary.withValues(alpha: 0.92),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
-              if (selected)
+              if (locked)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Icon(
+                    Icons.lock_clock_outlined,
+                    size: 18,
+                    color: AppColors.textSecondary.withValues(alpha: 0.55),
+                  ),
+                )
+              else if (selected)
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: Icon(
@@ -918,82 +938,3 @@ class _ExposureZoneRow extends StatelessWidget {
   }
 }
 
-/// 기본 플랜 요약 + 지역 푸시권 상점 이동
-class _PushPackagePlanBanner extends StatelessWidget {
-  const _PushPackagePlanBanner({
-    required this.pointCount,
-    required this.packageCredits,
-    required this.radiusUiLabel,
-    required this.onOpenShop,
-  });
-
-  final int pointCount;
-  final int packageCredits;
-  final String radiusUiLabel;
-  final VoidCallback onOpenShop;
-
-  @override
-  Widget build(BuildContext context) {
-    final plan = PartnershipPlanDefaults.activePlan;
-    return Material(
-      color: AppColors.primary.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onOpenShop,
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: AppColors.primaryLight.withValues(alpha: 0.45),
-            ),
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.inventory_2_outlined,
-                color: AppColors.primary,
-                size: 22,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '모집지역을 추가해 더 넓게 모집해 보세요',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '노출 $pointCount곳 · 지역 푸시권 $packageCredits회 · '
-                      '$radiusUiLabel · '
-                      '근무지 푸시 일 ${plan.dailyPushLimitLabel} · '
-                      '모집지역 추가 시 푸시권 1회 · '
-                      '지역 푸시권 ${PartnershipPlanFormat.krw(plan.extraPushPriceKrw)}/회',
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.35,
-                        color: AppColors.textSecondary.withValues(alpha: 0.95),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.textSecondary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

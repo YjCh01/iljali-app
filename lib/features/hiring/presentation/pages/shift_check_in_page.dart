@@ -3,6 +3,7 @@ import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/geo/geo_distance.dart';
+import 'package:map/core/hiring/attendance_geofence_service.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_refresh.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
@@ -44,51 +45,29 @@ class _ShiftCheckInPageState extends State<ShiftCheckInPage> {
 
     try {
       final workplace = widget.application.workplaceCoordinate;
-      final relaxed = DeviceLocationService.allowsRelaxedLocation;
-      final current = await DeviceLocationService.getCurrentPosition();
+      final position = await DeviceLocationService.getCurrentPositionDetailed();
+      final current = position?.coordinate;
+      final geofence = AttendanceGeofenceService.evaluate(
+        current: current,
+        workplace: workplace,
+        isMocked: position?.isMocked ?? false,
+      );
 
-      String status;
-      double? distance;
-      var allowed = false;
-
-      if (workplace == null) {
-        status = relaxed
-            ? '근무지 좌표 없음 · 데스크톱에서 위치 확인 생략'
-            : '근무지 좌표 없음 · GPS 확인 없이 출근 기록 가능';
-        allowed = true;
-      } else if (relaxed) {
-        status =
-            '데스크톱 환경 · 근무지 ${workplace.latitude.toStringAsFixed(4)}, '
-            '${workplace.longitude.toStringAsFixed(4)} (위치 확인 생략)';
-        allowed = true;
-      } else if (current == null) {
-        status = '위치 권한 또는 GPS를 확인할 수 없습니다';
-        allowed = false;
-      } else {
-        distance = GeoDistance.metersBetween(current, workplace);
-        final withinRadius = DeviceLocationService.isWithinCheckInRadius(
-          current: current,
-          workplace: workplace,
-        );
-        if (withinRadius) {
-          status =
-              '근무지 반경 ${GeoDistance.formatDistanceMeters(DeviceLocationService.checkInRadiusMeters)} 이내 '
-              '(현재 ${GeoDistance.formatDistanceMeters(distance)})';
-          allowed = true;
-        } else {
-          status =
-              '근무지에서 ${GeoDistance.formatDistanceMeters(distance)} 떨어져 있습니다 '
-              '(허용 ${GeoDistance.formatDistanceMeters(DeviceLocationService.checkInRadiusMeters)})';
-          allowed = false;
-        }
-      }
+      await AttendanceGeofenceService.logVerificationAttempt(
+        applicationId: widget.application.id,
+        role: 'seeker',
+        result: geofence,
+        latitude: current?.latitude,
+        longitude: current?.longitude,
+        companyKey: widget.application.companyKey,
+      );
 
       if (!mounted) return;
       setState(() {
         _currentPosition = current;
-        _distanceMeters = distance;
-        _locationStatus = status;
-        _canCheckIn = allowed;
+        _distanceMeters = geofence.distanceMeters;
+        _locationStatus = geofence.userMessage;
+        _canCheckIn = geofence.allowed;
         _loadingLocation = false;
       });
     } catch (_) {
@@ -117,6 +96,8 @@ class _ShiftCheckInPageState extends State<ShiftCheckInPage> {
         widget.application.id,
         latitude: _currentPosition?.latitude,
         longitude: _currentPosition?.longitude,
+        geofenceVerified: _canCheckIn,
+        geofenceDistanceMeters: _distanceMeters,
       );
       HiringRefresh.markUpdated();
       if (!mounted) return;

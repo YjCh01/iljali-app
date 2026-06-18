@@ -16,6 +16,8 @@ class CorporateExposureMiniMap extends StatefulWidget {
     this.interactive = false,
     this.onPinTap,
     this.initialZoom = 12.0,
+    this.selectedPostId,
+    this.centerOnPin,
   });
 
   final List<JobMapPin> pins;
@@ -23,6 +25,8 @@ class CorporateExposureMiniMap extends StatefulWidget {
   final bool interactive;
   final ValueChanged<JobMapPin>? onPinTap;
   final double initialZoom;
+  final String? selectedPostId;
+  final JobMapPin? centerOnPin;
 
   @override
   State<CorporateExposureMiniMap> createState() =>
@@ -32,11 +36,15 @@ class CorporateExposureMiniMap extends StatefulWidget {
 class _CorporateExposureMiniMapState extends State<CorporateExposureMiniMap> {
   late final double _zoom;
   Offset _panOffset = Offset.zero;
+  JobMapPin? _pendingCenterPin;
 
   @override
   void initState() {
     super.initState();
     _zoom = widget.initialZoom;
+    if (widget.centerOnPin != null) {
+      _pendingCenterPin = widget.centerOnPin;
+    }
   }
 
   @override
@@ -45,6 +53,21 @@ class _CorporateExposureMiniMapState extends State<CorporateExposureMiniMap> {
     if (!widget.interactive && oldWidget.interactive) {
       _panOffset = Offset.zero;
     }
+    if (widget.centerOnPin != null &&
+        widget.centerOnPin != oldWidget.centerOnPin) {
+      _pendingCenterPin = widget.centerOnPin;
+    }
+  }
+
+  void _centerOnPin(JobMapPin pin, Size mapSize) {
+    final center = MapConstants.warehouseAreaCenter;
+    final scale = 4200 * math.pow(2, _zoom - 12);
+    setState(() {
+      _panOffset = Offset(
+        -(pin.longitude - center.longitude) * scale,
+        (pin.latitude - center.latitude) * scale,
+      );
+    });
   }
 
   JobMapPinDisplayTier _tierForCluster(JobMapCluster cluster) {
@@ -75,6 +98,13 @@ class _CorporateExposureMiniMapState extends State<CorporateExposureMiniMap> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final mapSize = Size(constraints.maxWidth, constraints.maxHeight);
+        if (_pendingCenterPin != null) {
+          final pin = _pendingCenterPin!;
+          _pendingCenterPin = null;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _centerOnPin(pin, mapSize);
+          });
+        }
 
         return Stack(
           fit: StackFit.expand,
@@ -98,6 +128,8 @@ class _CorporateExposureMiniMapState extends State<CorporateExposureMiniMap> {
               );
               final tier = _tierForCluster(cluster);
               final isOwn = _clusterHasOwn(cluster);
+              final isSelected = cluster.isSingle &&
+                  cluster.singlePin.post.id == widget.selectedPostId;
               final size = tier.markerSize * (widget.interactive ? 0.88 : 0.72);
               return Positioned(
                 left: offset.dx - size / 2,
@@ -111,6 +143,7 @@ class _CorporateExposureMiniMapState extends State<CorporateExposureMiniMap> {
                     label: cluster.count > 1 ? '${cluster.count}' : tier.shapeGlyph,
                     size: size,
                     isOwn: isOwn,
+                    isSelected: isSelected,
                   ),
                 ),
               );
@@ -138,12 +171,14 @@ class _PinDot extends StatelessWidget {
     required this.label,
     required this.size,
     this.isOwn = false,
+    this.isSelected = false,
   });
 
   final JobMapPinDisplayTier tier;
   final String label;
   final double size;
   final bool isOwn;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -155,8 +190,12 @@ class _PinDot extends StatelessWidget {
         color: tier.pinColor,
         shape: BoxShape.circle,
         border: Border.all(
-          color: isOwn ? AppColors.primary : tier.pinBorderColor,
-          width: isOwn ? 2.5 : tier.borderWidth,
+          color: isSelected
+              ? const Color(0xFFFF6F00)
+              : isOwn
+                  ? AppColors.primary
+                  : tier.pinBorderColor,
+          width: isSelected ? 3.5 : isOwn ? 2.5 : tier.borderWidth,
         ),
         boxShadow: [
           BoxShadow(
@@ -164,11 +203,12 @@ class _PinDot extends StatelessWidget {
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
-          if (isOwn)
+          if (isOwn || isSelected)
             BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.25),
-              blurRadius: 8,
-              spreadRadius: 1,
+              color: (isSelected ? const Color(0xFFFF6F00) : AppColors.primary)
+                  .withValues(alpha: 0.3),
+              blurRadius: isSelected ? 12 : 8,
+              spreadRadius: isSelected ? 2 : 1,
             ),
         ],
       ),

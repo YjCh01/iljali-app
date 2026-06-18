@@ -1,6 +1,9 @@
-import 'package:map/core/geo/geo_coordinate.dart';
+﻿import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/features/corporate/domain/entities/job_post_payment_request_kind.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/entities/push_ticket_catalog.dart';
 import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
+import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
 
 /// 반경 등급 (km / m 단위)
 enum PushRadiusTier {
@@ -36,7 +39,7 @@ extension PushRadiusTierX on PushRadiusTier {
         PushRadiusTier.standardFree1km =>
           PushPackageCatalog.pushRadiusLabel,
         PushRadiusTier.standard1km =>
-          '${PushPackageCatalog.pushRadiusLabel} (지역 푸시권)',
+          '${PushPackageCatalog.pushRadiusLabel} (일자리 알림핀)',
         PushRadiusTier.extended3km => '3km',
         PushRadiusTier.extended5km => '5km',
         PushRadiusTier.extended7km => '7km',
@@ -61,11 +64,9 @@ extension PushRadiusTierX on PushRadiusTier {
 
   String get description => switch (this) {
         PushRadiusTier.radius0km => '지도 위치만 저장하고 알림 반경은 설정하지 않습니다.',
-        PushRadiusTier.standardFree1km =>
-            '기본 플랜 — ${PushPackageCatalog.planFreeRadiusSummary} · 하루 ${PushPackageCatalog.dailyFreePush}회.',
-        PushRadiusTier.standard1km =>
-            '지역 푸시권 푸시 — 모집지역 기준 1km. 추가 모집지역은 푸시권이 필요합니다.',
-        _ => '레거시 반경 — 근무지 1km/모집지역 1km 정책 사용을 권장합니다.',
+        PushRadiusTier.standardFree1km => '근무지 주변 1km · 현재 노출중.',
+        PushRadiusTier.standard1km => '일자리 알림핀 주변 1km.',
+        _ => '레거시 반경 — 근무지 1km/일자리 알림핀 1km 정책 사용을 권장합니다.',
       };
 
   bool get isPaid => false;
@@ -94,7 +95,7 @@ abstract final class PushRadiusOptions {
   }
 }
 
-/// 푸시 알림 거점 1곳
+/// PUSH 알림 거점 1곳
 class PushNotificationBasePoint {
   const PushNotificationBasePoint({
     required this.id,
@@ -104,6 +105,9 @@ class PushNotificationBasePoint {
     this.isPrimary = true,
     this.isPremiumSlot = false,
     this.isPaid = false,
+    this.exposureActivated = false,
+    this.activationCoordinate,
+    this.exposurePaidAt,
   });
 
   final String id;
@@ -113,6 +117,15 @@ class PushNotificationBasePoint {
   final bool isPrimary;
   final bool isPremiumSlot;
   final bool isPaid;
+
+  /// 일자리 알림핀 이용권으로 노출 활성화됨 — 좌표 잠금
+  final bool exposureActivated;
+
+  /// 활성화 시점 좌표 (PUSH 단독 발송 검증용)
+  final GeoCoordinate? activationCoordinate;
+
+  /// 노출 결제 시각 — D+1 23:59:59까지 잠금
+  final DateTime? exposurePaidAt;
 
   int get radiusMeters => radiusTier.radiusMeters;
 
@@ -124,6 +137,11 @@ class PushNotificationBasePoint {
     bool? isPrimary,
     bool? isPremiumSlot,
     bool? isPaid,
+    bool? exposureActivated,
+    GeoCoordinate? activationCoordinate,
+    DateTime? exposurePaidAt,
+    bool clearActivationCoordinate = false,
+    bool clearExposurePaidAt = false,
   }) {
     return PushNotificationBasePoint(
       id: id ?? this.id,
@@ -133,27 +151,47 @@ class PushNotificationBasePoint {
       isPrimary: isPrimary ?? this.isPrimary,
       isPremiumSlot: isPremiumSlot ?? this.isPremiumSlot,
       isPaid: isPaid ?? this.isPaid,
+      exposureActivated: exposureActivated ?? this.exposureActivated,
+      activationCoordinate: clearActivationCoordinate
+          ? null
+          : activationCoordinate ?? this.activationCoordinate,
+      exposurePaidAt:
+          clearExposurePaidAt ? null : exposurePaidAt ?? this.exposurePaidAt,
     );
   }
 }
 
-/// 노출·모집 지역 표시명 — 0: 근무지, 1+: 모집지역 N
+extension PushNotificationBasePointExposureX on PushNotificationBasePoint {
+  DateTime? get exposureExpiresAt => exposurePaidAt == null
+      ? null
+      : ShuttleExposurePolicy.expiresAtFromPayment(exposurePaidAt!);
+
+  bool get isExposureLocked {
+    if (!exposureActivated) return false;
+    if (exposurePaidAt == null) return true;
+    return ShuttleExposurePolicy.isActive(exposurePaidAt);
+  }
+}
+
+/// 일자리 알림핀 표시명 — 0: 근무지(기본), 1+: 추가 알림핀(유료)
 abstract final class ExposurePointLabels {
   static String title(int index) => switch (index) {
-        0 => '근무지',
-        _ => '모집지역 $index',
+        0 => '근무지(기본)',
+        _ => '일자리 알림핀 $index',
       };
 
-  /// 목록·시트 행 부제 — 근무지(무료) / 모집지역(지역 푸시권)
-  static String zoneRowSubtitle(int index) => switch (index) {
-        0 => '무료 · 1km · 근무지 주변',
-        _ => '노출지역 · 1km',
-      };
+  /// 목록·시트 행 부제 — 근무지는 공고 등록 시 자동 노출
+  static String zoneRowSubtitle(int index) => '';
 
-  /// 하단 「+」 행 — 잔여 지역 푸시권
+  /// 하단 「+」 행
   static String addZoneButtonLabel(int remainingAdds) {
-    if (remainingAdds <= 0) return '추가 슬롯·지역 푸시권 없음';
-    return '모집지역 추가 (잔여 지역 푸시권 : $remainingAdds)';
+    return '일자리 알림핀 추가';
+  }
+
+  static String compactLine(int index, PushNotificationBasePoint point) {
+    final sub = zoneRowSubtitle(index);
+    if (sub.isEmpty) return title(index);
+    return '${title(index)} · $sub';
   }
 
   /// UI용 반경 — 「반경 주변」 중복 없음
@@ -164,20 +202,13 @@ abstract final class ExposurePointLabels {
   }
 
   static String slotCount(int current, int max) => '$current/$max곳';
-
-  /// 카드·목록용 — 「근무지 · 무료 · 1km · 근무지 주변」
-  static String compactLine(int index, PushNotificationBasePoint point) {
-    return '${title(index)} · ${zoneRowSubtitle(index)}';
-  }
 }
 
 abstract final class NotificationPlanLimits {
   static int get maxBasePoints => PushPlanEnforcement.maxBasePointsSync;
 
-  static int get dailyPushLimit => PushPlanEnforcement.dailyPushLimit;
-
   static PushRadiusTier get maxRadiusTier =>
-      PushPlanEnforcement.defaultFreeRadiusTier;
+      PushPlanEnforcement.defaultRadiusTier;
 
   static int get extraPushPriceKrw => PushPlanEnforcement.extraPushPriceKrw;
 }
@@ -216,7 +247,7 @@ extension DesignatedPointTierX on DesignatedPointTier {
   int get priceKrw => 0;
 
   String get description => switch (this) {
-        DesignatedPointTier.onePoint => '기본 노출 범위 1곳 · 지역 푸시권으로 추가.',
+        DesignatedPointTier.onePoint => '근무지 1곳 · 일자리 알림핀은 설정 시 이용.',
         DesignatedPointTier.twoPoints => '노출 범위 2곳.',
         DesignatedPointTier.fivePoints => '노출 범위 5곳.',
         DesignatedPointTier.unlimited => '노출 범위 무제한.',
@@ -234,7 +265,7 @@ abstract final class DesignatedPointOptions {
   ];
 }
 
-/// 푸시 결제 묶음 — 일일 기본 한도 초과 시 추가 푸시(add-on) 과금
+/// PUSH 결제 묶음 — 일일 기본 한도 초과 시 추가 PUSH(add-on) 과금
 class PushPaymentBundle {
   const PushPaymentBundle({
     required this.radiusTier,
@@ -242,6 +273,7 @@ class PushPaymentBundle {
     required this.spotCount,
     this.isExtraPush = false,
     this.extraPushFeeKrw = 0,
+    this.paymentKind,
   });
 
   const PushPaymentBundle.extraPush({required int feeKrw})
@@ -249,7 +281,16 @@ class PushPaymentBundle {
         pointTier = DesignatedPointTier.onePoint,
         spotCount = 1,
         isExtraPush = true,
-        extraPushFeeKrw = feeKrw;
+        extraPushFeeKrw = feeKrw,
+        paymentKind = JobPostPaymentRequestKind.extraPush;
+
+  /// PUSH권 1곳·1회 발송
+  const PushPaymentBundle.pushTicket({this.spotCount = 1})
+      : radiusTier = PushRadiusTier.standard1km,
+        pointTier = DesignatedPointTier.onePoint,
+        isExtraPush = true,
+        extraPushFeeKrw = PushTicketCatalog.unitPriceKrw * spotCount,
+        paymentKind = JobPostPaymentRequestKind.pushTicket;
 
   /// 패키지 1회 구매
   const PushPaymentBundle.packagePurchase()
@@ -257,39 +298,145 @@ class PushPaymentBundle {
         pointTier = DesignatedPointTier.onePoint,
         spotCount = 1,
         isExtraPush = true,
-        extraPushFeeKrw = PushPackageCatalog.singlePackagePriceKrw;
+        extraPushFeeKrw = PushPackageCatalog.singlePackagePriceKrw,
+        paymentKind = JobPostPaymentRequestKind.packagePurchase;
 
   final PushRadiusTier radiusTier;
   final DesignatedPointTier pointTier;
   final int spotCount;
   final bool isExtraPush;
   final int extraPushFeeKrw;
+  final JobPostPaymentRequestKind? paymentKind;
 
   int get totalAmountKrw => isExtraPush ? extraPushFeeKrw : 0;
 
   bool get requiresPayment => isExtraPush && extraPushFeeKrw > 0;
 
   String get productSummary {
-    if (isExtraPush) {
-      return '지역 푸시권 1회';
+    if (!isExtraPush) {
+      return 'PUSH ${radiusTier.shortLabel} · ${pointTier.shortLabel} (요금제 포함)';
     }
-    return '푸시 ${radiusTier.shortLabel} · ${pointTier.shortLabel} (요금제 포함)';
+    return switch (paymentKind) {
+      JobPostPaymentRequestKind.shuttleStopExposure => spotCount > 1
+          ? '${PushPackageCatalog.shuttlePinProductName} $spotCount곳'
+          : '${PushPackageCatalog.shuttlePinProductName} 1곳',
+      JobPostPaymentRequestKind.jobPinExposure => spotCount > 1
+          ? '${PushPackageCatalog.jobPinProductName} $spotCount곳'
+          : '${PushPackageCatalog.jobPinProductName} 1곳',
+      JobPostPaymentRequestKind.pushTicket => spotCount > 1
+          ? '${PushTicketCatalog.productName} $spotCount회'
+          : '${PushTicketCatalog.productName} 1회',
+      JobPostPaymentRequestKind.packagePurchase => '알림핀 패키지 1회',
+      JobPostPaymentRequestKind.extraPush => spotCount > 1
+          ? '추가 PUSH $spotCount회'
+          : '추가 PUSH 1회',
+      null => spotCount > 1
+          ? '${PushPackageCatalog.jobPinProductName} $spotCount곳'
+          : '${PushPackageCatalog.jobPinProductName} 1곳',
+    };
+  }
+
+  String get checkoutProductTitle {
+    final summary = productSummary;
+    return switch (paymentKind) {
+      JobPostPaymentRequestKind.shuttleStopExposure =>
+        '${PushPackageCatalog.shuttlePinProductName} · $summary',
+      JobPostPaymentRequestKind.jobPinExposure =>
+        '${PushPackageCatalog.jobPinProductName} · $summary',
+      JobPostPaymentRequestKind.pushTicket =>
+        '${PushTicketCatalog.productName} · $summary',
+      JobPostPaymentRequestKind.packagePurchase => '알림핀 패키지 · $summary',
+      JobPostPaymentRequestKind.extraPush => '푸시 알림 · $summary',
+      null => '${PushPackageCatalog.jobPinProductName} · $summary',
+    };
+  }
+
+  String get checkoutProductDetail {
+    if (!isExtraPush) {
+      return '반경 ${radiusTier.label}\n'
+          '지정 ${pointTier.label} · $spotCount곳';
+    }
+    return switch (paymentKind) {
+      JobPostPaymentRequestKind.shuttleStopExposure =>
+        '선택한 정류장을 구직자 지도에 노출합니다.\n'
+        '노출 기간: ${PushPackageCatalog.exposureEndsLabel}',
+      JobPostPaymentRequestKind.jobPinExposure =>
+        '선택한 일자리 알림핀을 구직자 지도에 노출합니다.\n'
+        '노출 기간: ${PushPackageCatalog.exposureEndsLabel}',
+      JobPostPaymentRequestKind.pushTicket =>
+        '알림핀·정류장 1곳 선택 후 PUSH 1회 발송',
+      JobPostPaymentRequestKind.packagePurchase =>
+        '거점 1 + 푸시 1 (반경 1km)',
+      JobPostPaymentRequestKind.extraPush =>
+        '기본 일일 푸시 한도 초과 · 패키지 1회 발송\n'
+        '추가 공고 노출 범위·지원자 모집하기는 패키지 구매로 확장',
+      null =>
+        '선택한 위치를 구직자 지도에 노출합니다.\n'
+        '노출 기간: ${PushPackageCatalog.exposureEndsLabel}',
+    };
+  }
+
+  String get checkoutBreakdownLabel => switch (paymentKind) {
+        JobPostPaymentRequestKind.shuttleStopExposure => '정류장 표시핀 노출',
+        JobPostPaymentRequestKind.jobPinExposure => '일자리 알림핀 노출',
+        JobPostPaymentRequestKind.pushTicket => PushTicketCatalog.productName,
+        JobPostPaymentRequestKind.packagePurchase => '알림핀 패키지',
+        JobPostPaymentRequestKind.extraPush => '지원자 모집하기 (add-on)',
+        null => '일자리 알림핀 노출',
+      };
+
+  Map<String, dynamic> toJson() => {
+        'radiusTier': radiusTier.name,
+        'pointTier': pointTier.name,
+        'spotCount': spotCount,
+        'isExtraPush': isExtraPush,
+        'extraPushFeeKrw': extraPushFeeKrw,
+        if (paymentKind != null) 'paymentKind': paymentKind!.name,
+      };
+
+  factory PushPaymentBundle.fromJson(Map<String, dynamic> json) {
+    PushRadiusTier parseRadius(String? raw) {
+      if (raw == null) return PushRadiusTier.standard1km;
+      try {
+        return PushRadiusTier.values.byName(raw);
+      } on ArgumentError {
+        return PushRadiusTier.standard1km;
+      }
+    }
+
+    DesignatedPointTier parsePoint(String? raw) {
+      if (raw == null) return DesignatedPointTier.onePoint;
+      try {
+        return DesignatedPointTier.values.byName(raw);
+      } on ArgumentError {
+        return DesignatedPointTier.onePoint;
+      }
+    }
+
+    return PushPaymentBundle(
+      radiusTier: parseRadius(json['radiusTier'] as String?),
+      pointTier: parsePoint(json['pointTier'] as String?),
+      spotCount: json['spotCount'] as int? ?? 1,
+      isExtraPush: json['isExtraPush'] as bool? ?? true,
+      extraPushFeeKrw: json['extraPushFeeKrw'] as int? ?? 0,
+      paymentKind: json['paymentKind'] != null
+          ? parseJobPostPaymentRequestKind(json['paymentKind'] as String?)
+          : null,
+    );
   }
 }
 
-/// 일자리 공고별 푸시 알림 설정
+/// 일자리 공고별 PUSH 알림 설정
 class JobPostNotificationSettings {
   JobPostNotificationSettings({
     this.basePoints = const [],
-    int? pushCountLimit,
+    this.pushCountLimit = 999,
     this.pushCountUsed = 0,
     int? maxBasePointsAllowed,
     this.paymentCompleted = false,
     this.designatedPointTier = DesignatedPointTier.onePoint,
     this.spotPaymentCompleted = false,
-  })  : pushCountLimit =
-            pushCountLimit ?? NotificationPlanLimits.dailyPushLimit,
-        maxBasePointsAllowed =
+  })  : maxBasePointsAllowed =
             maxBasePointsAllowed ?? NotificationPlanLimits.maxBasePoints;
 
   final List<PushNotificationBasePoint> basePoints;

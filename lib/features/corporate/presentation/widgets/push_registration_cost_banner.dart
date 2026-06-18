@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
-import 'package:map/core/constants/app_routes.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
-import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
 
-/// 공고 등록 — 무료 등록 + 하루 1회 무료 푸시 안내
+/// 공고 등록 — 근무지 무료 노출 안내 (유료 상품 노출 없음)
 class PushRegistrationCostBanner extends StatelessWidget {
   const PushRegistrationCostBanner({
     super.key,
@@ -19,11 +17,9 @@ class PushRegistrationCostBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cost = PushWalletCreditPolicy.registrationCost(
-      settings: settings,
-      wallet: wallet,
+    final extraHubs = PushWalletCreditPolicy.registrationRecruitZoneCount(
+      settings,
     );
-    final recruitZones = cost.configuredRecruitZones;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -32,57 +28,39 @@ class PushRegistrationCostBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.searchBarBorder),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.check_circle_outline_rounded,
-                size: 20,
-                color: Colors.green.shade700,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      cost.formPreviewLine,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        height: 1.4,
-                        color: AppColors.textPrimary.withValues(alpha: 0.95),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      recruitZones > 0
-                          ? '추가 모집지역 $recruitZones곳 — 모집하기 시 지역 푸시권 1회/곳'
-                          : '등록 후 「모집하기」로 근무지 ${PushPackageCatalog.pushRadiusLabel} 푸시를 보낼 수 있습니다.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.4,
-                        color: AppColors.textSecondary.withValues(alpha: 0.95),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Icon(
+            Icons.check_circle_outline_rounded,
+            size: 20,
+            color: Colors.green.shade700,
           ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.tonal(
-              onPressed: () {
-                Navigator.of(context).pushNamed(
-                  AppRoutes.corporatePushPackageShop,
-                );
-              },
-              child: const Text('지역 푸시권 보기'),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '근무지 주변 1km 무료 노출',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  extraHubs > 0
+                      ? '일자리 알림핀 $extraHubs곳 설정됨'
+                      : '공고 등록만으로 근무지 핀이 지도에 표시됩니다.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: AppColors.textSecondary.withValues(alpha: 0.95),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

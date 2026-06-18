@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 
 import 'package:intl/intl.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
@@ -89,7 +89,7 @@ class InternalApprovalPdfService {
           row('공고 요약', post.fullDescriptionText),
           if (post.notificationSettings?.primaryBase != null)
             row(
-              '푸시 알림',
+              'PUSH 알림',
               post.notificationSettings!.summaryLabel,
             ),
           pw.SizedBox(height: 14),

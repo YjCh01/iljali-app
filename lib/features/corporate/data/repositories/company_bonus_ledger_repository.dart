@@ -17,17 +17,39 @@ class CompanyBonusLedgerRepository {
 
   Future<bool> isSignupBonusClaimed(String companyKey) async {
     final all = _loadAll();
-    return all[companyKey]?['claimed'] as bool? ?? false;
+    final entry = all[companyKey];
+    return (entry?['signupClaimed'] as bool? ?? false) ||
+        (entry?['claimed'] as bool? ?? false);
+  }
+
+  Future<bool> isVerificationBonusClaimed(String companyKey) async {
+    final all = _loadAll();
+    return all[companyKey]?['verificationClaimed'] as bool? ?? false;
   }
 
   /// 최초 1회만 true — 보너스 지급 가능
   Future<bool> tryClaimSignupBonus(String companyKey) async {
     final all = _loadAll();
     final existing = all[companyKey];
-    if (existing?['claimed'] == true) return false;
+    if (existing?['signupClaimed'] == true) return false;
     all[companyKey] = {
-      'claimed': true,
-      'claimedAt': DateTime.now().toIso8601String(),
+      ...?existing,
+      'signupClaimed': true,
+      'signupClaimedAt': DateTime.now().toIso8601String(),
+    };
+    await _prefs.setString(_key, jsonEncode(all));
+    return true;
+  }
+
+  /// 사업자 검증 완료 후 1회만 true — 검증 보너스 지급 가능
+  Future<bool> tryClaimVerificationBonus(String companyKey) async {
+    final all = _loadAll();
+    final existing = all[companyKey];
+    if (existing?['verificationClaimed'] == true) return false;
+    all[companyKey] = {
+      ...?existing,
+      'verificationClaimed': true,
+      'verificationClaimedAt': DateTime.now().toIso8601String(),
     };
     await _prefs.setString(_key, jsonEncode(all));
     return true;

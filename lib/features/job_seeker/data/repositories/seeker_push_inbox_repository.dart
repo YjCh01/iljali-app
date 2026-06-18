@@ -1,10 +1,10 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:map/features/job_seeker/domain/entities/seeker_push_notification.dart';
 import 'package:map/features/job_seeker/domain/utils/seeker_push_retention_policy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 구직자 푸시 받은함 — 30일 보관·보관함·삭제
+/// 구직자 PUSH 받은함 — 30일 보관·보관함·삭제
 class SeekerPushInboxRepository {
   SeekerPushInboxRepository(this._prefs);
 

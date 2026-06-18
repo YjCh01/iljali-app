@@ -51,6 +51,22 @@ abstract final class WorkHoursCalculator {
   }
 
   static double? _hoursFromSpec(WorkScheduleSpec spec) {
+    if (spec.mode == WorkScheduleMode.dailyPick) {
+      if (spec.selectedWorkDates.isEmpty) return null;
+      var total = 0.0;
+      var count = 0;
+      for (final date in spec.selectedWorkDates) {
+        final hours = spec.hoursForDate(date);
+        final dayHours =
+            _hoursBetween(hours.start, hours.end, daytime: true);
+        if (dayHours == null) continue;
+        total += dayHours;
+        count++;
+      }
+      if (count == 0) return null;
+      return total / count;
+    }
+
     final dayHours = _hoursBetween(spec.dayStart, spec.dayEnd, daytime: true);
     if (spec.mode != WorkScheduleMode.rotatingShift) {
       return dayHours;

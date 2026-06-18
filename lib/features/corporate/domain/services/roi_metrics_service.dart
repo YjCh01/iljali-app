@@ -1,3 +1,4 @@
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
@@ -30,7 +31,7 @@ class RoiMetrics {
   });
 
   /// 일용직 출근 확인 기준 수수료 (map/PUSH_PACKAGE_PRICING — 티어 무관)
-  static const baselineDailyCheckInFeeKrw = 10000;
+  static const baselineDailyCheckInFeeKrw = 15000;
 
   @Deprecated('Use baselineDailyCheckInFeeKrw')
   static const basicLegacyCommissionKrw = baselineDailyCheckInFeeKrw;
@@ -55,7 +56,7 @@ class RoiMetrics {
       : '지원 $applications건 · 출근 데이터를 모으는 중';
 
   String get savingsHeadline => commissionSavingsVsBasicKrw > 0
-      ? '출근 확인(10,000원/건) 대비 ${_formatKrw(commissionSavingsVsBasicKrw)} 절약'
+      ? '출근 확인(15,000원/건) 대비 ${_formatKrw(commissionSavingsVsBasicKrw)} 절약'
       : '출근 $checkIns건 · 수수료 ${_formatKrw(commissionSpendKrw)}';
 
   bool get hasActivity =>
@@ -158,12 +159,18 @@ class RoiMetricsService {
     final pushSpend = pushSpendFromPosts + pushSpendFromUsage;
 
     final tierFee = tier.dailyWorkerSuccessFeeKrwMin;
-    final estimatedAtTier = checkIns * tierFee;
+    final estimatedAtTier = ProductFeatureFlags.isHiringCommissionEnabled
+        ? checkIns * tierFee
+        : 0;
     final effectiveCommission =
         commissionTotal > 0 ? commissionTotal : estimatedAtTier;
 
-    final baselineTotal = checkIns * RoiMetrics.baselineDailyCheckInFeeKrw;
-    final savingsVsBasic = baselineTotal - effectiveCommission;
+    final baselineTotal = ProductFeatureFlags.isHiringCommissionEnabled
+        ? checkIns * RoiMetrics.baselineDailyCheckInFeeKrw
+        : 0;
+    final savingsVsBasic = ProductFeatureFlags.isHiringCommissionEnabled
+        ? baselineTotal - effectiveCommission
+        : 0;
 
     final total = pushSpend + subscriptionSpend + effectiveCommission;
     const laborValuePerCheckIn = 120000;
@@ -287,9 +294,12 @@ class RoiMetricsService {
           commissionTotal += app.commissionAmountKrw!;
         }
       }
-      final effectiveCommission =
-          commissionTotal > 0 ? commissionTotal : checkIns * tierFee;
-      final baseline = checkIns * RoiMetrics.baselineDailyCheckInFeeKrw;
+      final effectiveCommission = ProductFeatureFlags.isHiringCommissionEnabled
+          ? (commissionTotal > 0 ? commissionTotal : checkIns * tierFee)
+          : 0;
+      final baseline = ProductFeatureFlags.isHiringCommissionEnabled
+          ? checkIns * RoiMetrics.baselineDailyCheckInFeeKrw
+          : 0;
       rows.add(
         BranchRoiRow(
           branchId: branch.id,

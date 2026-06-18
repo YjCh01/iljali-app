@@ -1,7 +1,9 @@
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/core/compliance/business_entity_type.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
+import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
+
 /// 기업회원 하위 담당자 프로필 (4자리 담당자 코드 + 검증·플랜)
 class CorporateMemberProfile {
   const CorporateMemberProfile({
@@ -24,6 +26,10 @@ class CorporateMemberProfile {
     this.subscriptionExpiresAt,
     this.isEnterpriseOutsourcingEdition = false,
     this.pushWallet,
+    this.businessHeadOfficeAddress,
+    this.businessHeadOfficeLatitude,
+    this.businessHeadOfficeLongitude,
+    this.commuteRouteId,
   });
 
   final String companyName;
@@ -45,6 +51,17 @@ class CorporateMemberProfile {
   final DateTime? subscriptionExpiresAt;
   final bool isEnterpriseOutsourcingEdition;
   final EmployerPushWallet? pushWallet;
+  final String? businessHeadOfficeAddress;
+  final double? businessHeadOfficeLatitude;
+  final double? businessHeadOfficeLongitude;
+  final String? commuteRouteId;
+
+  GeoCoordinate? get businessHeadOfficeCoordinate {
+    final lat = businessHeadOfficeLatitude;
+    final lng = businessHeadOfficeLongitude;
+    if (lat == null || lng == null) return null;
+    return GeoCoordinate(latitude: lat, longitude: lng);
+  }
 
   String get companyKey =>
       businessRegistrationNumber.replaceAll(RegExp(r'[^0-9]'), '');
@@ -90,6 +107,10 @@ class CorporateMemberProfile {
     bool clearSubscriptionExpiresAt = false,
     bool? isEnterpriseOutsourcingEdition,
     EmployerPushWallet? pushWallet,
+    String? businessHeadOfficeAddress,
+    double? businessHeadOfficeLatitude,
+    double? businessHeadOfficeLongitude,
+    String? commuteRouteId,
   }) {
     return CorporateMemberProfile(
       companyName: companyName,
@@ -112,9 +133,16 @@ class CorporateMemberProfile {
       subscriptionExpiresAt: clearSubscriptionExpiresAt
           ? null
           : (subscriptionExpiresAt ?? this.subscriptionExpiresAt),
-      isEnterpriseOutsourcingEdition: isEnterpriseOutsourcingEdition ??
-          this.isEnterpriseOutsourcingEdition,
+      isEnterpriseOutsourcingEdition:
+          isEnterpriseOutsourcingEdition ?? this.isEnterpriseOutsourcingEdition,
       pushWallet: pushWallet ?? this.pushWallet,
+      businessHeadOfficeAddress:
+          businessHeadOfficeAddress ?? this.businessHeadOfficeAddress,
+      businessHeadOfficeLatitude:
+          businessHeadOfficeLatitude ?? this.businessHeadOfficeLatitude,
+      businessHeadOfficeLongitude:
+          businessHeadOfficeLongitude ?? this.businessHeadOfficeLongitude,
+      commuteRouteId: commuteRouteId ?? this.commuteRouteId,
     );
   }
 
@@ -138,6 +166,13 @@ class CorporateMemberProfile {
         'subscriptionExpiresAt': subscriptionExpiresAt?.toIso8601String(),
         'isEnterpriseOutsourcingEdition': isEnterpriseOutsourcingEdition,
         if (pushWallet != null) 'pushWallet': pushWallet!.toJson(),
+        if (businessHeadOfficeAddress != null)
+          'businessHeadOfficeAddress': businessHeadOfficeAddress,
+        if (businessHeadOfficeLatitude != null)
+          'businessHeadOfficeLatitude': businessHeadOfficeLatitude,
+        if (businessHeadOfficeLongitude != null)
+          'businessHeadOfficeLongitude': businessHeadOfficeLongitude,
+        if (commuteRouteId != null) 'commuteRouteId': commuteRouteId,
       };
 
   factory CorporateMemberProfile.fromJson(Map<String, dynamic> map) {
@@ -149,7 +184,8 @@ class CorporateMemberProfile {
       contactPersonName: map['contactPersonName'] as String? ?? '',
       handlerCode: map['handlerCode'] as String? ?? '',
       entityType: _parseEntityType(map['entityType'] as String?),
-      verificationStatus: _parseVerification(map['verificationStatus'] as String?),
+      verificationStatus:
+          _parseVerification(map['verificationStatus'] as String?),
       partnershipTier: _parseTier(map['partnershipTier'] as String?),
       monthlySubscriptionActive:
           map['monthlySubscriptionActive'] as bool? ?? false,
@@ -170,6 +206,12 @@ class CorporateMemberProfile {
               Map<String, dynamic>.from(map['pushWallet'] as Map),
             )
           : null,
+      businessHeadOfficeAddress: map['businessHeadOfficeAddress'] as String?,
+      businessHeadOfficeLatitude:
+          (map['businessHeadOfficeLatitude'] as num?)?.toDouble(),
+      businessHeadOfficeLongitude:
+          (map['businessHeadOfficeLongitude'] as num?)?.toDouble(),
+      commuteRouteId: map['commuteRouteId'] as String?,
     );
   }
 

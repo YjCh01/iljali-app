@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/widgets/push_wallet_bonus_feedback.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
@@ -21,6 +22,8 @@ import 'package:map/core/compliance/verified_business_record.dart';
 import 'package:map/features/auth/domain/usecases/corporate_sign_up_verification_gate.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/data/repositories/corporate_account_registry.dart';
+import 'package:map/features/corporate/domain/entities/push_wallet_load_outcome.dart';
+import 'package:map/features/corporate/domain/services/corporate_org_join_service.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 
 enum _CorporateSignUpStep {
@@ -366,12 +369,18 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
       ),
     );
 
+    await const CorporateOrgJoinService().syncCurrentUser();
+
     final signedIn = AuthSession.instance.currentUser?.corporateProfile;
+    PushWalletLoadOutcome? walletOutcome;
     if (signedIn != null) {
-      await PushWalletService().loadWallet(signedIn);
+      walletOutcome = await PushWalletService().loadWalletDetailed(signedIn);
     }
 
     if (!mounted) return;
+    if (walletOutcome != null) {
+      showPushWalletBonusSnackBar(context, walletOutcome);
+    }
     Navigator.of(context).pushNamedAndRemoveUntil(
       AppRoutes.corporateWelcomeOnboarding,
       (_) => false,

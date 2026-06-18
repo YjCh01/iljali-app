@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/hiring/commission_calculator.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
@@ -8,9 +9,9 @@ class AttendanceEscalationService {
   AttendanceEscalationService._();
 
   static Future<void> runEscalationPass(BuildContext context) async {
+    if (!ProductFeatureFlags.isHiringCommissionEnabled) return;
     if (!context.mounted) return;
     final repo = await LocalHiringRepository.create();
-    await repo.autoConfirmSilentEmployers();
     final overdue = await repo.escalateOverdueCommissions();
     if (!context.mounted) return;
 

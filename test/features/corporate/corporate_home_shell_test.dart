@@ -104,9 +104,10 @@ void main() {
 
     expect(find.byType(CorporateHomeShellPage), findsOneWidget);
 
-    expect(find.text('기업회원'), findsOneWidget);
+    expect(find.text('강남물류'), findsOneWidget);
 
-    expect(find.text('진행 공고'), findsOneWidget);
+    expect(find.text('채용 현황'), findsOneWidget);
+    expect(find.byType(DraggableScrollableSheet), findsOneWidget);
 
     expect(find.byType(CorporateBottomNav), findsOneWidget);
 
@@ -242,7 +243,7 @@ void main() {
 
     await _tapCorporateNav(tester, 5);
 
-    expect(find.text('채용 통계'), findsOneWidget);
+    expect(find.text('내정보 관리'), findsWidgets);
 
   });
 
@@ -276,17 +277,10 @@ void main() {
 
 
 
-    await tester.scrollUntilVisible(
+    await tester.drag(find.text('채용 현황'), const Offset(0, -360));
+    await _pumpFrames(tester, count: 10);
 
-      find.text('진행 공고').first,
-
-      48,
-
-      scrollable: find.byType(Scrollable).first,
-
-    );
-
-    await tester.tap(find.text('진행 공고').first);
+    await tester.tap(find.byKey(const Key('corp-stat-job-posts')));
 
     await _pumpFrames(tester);
 
@@ -300,21 +294,14 @@ void main() {
 
 
 
-    await tester.scrollUntilVisible(
+    await tester.drag(find.text('채용 현황'), const Offset(0, -360));
+    await _pumpFrames(tester, count: 10);
 
-      find.text('오늘 지원').first,
-
-      48,
-
-      scrollable: find.byType(Scrollable).first,
-
-    );
-
-    await tester.tap(find.text('오늘 지원').first);
+    await tester.tap(find.byKey(const Key('corp-stat-unread-chats')));
 
     await _pumpFrames(tester);
 
-    expect(find.text('지원자 연락 이용 제한'), findsOneWidget);
+    expect(find.text('지원자 채팅 이용 제한'), findsOneWidget);
 
   });
 

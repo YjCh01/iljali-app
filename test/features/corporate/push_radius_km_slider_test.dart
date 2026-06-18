@@ -74,9 +74,9 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('다른 지역 1곳'), findsOneWidget);
-    expect(find.textContaining('두 손가락으로 확대/축소'), findsOneWidget);
-    expect(find.text('모집지역 1'), findsOneWidget);
     expect(find.textContaining('근무지'), findsWidgets);
+    expect(find.text('모집지역 1'), findsOneWidget);
+    expect(find.textContaining('37.51280'), findsNothing);
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
   });
 }

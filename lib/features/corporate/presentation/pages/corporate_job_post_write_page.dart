@@ -1,32 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/labor_constants.dart';
 import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/data/repositories/local_branch_repository.dart';
-import 'package:map/features/corporate/data/repositories/local_push_usage_repository.dart';
 import 'package:map/features/corporate/domain/entities/corporate_branch.dart';
 import 'package:map/features/corporate/domain/entities/job_post_write_draft.dart';
-import 'package:map/features/corporate/domain/entities/internal_approval_report.dart';
-import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
-import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/corporate/domain/usecases/save_corporate_job_post_usecase.dart';
-import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
-import 'package:map/features/corporate/domain/services/push_job_post_payment_flow.dart';
-import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
-import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
-import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
-import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/salary_pay_type.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/core/widgets/korean_calendar.dart';
-import 'package:map/features/corporate/presentation/widgets/push_registration_cost_banner.dart';
+import 'package:map/features/corporate/domain/utils/daily_worker_policy.dart';
+import 'package:map/features/corporate/presentation/navigation/corporate_job_post_flow_result.dart';
+import 'package:map/features/corporate/presentation/navigation/corporate_job_post_published_args.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_form.dart';
+import 'package:map/features/corporate/presentation/widgets/job_post_import_labels.dart';
 
 /// 일자리 등록 — 최종 작성·저장
 class CorporateJobPostWritePage extends StatefulWidget {
@@ -52,22 +46,23 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
       TextEditingController(text: widget.draft.jobDescription);
   late final TextEditingController _wageController =
       TextEditingController(
-    text: salaryPayDigits(widget.draft.hourlyWage),
+    text: LaborConstants.initialHourlyWageFieldText(
+      salaryPayDigits(widget.draft.hourlyWage),
+    ),
   );
   late final TextEditingController _scheduleController =
       TextEditingController(text: widget.draft.workSchedule);
-  late final TextEditingController _summaryController =
-      TextEditingController(text: widget.draft.summary);
 
   WorkplaceAddress? _workplace;
   DateTime? _paymentDate;
   SalaryPaymentMonthOffset? _paymentMonthOffset;
   int? _paymentDayOfMonth;
-  JobPostNotificationSettings? _notificationSettings;
-  EmployerPushWallet? _wallet;
   WorkerCategory _workerCategory = ProductFeatureFlags.defaultWorkerCategory;
+  String? _workCategoryId;
   SalaryPayType _salaryPayType = SalaryPayType.hourly;
   bool _submitting = false;
+  bool _dailyWorkerAcknowledged = false;
+  bool _paymentDateNegotiable = false;
   List<CorporateBranch> _branches = [];
   CorporateBranch? _selectedBranch;
 
@@ -80,21 +75,36 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     _paymentDate = widget.draft.paymentDate;
     _paymentMonthOffset = widget.draft.paymentMonthOffset;
     _paymentDayOfMonth = widget.draft.paymentDayOfMonth;
-    _notificationSettings = widget.draft.notificationSettings;
     _workerCategory = widget.draft.workerCategory;
+    _workCategoryId = widget.draft.workCategoryId;
     if (!ProductFeatureFlags.isWorkerCategoryAllowed(_workerCategory)) {
       _workerCategory = ProductFeatureFlags.defaultWorkerCategory;
     }
     _salaryPayType = parseSalaryPayType(widget.draft.hourlyWage);
     _loadBranches();
-    _refreshWallet();
+    if (_workerCategory == WorkerCategory.daily) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ensureDailyWorkerAcknowledged();
+      });
+    }
   }
 
-  Future<void> _refreshWallet() async {
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-    if (profile == null) return;
-    final wallet = await PushWalletService().loadWallet(profile);
-    if (mounted) setState(() => _wallet = wallet);
+  Future<void> _ensureDailyWorkerAcknowledged() async {
+    if (_dailyWorkerAcknowledged || !mounted) return;
+    final ok = await DailyWorkerPolicy.showAcknowledgmentDialog(context);
+    if (!mounted) return;
+    if (ok) {
+      setState(() => _dailyWorkerAcknowledged = true);
+    } else {
+      setState(() {
+        _workerCategory = ProductFeatureFlags.defaultWorkerCategory;
+      });
+    }
+  }
+
+  void _syncDailyPaymentDateFromSchedule() {
+    if (!mounted) return;
+    setState(() => _paymentDateNegotiable = false);
   }
 
   Future<void> _loadBranches() async {
@@ -112,7 +122,6 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     _jobDescriptionController.dispose();
     _wageController.dispose();
     _scheduleController.dispose();
-    _summaryController.dispose();
     super.dispose();
   }
 
@@ -136,12 +145,27 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
       title: '급여지급일 선택',
     );
     if (picked != null && mounted) {
-      setState(() => _paymentDate = picked);
+      setState(() {
+        _paymentDate = picked;
+        _paymentDateNegotiable = false;
+      });
     }
   }
 
   SalaryPaymentSchedule? _buildPaymentSchedule() {
-    if (_workerCategory == WorkerCategory.daily) {
+    if (_paymentDateNegotiable &&
+        (_workerCategory.usesAbsolutePaymentDate ||
+            _workerCategory.usesCalendarPaymentDate)) {
+      return const SalaryPaymentSchedule.negotiable();
+    }
+    if (_workerCategory.usesAbsolutePaymentDate) {
+      final dates = DailyWorkerPolicy.paymentDatesFromWorkSchedule(
+        _scheduleController.text,
+      );
+      if (dates.isEmpty) return null;
+      return SalaryPaymentSchedule.dailyPerWorkDay(dates);
+    }
+    if (_workerCategory.usesCalendarPaymentDate) {
       if (_paymentDate == null) return null;
       return SalaryPaymentSchedule.absoluteDate(_paymentDate!);
     }
@@ -154,30 +178,38 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     );
   }
 
-  void _onWorkerCategoryChanged(WorkerCategory category) {
+  Future<void> _onWorkerCategoryChanged(WorkerCategory category) async {
+    if (category == WorkerCategory.daily && !_dailyWorkerAcknowledged) {
+      final ok = await DailyWorkerPolicy.showAcknowledgmentDialog(context);
+      if (!ok || !mounted) return;
+      setState(() => _dailyWorkerAcknowledged = true);
+    } else if (category != WorkerCategory.daily) {
+      setState(() => _dailyWorkerAcknowledged = false);
+    }
+    if (!mounted) return;
     setState(() {
       _workerCategory = category;
-      if (category == WorkerCategory.daily) {
+      if (category.usesAbsolutePaymentDate) {
+        _paymentMonthOffset = null;
+        _paymentDayOfMonth = null;
+      } else if (category.usesCalendarPaymentDate) {
         _paymentMonthOffset = null;
         _paymentDayOfMonth = null;
       } else {
         _paymentDate = null;
+        _paymentDateNegotiable = false;
       }
     });
   }
 
-  Future<void> _configurePushNotification() async {
-    final result =
-        await Navigator.of(context).pushNamed<JobPostNotificationSettings>(
-      AppRoutes.corporatePushBasePoint,
-      arguments: PushBasePointArgs(
-        initialSettings: _notificationSettings,
-        workplace: _workplace,
-      ),
+  Future<void> _openImportPage() async {
+    final created = await Navigator.of(context).pushNamed<bool>(
+      AppRoutes.corporateJobPostImport,
     );
-    if (result != null && mounted) {
-      setState(() => _notificationSettings = result);
-      await _refreshWallet();
+    if (created == true && mounted) {
+      Navigator.of(context).pop(
+        const CorporateJobPostFlowResult(shellTabIndex: 1),
+      );
     }
   }
 
@@ -230,36 +262,7 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
 
     setState(() => _submitting = true);
 
-    var notificationSettings = _notificationSettings;
-    JobPostPaymentRecord? paymentRecord;
-    var extraPushFeeKrw = 0;
     final registeredBy = AuthSession.instance.currentUser?.corporateProfile;
-
-    if (registeredBy != null && notificationSettings != null) {
-      final wallet = await PushWalletService().loadWallet(registeredBy);
-      notificationSettings = PushWalletCreditPolicy.clampNotificationSettings(
-        notificationSettings!,
-        wallet,
-      );
-      setState(() => _notificationSettings = notificationSettings);
-    }
-
-    final paymentOutcome = await PushJobPostPaymentFlow().collect(
-      context: context,
-      notificationSettings: notificationSettings,
-      profile: registeredBy,
-      companyKey: registeredBy?.companyKey,
-    );
-    if (!mounted) return;
-    if (paymentOutcome == null) {
-      setState(() => _submitting = false);
-      return;
-    }
-    notificationSettings = paymentOutcome.notificationSettings;
-    paymentRecord = paymentOutcome.paymentRecord;
-    extraPushFeeKrw = paymentOutcome.extraPushFeeKrw;
-    setState(() => _notificationSettings = notificationSettings);
-
     final wageLabel = _salaryPayType.formatAmount(_wageController.text);
     final result = await _createPost(
       title: _titleController.text,
@@ -267,12 +270,11 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
       hourlyWage: wageLabel,
       workSchedule: _scheduleController.text,
       jobDescription: _jobDescriptionController.text,
-      summary: _summaryController.text,
+      summary: _jobDescriptionController.text,
       paymentSchedule: paymentSchedule,
       workerCategory: _workerCategory,
-      notificationSettings: notificationSettings,
+      workCategoryId: _workCategoryId,
       registeredBy: registeredBy,
-      paymentRecord: paymentRecord,
       branchId: _selectedBranch?.id,
       branchName: _selectedBranch?.name,
     );
@@ -281,109 +283,49 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
     setState(() => _submitting = false);
 
     if (!result.isSuccess) {
+      final message = result.message ?? '등록에 실패했습니다.';
+      final needsHeadOffice = message.contains('본사 주소');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message ?? '등록에 실패했습니다.')),
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          action: needsHeadOffice
+              ? SnackBarAction(
+                  label: '내정보에서 등록',
+                  onPressed: () => Navigator.of(context)
+                      .pushNamed(AppRoutes.corporateMyInfo),
+                )
+              : null,
+        ),
       );
       return;
     }
 
-    if (mounted) {
-      await _showGoldenPinUpsell();
-    }
-
-    if (paymentRecord != null && result.post != null && registeredBy != null) {
-      await Navigator.of(context).pushNamed<bool>(
-        AppRoutes.corporateInternalApprovalReport,
-        arguments: InternalApprovalReport(
-          profile: registeredBy,
-          post: result.post!,
-          paymentRecord: paymentRecord,
-        ),
-      );
-    } else if (paymentRecord != null && registeredBy == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            '기업·담당자 정보가 없어 결재 보고서를 건너뛰었습니다. 홈에서 등록해 주세요.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-
-    final pushTier = paymentOutcome.dispatchRadiusTier ??
-        notificationSettings?.primaryBase?.radiusTier;
-    if (pushTier != null && pushTier != PushRadiusTier.radius0km) {
-      final slotCount = paymentOutcome.recruitmentPushCount > 0
-          ? paymentOutcome.recruitmentPushCount
-          : 1;
-      await Navigator.of(context).pushNamed<bool>(
-        AppRoutes.corporatePushDispatch,
-        arguments: PushDispatchArgs(
-          radiusTier: pushTier,
-          recruitmentSlotCount: slotCount,
-          jobPostId: result.post?.id,
-          jobTitle: result.post?.title,
-          companyName: registeredBy?.companyName,
-        ),
-      );
-      if (registeredBy != null) {
-        final usageRepo = await LocalPushUsageRepository.create();
-        await usageRepo.recordDispatch(
-          companyKey: registeredBy.companyKey,
-          paymentKrw: extraPushFeeKrw,
-        );
-      }
-    }
-
-    if (!mounted) return;
+    if (result.post == null) return;
     JobBoardRefresh.markUpdated();
-    Navigator.of(context).pop(true);
-  }
-
-  Future<void> _showGoldenPinUpsell() async {
-    final goShop = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('공고 등록 완료'),
-        content: Text(
-          '공고가 무료로 등록되었습니다.\n'
-          '사업자번호당 동시 활성 공고는 최대 10개입니다.\n'
-          '근무지 ${PushPackageCatalog.pushRadiusLabel} · 하루 1회 무료 푸시로 지원자를 모집해 보세요.\n\n'
-          '더 넓은 지역에 알리려면 지역 푸시권을 구매하세요. '
-          '(${PushPackageCatalog.krwSuffix(PushPackageCatalog.singlePackagePriceKrw)}/회)',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('나중에'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('지역 푸시권 보기'),
-          ),
-        ],
+    final flowResult =
+        await Navigator.of(context).pushNamed<CorporateJobPostFlowResult>(
+      AppRoutes.corporateJobPostPublished,
+      arguments: CorporateJobPostPublishedArgs(
+        post: result.post!,
+        workplace: _workplace!,
       ),
     );
-    if (goShop == true && mounted) {
-      await Navigator.of(context).pushNamed(AppRoutes.corporatePushPackageShop);
-    }
+    if (!mounted) return;
+    Navigator.of(context).pop(
+      flowResult ?? const CorporateJobPostFlowResult(shellTabIndex: 1),
+    );
   }
 
-  Widget? _buildBeforeSubmit() {
-    final children = <Widget>[];
-    final settings = _notificationSettings;
-    final wallet = _wallet;
-    if (settings?.hasConfiguredBase == true && wallet != null) {
-      children.add(
-        PushRegistrationCostBanner(settings: settings!, wallet: wallet),
-      );
-      children.add(const SizedBox(height: 16));
-    }
+  Widget? _buildBeforeSubmit() => _buildBranchSection();
 
-    if (_branches.isNotEmpty) {
-      if (_selectedBranch == null) {
-        children.add(
+  Widget? _buildBranchSection() {
+    if (_branches.isEmpty) return null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_selectedBranch == null)
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(12),
@@ -403,9 +345,6 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
               ),
             ),
           ),
-        );
-      }
-      children.add(
         DropdownButtonFormField<CorporateBranch?>(
           value: _selectedBranch,
           decoration: const InputDecoration(
@@ -426,14 +365,7 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
           ],
           onChanged: (value) => setState(() => _selectedBranch = value),
         ),
-      );
-      children.add(const SizedBox(height: 16));
-    }
-
-    if (children.isEmpty) return null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
+      ],
     );
   }
 
@@ -448,19 +380,76 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
         leading: const AppBackButton(),
         automaticallyImplyLeading: false,
         title: const Text('일자리 내용 작성'),
+        actions: [
+          if (widget.draft.importSourceLabel == null)
+            TextButton(
+              onPressed: _openImportPage,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AiSparkleMark(
+                    size: 16,
+                    color: AppColors.primary.withValues(alpha: 0.95),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    JobPostImportCopy.pageTitle,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary.withValues(alpha: 0.95),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: CorporateJobPostForm(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.draft.importSourceLabel != null) ...[
+              Material(
+                color: AppColors.primaryLight.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome_outlined,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${widget.draft.importSourceLabel} · 초안이 채워졌습니다. 등록 전 확인해 주세요.',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            CorporateJobPostForm(
           titleController: _titleController,
           jobDescriptionController: _jobDescriptionController,
           wageController: _wageController,
           scheduleController: _scheduleController,
-          summaryController: _summaryController,
           workplace: _workplace,
           onSearchWorkplace: _searchWorkplace,
           workerCategory: _workerCategory,
           onWorkerCategoryChanged: _onWorkerCategoryChanged,
+          workCategoryId: _workCategoryId,
+          onWorkCategoryChanged: (id) => setState(() => _workCategoryId = id),
           salaryPayType: _salaryPayType,
           onSalaryPayTypeChanged: (type) =>
               setState(() => _salaryPayType = type),
@@ -472,25 +461,22 @@ class _CorporateJobPostWritePageState extends State<CorporateJobPostWritePage> {
               setState(() => _paymentMonthOffset = value),
           onPaymentDayOfMonthChanged: (value) =>
               setState(() => _paymentDayOfMonth = value),
-          notificationSettings: _notificationSettings,
-          onConfigurePushNotification: _configurePushNotification,
+          notificationSettings: null,
+          onConfigurePushNotification: () {},
+          showExposureSection: false,
           submitLabel: '일자리 등록하기',
           submitting: _submitting,
           onSubmit: _submit,
+          dailyWorkerAcknowledged: _dailyWorkerAcknowledged,
+          onDailyScheduleCommitted: _syncDailyPaymentDateFromSchedule,
+          paymentDateNegotiable: _paymentDateNegotiable,
+          onPaymentDateNegotiableChanged: (value) =>
+              setState(() => _paymentDateNegotiable = value),
           beforeSubmit: _buildBeforeSubmit(),
+            ),
+          ],
         ),
       ),
     );
   }
-}
-
-/// 푸시 거점 페이지 라우트 인자
-class PushBasePointArgs {
-  const PushBasePointArgs({
-    this.initialSettings,
-    this.workplace,
-  });
-
-  final JobPostNotificationSettings? initialSettings;
-  final WorkplaceAddress? workplace;
 }

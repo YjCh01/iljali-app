@@ -33,7 +33,7 @@ void main() {
     expect(find.text('지도'), findsOneWidget);
   });
 
-  testWidgets('individual bottom nav switches jobs tab', (tester) async {
+  testWidgets('individual bottom nav switches vault tab', (tester) async {
     await AuthSession.instance.signIn(
       const AuthUser(
         name: '홍길동',
@@ -48,11 +48,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('공고'));
+    await tester.tap(find.text('보관함'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('진행 중인 공고'), findsOneWidget);
-    expect(find.text('모집 중인 공고가 없습니다'), findsOneWidget);
+    expect(find.text('보관함'), findsWidgets);
+    expect(find.text('공고'), findsNothing);
   });
 }

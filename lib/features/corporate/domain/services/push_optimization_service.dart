@@ -1,10 +1,10 @@
-import 'package:map/core/hiring/hiring_application_status.dart';
+﻿import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
 import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 
-/// 푸시 반경·거점·발송 시각 AI 추천 (MVP — 로컬 이력 기반, 1km 고정)
+/// PUSH 반경·거점·발송 시각 AI 추천 (MVP — 로컬 이력 기반, 1km 고정)
 class PushOptimizationRecommendation {
   const PushOptimizationRecommendation({
     required this.suggestedRadius,

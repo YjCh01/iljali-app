@@ -9,6 +9,7 @@ import 'package:map/core/constants/app_routes.dart';
 
 import 'package:map/core/session/member_type.dart';
 
+import 'package:map/features/auth/presentation/widgets/dev_test_login_panel.dart';
 import 'package:map/features/auth/presentation/widgets/member_type_login_button.dart';
 
 
@@ -188,7 +189,20 @@ class MemberLoginGatewayPage extends StatelessWidget {
 
               ),
 
-              const SizedBox(height: 32),
+              Text(
+                '개발 빌드: 하단 「개발 테스트 로그인」으로\n'
+                '기업·구직 테스트 계정에 바로 접속할 수 있습니다.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: Colors.white.withValues(alpha: 0.65),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const DevTestLoginPanel(),
+
+              const SizedBox(height: 24),
 
             ],
 

@@ -99,10 +99,10 @@ void main() {
 
     expect(find.text('지원자 모집하기'), findsWidgets);
     expect(find.text('보유 4회'), findsOneWidget);
-    expect(find.text('지역 푸시권 구매'), findsOneWidget);
+    expect(find.text('일자리 알림핀 구매'), findsOneWidget);
     expect(find.text('물류센터 야간 보조'), findsOneWidget);
     expect(
-      find.textContaining('근무지 무료 푸시(1km · 일 1회)는'),
+      find.textContaining('일자리 알림핀 1회당'),
       findsOneWidget,
     );
     expect(find.byType(PushRadiusMapPicker), findsOneWidget);
@@ -209,7 +209,7 @@ void main() {
 
     expect(find.text('보유 0회'), findsOneWidget);
     expect(
-      find.textContaining('오늘 무료 근무지 푸시를 사용할 수 없습니다'),
+      find.textContaining('일자리 알림핀 1회 필요'),
       findsOneWidget,
     );
     final confirmButtons = find.widgetWithText(FilledButton, '지원자 모집하기');
@@ -269,13 +269,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('발송 지역'), findsOneWidget);
-    expect(find.text('모집지역 1'), findsNothing);
+    expect(find.text('추가 거점 1'), findsNothing);
 
     await tester.tap(find.text('발송 지역'));
     await tester.pumpAndSettle();
 
-    expect(find.text('근무지'), findsOneWidget);
-    expect(find.text('모집지역 1'), findsOneWidget);
+    expect(find.text('근무지'), findsWidgets);
+    expect(find.text('일자리 알림핀 1'), findsOneWidget);
     expect(find.byType(ChoiceChip), findsNothing);
   });
 
@@ -309,15 +309,15 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.text('모집지역 설정'), findsOneWidget);
-    expect(find.text('모집 지역'), findsOneWidget);
+    expect(find.text('일자리 알림핀 설정'), findsOneWidget);
+    expect(find.text('설정 목록'), findsOneWidget);
     expect(find.text('발송 지역'), findsNothing);
-    expect(find.text('근무지'), findsOneWidget);
-    expect(find.textContaining('지역 푸시권 6회'), findsOneWidget);
-    expect(find.textContaining('근무지 1 · 모집 0'), findsOneWidget);
-    expect(find.textContaining('추가 가능 6곳'), findsWidgets);
+    expect(find.text('근무지'), findsWidgets);
+    expect(find.textContaining('일자리 알림핀 6회'), findsOneWidget);
+    expect(find.textContaining('근무지 1 · 일자리 알림핀 0'), findsOneWidget);
+    expect(find.textContaining('추가 가능 6개'), findsWidgets);
     expect(find.text('저장'), findsOneWidget);
-    expect(find.textContaining('모집지역 추가 (잔여 지역 푸시권'), findsOneWidget);
+    expect(find.text('일자리 알림핀 추가'), findsOneWidget);
   });
 
   testWidgets('configure mode deducts push ticket when adding zones',
@@ -348,16 +348,16 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('지역 푸시권 14회'), findsOneWidget);
+    expect(find.textContaining('일자리 알림핀 14회'), findsOneWidget);
 
     for (var i = 0; i < 3; i++) {
-      await tester.tap(find.textContaining('모집지역 추가 (잔여 지역 푸시권'));
+      await tester.tap(find.text('일자리 알림핀 추가'));
       await tester.pumpAndSettle();
     }
 
-    expect(find.textContaining('지역 푸시권 11회'), findsOneWidget);
-    expect(find.textContaining('근무지 1 · 모집 3'), findsOneWidget);
-    expect(find.textContaining('추가 가능 11곳'), findsWidgets);
+    expect(find.textContaining('일자리 알림핀 11회'), findsOneWidget);
+    expect(find.textContaining('근무지 1 · 일자리 알림핀 3'), findsOneWidget);
+    expect(find.textContaining('추가 가능 11개'), findsWidgets);
   });
 
   testWidgets('configure mode keeps badge status and add button consistent',
@@ -414,10 +414,10 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('지역 푸시권 14회'), findsOneWidget);
-    expect(find.textContaining('근무지 1 · 모집 12'), findsOneWidget);
+    expect(find.textContaining('일자리 알림핀 14회'), findsOneWidget);
+    expect(find.textContaining('근무지 1 · 일자리 알림핀 12'), findsOneWidget);
     expect(find.textContaining('추가 가능'), findsOneWidget);
-    expect(find.textContaining('모집지역 추가 (잔여 지역 푸시권'), findsOneWidget);
-    expect(find.text('추가 슬롯·지역 푸시권 없음'), findsNothing);
+    expect(find.text('일자리 알림핀 추가'), findsOneWidget);
+    expect(find.text('일자리 알림핀 추가'), findsWidgets);
   });
 }

@@ -1,10 +1,9 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
-import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 일일 푸시 사용·과금 집계 (ROI·한도)
+/// 일일 PUSH 사용·과금 집계 (ROI·한도)
 class LocalPushUsageRepository {
   LocalPushUsageRepository(this._prefs);
 
@@ -31,14 +30,7 @@ class LocalPushUsageRepository {
   }
 
   Future<ExtraPushQuote?> quoteExtraPushIfNeeded(String companyKey) async {
-    final used = await getTodayDispatchCount(companyKey);
-    final limit = PushPlanEnforcement.dailyPushLimit;
-    if (used < limit) return null;
-    return ExtraPushQuote(
-      amountKrw: PushPackageCatalog.singlePackagePriceKrw,
-      usedToday: used,
-      dailyLimit: limit,
-    );
+    return null;
   }
 
   Future<void> recordDispatch({

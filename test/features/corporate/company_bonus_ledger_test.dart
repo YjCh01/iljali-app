@@ -24,4 +24,13 @@ void main() {
     expect(await repo.isSignupBonusClaimed('1111111111'), isTrue);
     expect(await repo.isSignupBonusClaimed('2222222222'), isTrue);
   });
+
+  test('verification bonus granted only once per company key', () async {
+    final repo = await CompanyBonusLedgerRepository.create();
+    const key = '9898989898';
+
+    expect(await repo.tryClaimVerificationBonus(key), isTrue);
+    expect(await repo.tryClaimVerificationBonus(key), isFalse);
+    expect(await repo.isVerificationBonusClaimed(key), isTrue);
+  });
 }

@@ -32,8 +32,8 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
   bool _loading = true;
   bool _expanded = false;
 
-  static const _collapsedMapHeight = 168.0;
-  static const _expandedMapHeight = 360.0;
+  static const _collapsedMapHeight = 248.0;
+  static const _expandedMapHeight = 420.0;
 
   @override
   void initState() {
@@ -128,9 +128,7 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _loading
-                          ? '지도 노출 확인 중…'
-                          : '내 공고 $_ownCount건 지도 노출',
+                      _loading ? '불러오는 중…' : '채용 현황',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,

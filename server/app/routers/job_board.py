@@ -1,0 +1,111 @@
+from datetime import datetime, timezone
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.job_sync_models import JobPostRow
+
+router = APIRouter(prefix="/v1/job-board", tags=["job-board"])
+
+
+class JobPostBody(BaseModel):
+    title: str
+    company_name: str = ""
+    company_key: str = ""
+    warehouse_name: str = ""
+    hourly_wage: str = ""
+    work_schedule: str = ""
+    summary: str = ""
+    status: str = "recruiting"
+
+
+class JobPostUpdate(BaseModel):
+    title: str | None = None
+    company_name: str | None = None
+    warehouse_name: str | None = None
+    hourly_wage: str | None = None
+    work_schedule: str | None = None
+    summary: str | None = None
+    status: str | None = None
+
+
+def _row_to_dict(row: JobPostRow) -> dict:
+    return {
+        "id": row.id,
+        "title": row.title,
+        "company_name": row.company_name,
+        "company_key": row.company_key,
+        "warehouse_name": row.warehouse_name,
+        "hourly_wage": row.hourly_wage,
+        "work_schedule": row.work_schedule,
+        "summary": row.summary,
+        "status": row.status,
+        "created_at": row.created_at.replace(tzinfo=timezone.utc).isoformat()
+        if row.created_at
+        else None,
+        "updated_at": row.updated_at.replace(tzinfo=timezone.utc).isoformat()
+        if row.updated_at
+        else None,
+    }
+
+
+@router.get("/posts")
+def list_posts(db: Session = Depends(get_db)):
+    rows = db.query(JobPostRow).order_by(JobPostRow.created_at.desc()).all()
+    posts = [_row_to_dict(r) for r in rows]
+    return {"posts": posts, "count": len(posts)}
+
+
+@router.post("/posts")
+def create_post(body: JobPostBody, db: Session = Depends(get_db)):
+    row = JobPostRow(
+        id=f"post_{uuid4().hex[:12]}",
+        title=body.title,
+        company_name=body.company_name,
+        company_key=body.company_key,
+        warehouse_name=body.warehouse_name,
+        hourly_wage=body.hourly_wage,
+        work_schedule=body.work_schedule,
+        summary=body.summary,
+        status=body.status,
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _row_to_dict(row)
+
+
+@router.get("/posts/{post_id}")
+def get_post(post_id: str, db: Session = Depends(get_db)):
+    row = db.get(JobPostRow, post_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
+    return _row_to_dict(row)
+
+
+@router.put("/posts/{post_id}")
+def update_post(post_id: str, body: JobPostUpdate, db: Session = Depends(get_db)):
+    row = db.get(JobPostRow, post_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
+    data = body.model_dump(exclude_none=True)
+    for key, value in data.items():
+        setattr(row, key, value)
+    row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.commit()
+    db.refresh(row)
+    return _row_to_dict(row)
+
+
+@router.delete("/posts/{post_id}")
+def delete_post(post_id: str, db: Session = Depends(get_db)):
+    row = db.get(JobPostRow, post_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True, "id": post_id}

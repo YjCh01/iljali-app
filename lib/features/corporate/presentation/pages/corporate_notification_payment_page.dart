@@ -1,48 +1,37 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:map/core/constants/app_colors.dart';
-
+import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
-
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
-
+import 'package:map/features/corporate/domain/entities/job_post_payment_request_kind.dart';
 import 'package:map/features/corporate/domain/entities/payment_method.dart';
-
 import 'package:map/features/corporate/domain/entities/payment_method_option.dart';
-
 import 'package:map/features/corporate/domain/entities/payment_request.dart';
-
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
-
+import 'package:map/features/corporate/domain/entities/saved_payment_method.dart';
+import 'package:map/features/corporate/domain/services/job_post_payment_request_service.dart';
 import 'package:map/features/corporate/domain/services/payment_flow_helper.dart';
-
 import 'package:map/features/corporate/domain/services/payment_gateway_service.dart';
-
+import 'package:map/features/corporate/domain/services/saved_payment_method_service.dart';
 import 'package:map/features/corporate/presentation/widgets/payment/payment_amount_breakdown.dart';
-
 import 'package:map/features/corporate/presentation/widgets/payment/payment_method_selection_section.dart';
+import 'package:map/features/corporate/presentation/widgets/payment/saved_card_checkout_section.dart';
 
-
-
-/// 푸시 반경·지정포인트 — PG 결제 (MVP: mock, 추후 실 PG API 연동)
-
+/// 유료 서비스 PG 결제
 class CorporateNotificationPaymentPage extends StatefulWidget {
-
   const CorporateNotificationPaymentPage({
-
     super.key,
-
     required this.bundle,
-
     this.paymentGateway,
-
+    this.paymentRequestId,
+    this.paymentKind,
   });
 
-
-
   final PushPaymentBundle bundle;
-
   final PaymentGatewayService? paymentGateway;
+  final String? paymentRequestId;
+  final JobPostPaymentRequestKind? paymentKind;
 
 
 
@@ -57,149 +46,148 @@ class CorporateNotificationPaymentPage extends StatefulWidget {
 
 
 class _CorporateNotificationPaymentPageState
-
     extends State<CorporateNotificationPaymentPage> {
-
   PaymentMethod _selectedMethod = PaymentMethodCatalog.defaultMethod;
-
   bool _agreedToTerms = false;
-
   bool _processing = false;
-
   String? _errorMessage;
+  List<SavedPaymentMethod> _savedCards = [];
+  String? _selectedCardId;
+  bool _useOtherMethod = false;
 
+  JobPostPaymentRequestKind? get _effectiveKind =>
+      widget.paymentKind ?? widget.bundle.paymentKind;
 
+  PushPaymentBundle get _displayBundle {
+    final kind = _effectiveKind;
+    if (kind == null || kind == widget.bundle.paymentKind) {
+      return widget.bundle;
+    }
+    return PushPaymentBundle(
+      radiusTier: widget.bundle.radiusTier,
+      pointTier: widget.bundle.pointTier,
+      spotCount: widget.bundle.spotCount,
+      isExtraPush: widget.bundle.isExtraPush,
+      extraPushFeeKrw: widget.bundle.extraPushFeeKrw,
+      paymentKind: kind,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCards();
+  }
+
+  Future<void> _loadSavedCards() async {
+    final companyKey =
+        AuthSession.instance.currentUser?.corporateProfile?.companyKey;
+    if (companyKey == null || companyKey.isEmpty) return;
+    final cards =
+        await SavedPaymentMethodService().listForCompany(companyKey);
+    if (!mounted) return;
+    setState(() {
+      _savedCards = cards;
+      _selectedCardId = cards.isEmpty
+          ? null
+          : cards.firstWhere((c) => c.isDefault, orElse: () => cards.first).id;
+      _useOtherMethod = cards.isEmpty;
+    });
+  }
 
   Future<void> _pay() async {
-
     if (!_agreedToTerms) {
-
       setState(() => _errorMessage = '결제 이용약관에 동의해 주세요.');
-
       return;
-
     }
 
-
+    SavedPaymentMethod? savedCard;
+    if (!_useOtherMethod && _selectedCardId != null) {
+      savedCard = _savedCards.firstWhere(
+        (c) => c.id == _selectedCardId,
+        orElse: () => _savedCards.first,
+      );
+    }
 
     setState(() {
-
       _processing = true;
-
       _errorMessage = null;
-
     });
 
-
-
-    final bundle = widget.bundle;
-
+    final bundle = _displayBundle;
     final orderId = 'PUSH-${DateTime.now().millisecondsSinceEpoch}';
-
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
     final request = PaymentRequest(
-
       orderId: orderId,
-
-      productName: '푸시 알림 · ${bundle.productSummary}',
-
+      productName: bundle.checkoutProductTitle,
       amountKrw: bundle.totalAmountKrw,
-
-      method: _selectedMethod,
-
+      method: savedCard != null ? PaymentMethod.card : _selectedMethod,
       radiusTier: bundle.radiusTier.isPaid ? bundle.radiusTier : null,
-
+      buyerEmail: AuthSession.instance.currentUser?.email,
+      buyerName: AuthSession.instance.currentUser?.name,
+      companyKey: profile?.companyKey,
+      savedPaymentMethodId: savedCard?.id,
+      billingKey: savedCard?.billingKey,
     );
-
     final flow = PaymentFlowHelper(gateway: widget.paymentGateway);
-
     final result = await flow.pay(context, request);
-
-
 
     if (!mounted) return;
 
-
-
     if (result.success) {
-
+      final txnId = result.transactionId ?? orderId;
+      final requestId = widget.paymentRequestId;
+      if (requestId != null && requestId.isNotEmpty) {
+        await JobPostPaymentRequestService().markPaid(
+          id: requestId,
+          transactionId: txnId,
+        );
+      }
+      if (!mounted) return;
       Navigator.of(context).pop(
-
         PaymentCompletionResult(
-
           record: JobPostPaymentRecord(
-
             orderId: orderId,
-
-            productName: '푸시 알림 · ${bundle.productSummary}',
-
+            productName: bundle.checkoutProductTitle,
             amountKrw: bundle.totalAmountKrw,
-
-            method: _selectedMethod,
-
-            transactionId: result.transactionId ?? 'UNKNOWN',
-
+            method: savedCard != null ? PaymentMethod.card : _selectedMethod,
+            transactionId: txnId,
             paidAt: DateTime.now(),
-
             radiusTier: bundle.radiusTier.isPaid
-
                 ? bundle.radiusTier
-
                 : PushRadiusTier.standard1km,
-
           ),
-
         ),
-
       );
-
       return;
-
     }
 
-
-
     setState(() {
-
       _processing = false;
-
       _errorMessage = result.message ?? '결제에 실패했습니다. 다시 시도해 주세요.';
-
     });
-
   }
 
 
 
   List<PaymentBreakdownLine> _breakdownLines(PushPaymentBundle bundle, int price) {
-
     final vat = (price / 11).round();
-
     final supply = price - vat;
 
-
-
     if (bundle.isExtraPush) {
-
       return [
-
-        PaymentBreakdownLine(label: '지원자 모집하기 (add-on)', amountKrw: supply),
-
+        PaymentBreakdownLine(
+          label: bundle.checkoutBreakdownLabel,
+          amountKrw: supply,
+        ),
         PaymentBreakdownLine(label: '부가세 (10%)', amountKrw: vat),
-
       ];
-
     }
 
-
-
     return [
-
       PaymentBreakdownLine(label: '상품 금액', amountKrw: supply),
-
       PaymentBreakdownLine(label: '부가세 (10%)', amountKrw: vat),
-
     ];
-
   }
 
 
@@ -208,15 +196,8 @@ class _CorporateNotificationPaymentPageState
 
   Widget build(BuildContext context) {
 
-    final bundle = widget.bundle;
-
+    final bundle = _displayBundle;
     final price = bundle.totalAmountKrw;
-
-    final formatted = formatKrw(price);
-
-    final selectedLabel = PaymentMethodCatalog.byMethod(_selectedMethod).label;
-
-
 
     return Scaffold(
 
@@ -251,22 +232,26 @@ class _CorporateNotificationPaymentPageState
                 const SizedBox(height: 8),
 
                 _OrderSummaryCard(bundle: bundle),
-
                 const SizedBox(height: 12),
-
-                PaymentMethodSelectionSection(
-
-                  selectedMethod: _selectedMethod,
-
-                  onMethodSelected: _processing
-
-                      ? (_) {}
-
-                      : (method) => setState(() => _selectedMethod = method),
-
+                SavedCardCheckoutSection(
+                  cards: _savedCards,
+                  selectedCardId: _selectedCardId,
+                  onCardSelected: (id) => setState(() => _selectedCardId = id),
+                  useOtherMethod: _useOtherMethod,
+                  onUseOtherMethodChanged: (value) =>
+                      setState(() => _useOtherMethod = value),
                   enabled: !_processing,
-
                 ),
+                if (_useOtherMethod || _savedCards.isEmpty) ...[
+                  const SizedBox(height: 12),
+                  PaymentMethodSelectionSection(
+                    selectedMethod: _selectedMethod,
+                    onMethodSelected: _processing
+                        ? (_) {}
+                        : (method) => setState(() => _selectedMethod = method),
+                    enabled: !_processing,
+                  ),
+                ],
 
                 const SizedBox(height: 16),
 
@@ -405,89 +390,40 @@ class _CorporateNotificationPaymentPageState
           ),
 
           PaymentAmountBreakdown(
-
             lines: _breakdownLines(bundle, price),
-
             totalKrw: price,
-
-          ),
-
-          Container(
-
-            color: AppColors.surface,
-
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-
-            child: SafeArea(
-
-              top: false,
-
-              child: FilledButton(
-
-                onPressed: _processing ? null : _pay,
-
-                style: FilledButton.styleFrom(
-
-                  backgroundColor: AppColors.primary,
-
-                  foregroundColor: Colors.white,
-
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-
-                  shape: RoundedRectangleBorder(
-
-                    borderRadius: BorderRadius.circular(14),
-
-                  ),
-
+            action: FilledButton(
+              onPressed: _processing ? null : _pay,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(52),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
-
-                child: _processing
-
-                    ? const SizedBox(
-
-                        height: 22,
-
-                        width: 22,
-
-                        child: CircularProgressIndicator(
-
-                          strokeWidth: 2,
-
-                          color: Colors.white,
-
-                        ),
-
-                      )
-
-                    : Text(
-
-                        '$formatted원 $selectedLabel 결제',
-
-                        style: const TextStyle(
-
-                          fontWeight: FontWeight.w700,
-
-                          fontSize: 15,
-
-                        ),
-
-                      ),
-
               ),
-
+              child: _processing
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      '결제하기',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
             ),
-
           ),
-
         ],
-
       ),
-
     );
-
   }
-
 }
 
 
@@ -568,12 +504,9 @@ class _OrderSummaryCard extends StatelessWidget {
 
                   ),
 
-                  child: const Icon(
-
-                    Icons.campaign_rounded,
-
+                  child: Icon(
+                    _orderIcon(bundle.paymentKind),
                     color: AppColors.primary,
-
                   ),
 
                 ),
@@ -589,26 +522,16 @@ class _OrderSummaryCard extends StatelessWidget {
                     children: [
 
                       Text(
-
-                        '푸시 알림 · ${bundle.productSummary}',
-
+                        bundle.checkoutProductTitle,
                         style: const TextStyle(
-
                           fontSize: 16,
-
                           fontWeight: FontWeight.w800,
-
                           color: AppColors.textPrimary,
-
                         ),
-
                       ),
-
                       const SizedBox(height: 4),
-
                       Text(
-
-                        _bundleDetail(bundle),
+                        bundle.checkoutProductDetail,
 
                         style: TextStyle(
 
@@ -644,22 +567,16 @@ class _OrderSummaryCard extends StatelessWidget {
 
 
 
-  static String _bundleDetail(PushPaymentBundle bundle) {
-
-    if (bundle.isExtraPush) {
-
-      return '기본 일일 푸시 한도 초과 · 패키지 1회 발송\n'
-
-          '추가 공고 노출 범위·지원자 모집하기는 패키지 구매로 확장';
-
-    }
-
-    return '반경 ${bundle.radiusTier.label}\n'
-
-        '지정 ${bundle.pointTier.label} · ${bundle.spotCount}곳';
-
-  }
-
+  static IconData _orderIcon(JobPostPaymentRequestKind? kind) =>
+      switch (kind) {
+        JobPostPaymentRequestKind.shuttleStopExposure =>
+          Icons.directions_bus_rounded,
+        JobPostPaymentRequestKind.jobPinExposure => Icons.place_rounded,
+        JobPostPaymentRequestKind.pushTicket => Icons.campaign_rounded,
+        JobPostPaymentRequestKind.packagePurchase => Icons.inventory_2_outlined,
+        JobPostPaymentRequestKind.extraPush => Icons.campaign_rounded,
+        null => Icons.place_rounded,
+      };
 }
 
 

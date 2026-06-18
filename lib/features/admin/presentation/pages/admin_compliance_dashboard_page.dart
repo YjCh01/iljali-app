@@ -28,6 +28,7 @@ class _AdminComplianceDashboardPageState
   List<Map<String, dynamic>> _flags = [];
   List<VerifiedBusinessRecord> _businessRecords = [];
   List<AbuseAlert> _liveAlerts = [];
+  List<Map<String, dynamic>> _workplaceMismatchFlags = [];
   List<Map<String, dynamic>> _enterpriseInquiries = [];
   Set<String> _outsourcingRoiWatchlist = {};
   bool _loading = true;
@@ -58,6 +59,9 @@ class _AdminComplianceDashboardPageState
     if (!mounted) return;
     setState(() {
       _flags = flags;
+      _workplaceMismatchFlags = flags
+          .where((f) => f['type'] == AbuseAlertType.workplaceMismatch.name)
+          .toList();
       _enterpriseInquiries =
           flags.where((f) => f['type'] == 'enterprise_inquiry').toList();
       _businessRecords = records;
@@ -80,7 +84,8 @@ class _AdminComplianceDashboardPageState
         // 로컬 승인은 유지
       }
     }
-    await _syncSessionIfMatch(record.businessRegistrationNumber, approved: true);
+    await _syncSessionIfMatch(record.businessRegistrationNumber,
+        approved: true);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${record.companyName} 승인 처리')),
@@ -118,7 +123,8 @@ class _AdminComplianceDashboardPageState
         );
       } on Object {}
     }
-    await _syncSessionIfMatch(record.businessRegistrationNumber, suspended: true);
+    await _syncSessionIfMatch(record.businessRegistrationNumber,
+        suspended: true);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${record.companyName} 계정 정지')),
@@ -134,7 +140,8 @@ class _AdminComplianceDashboardPageState
   }) async {
     final user = AuthSession.instance.currentUser;
     final profile = user?.corporateProfile;
-    if (profile == null || profile.companyKey != brn.replaceAll(RegExp(r'[^0-9]'), '')) {
+    if (profile == null ||
+        profile.companyKey != brn.replaceAll(RegExp(r'[^0-9]'), '')) {
       return;
     }
     CorporateMemberProfile updated;
@@ -197,6 +204,31 @@ class _AdminComplianceDashboardPageState
                         severity: a.severity.name,
                       ),
                     ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    '근무지 주소 불일치 알림',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  if (_workplaceMismatchFlags.isEmpty)
+                    const Text('주소 불일치 알림 없음')
+                  else
+                    ..._workplaceMismatchFlags.take(20).map(
+                          (f) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              title: Text(
+                                '${f['companyKey'] ?? '-'} · ${f['severity'] ?? 'high'}',
+                              ),
+                              subtitle: Text(
+                                '${f['headOfficeAddress'] ?? ''}\n'
+                                '→ ${f['workplaceAddress'] ?? ''}\n'
+                                '${f['message'] ?? ''}',
+                              ),
+                              isThreeLine: true,
+                            ),
+                          ),
+                        ),
                   const SizedBox(height: 24),
                   const Text(
                     'Enterprise 견적 요청',
@@ -382,7 +414,8 @@ class _OutsourcingRoiMonitorTile extends StatefulWidget {
       _OutsourcingRoiMonitorTileState();
 }
 
-class _OutsourcingRoiMonitorTileState extends State<_OutsourcingRoiMonitorTile> {
+class _OutsourcingRoiMonitorTileState
+    extends State<_OutsourcingRoiMonitorTile> {
   RoiMetrics? _metrics;
   bool _loading = false;
 

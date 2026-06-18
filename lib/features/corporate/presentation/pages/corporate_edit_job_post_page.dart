@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/constants/labor_constants.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
@@ -17,10 +18,13 @@ import 'package:map/features/corporate/domain/usecases/save_corporate_job_post_u
 import 'package:map/features/corporate/domain/entities/salary_pay_type.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
-import 'package:map/features/corporate/presentation/pages/corporate_job_post_write_page.dart';
+import 'package:map/features/corporate/presentation/navigation/push_base_point_args.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_card.dart';
 import 'package:map/core/widgets/korean_calendar.dart';
+import 'package:map/features/corporate/domain/utils/daily_worker_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_form.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_job_post_optional_services_sheet.dart';
+import 'package:map/core/widgets/transient_snack_bar.dart';
 
 /// 기업회원 — 수정할 공고 선택 (Speed Dial 2)
 class CorporateSelectJobPostPage extends StatefulWidget {
@@ -97,14 +101,16 @@ class _CorporateSelectJobPostPageState extends State<CorporateSelectJobPostPage>
   }
 }
 
-/// 기업회원 — 공고 수정
+/// 기업회원 — 공고 수정·복사
 class CorporateEditJobPostPage extends StatefulWidget {
   const CorporateEditJobPostPage({
     super.key,
     required this.post,
+    this.asCopy = false,
   });
 
   final CorporateJobPost post;
+  final bool asCopy;
 
   @override
   State<CorporateEditJobPostPage> createState() =>
@@ -114,6 +120,9 @@ class CorporateEditJobPostPage extends StatefulWidget {
 class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   final _dataSource = const CorporateJobPostLocalDataSourceImpl();
   late final _updatePost = UpdateCorporateJobPostUseCase(_dataSource);
+  late final _createPost = CreateCorporateJobPostUseCase(_dataSource);
+
+  bool get _asCopy => widget.asCopy;
 
   late final TextEditingController _titleController =
       TextEditingController(text: widget.post.title);
@@ -123,13 +132,15 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         ? widget.post.jobDescription
         : widget.post.summary,
   );
+  late SalaryPayType _salaryPayType =
+      parseSalaryPayType(widget.post.hourlyWage);
   late final TextEditingController _wageController = TextEditingController(
-    text: salaryPayDigits(widget.post.hourlyWage),
+    text: LaborConstants.initialHourlyWageFieldText(
+      salaryPayDigits(widget.post.hourlyWage),
+    ),
   );
   late final TextEditingController _scheduleController =
       TextEditingController(text: widget.post.workSchedule);
-  late final TextEditingController _summaryController =
-      TextEditingController();
 
   late WorkplaceAddress _workplace =
       WorkplaceAddress(roadAddress: widget.post.warehouseName);
@@ -137,20 +148,37 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   late SalaryPaymentMonthOffset? _paymentMonthOffset =
       widget.post.paymentMonthOffset;
   late int? _paymentDayOfMonth = widget.post.paymentDayOfMonth;
+  late bool _paymentDateNegotiable = widget.post.paymentDateNegotiable;
   late JobPostNotificationSettings? _notificationSettings =
       widget.post.notificationSettings;
-  late CorporateJobPostStatus _status = widget.post.status;
+  late CorporateJobPostStatus _status = _asCopy
+      ? CorporateJobPostStatus.recruiting
+      : widget.post.status;
   late WorkerCategory _workerCategory = widget.post.effectiveWorkerCategory;
-  late SalaryPayType _salaryPayType =
-      parseSalaryPayType(widget.post.hourlyWage);
+  late String? _workCategoryId = widget.post.workCategoryId;
   bool _submitting = false;
+  late bool _dailyWorkerAcknowledged;
   List<CorporateBranch> _branches = [];
   CorporateBranch? _selectedBranch;
+  late String? _shuttleRouteId = widget.post.commuteRouteId;
+  late List<String> _linkedShuttleRouteIds =
+      widget.post.effectiveLinkedCommuteRouteIds;
+  late bool _hasShuttleRouteOverlay = widget.post.hasShuttleRouteOverlay;
+  late Map<String, List<String>> _shuttleRegisteredStopIdsByRoute =
+      Map<String, List<String>>.from(widget.post.shuttleRegisteredStopIdsByRoute);
 
   @override
   void initState() {
     super.initState();
+    _dailyWorkerAcknowledged =
+        widget.post.effectiveWorkerCategory == WorkerCategory.daily;
     _loadBranches();
+    if (_asCopy) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDarkTransientSnackBar(context, '공고가 복사되었습니다');
+      });
+    }
   }
 
   Future<void> _loadBranches() async {
@@ -180,7 +208,6 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
     _jobDescriptionController.dispose();
     _wageController.dispose();
     _scheduleController.dispose();
-    _summaryController.dispose();
     super.dispose();
   }
 
@@ -204,12 +231,27 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
       title: '급여지급일 선택',
     );
     if (picked != null && mounted) {
-      setState(() => _paymentDate = picked);
+      setState(() {
+        _paymentDate = picked;
+        _paymentDateNegotiable = false;
+      });
     }
   }
 
   SalaryPaymentSchedule? _buildPaymentSchedule() {
-    if (_workerCategory == WorkerCategory.daily) {
+    if (_paymentDateNegotiable &&
+        (_workerCategory.usesAbsolutePaymentDate ||
+            _workerCategory.usesCalendarPaymentDate)) {
+      return const SalaryPaymentSchedule.negotiable();
+    }
+    if (_workerCategory.usesAbsolutePaymentDate) {
+      final dates = DailyWorkerPolicy.paymentDatesFromWorkSchedule(
+        _scheduleController.text,
+      );
+      if (dates.isEmpty) return null;
+      return SalaryPaymentSchedule.dailyPerWorkDay(dates);
+    }
+    if (_workerCategory.usesCalendarPaymentDate) {
       if (_paymentDate == null) return null;
       return SalaryPaymentSchedule.absoluteDate(_paymentDate!);
     }
@@ -222,16 +264,32 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
     );
   }
 
-  void _onWorkerCategoryChanged(WorkerCategory category) {
+  Future<void> _onWorkerCategoryChanged(WorkerCategory category) async {
+    if (category == WorkerCategory.daily && !_dailyWorkerAcknowledged) {
+      final ok = await DailyWorkerPolicy.showAcknowledgmentDialog(context);
+      if (!ok || !mounted) return;
+      setState(() => _dailyWorkerAcknowledged = true);
+    }
+    if (!mounted) return;
     setState(() {
       _workerCategory = category;
-      if (category == WorkerCategory.daily) {
+      if (category.usesAbsolutePaymentDate) {
+        _paymentMonthOffset = null;
+        _paymentDayOfMonth = null;
+      } else if (category.usesCalendarPaymentDate) {
         _paymentMonthOffset = null;
         _paymentDayOfMonth = null;
       } else {
         _paymentDate = null;
+        _paymentDateNegotiable = false;
+        _dailyWorkerAcknowledged = false;
       }
     });
+  }
+
+  void _syncDailyPaymentDateFromSchedule() {
+    if (!mounted) return;
+    setState(() => _paymentDateNegotiable = false);
   }
 
   Future<void> _configurePushNotification() async {
@@ -246,6 +304,32 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
     if (result != null && mounted) {
       setState(() => _notificationSettings = result);
     }
+  }
+
+  Future<void> _openPaidServices() async {
+    final fresh = await const CorporateJobPostLocalDataSourceImpl()
+        .findById(widget.post.id);
+    if (!mounted) return;
+    await showCorporateJobPostOptionalServicesSheet(
+      context,
+      post: fresh ?? widget.post,
+      workplace: _workplace,
+      onPostUpdated: (updated) {
+        if (!mounted) return;
+        setState(() {
+          _notificationSettings = updated.notificationSettings;
+          _linkedShuttleRouteIds = updated.effectiveLinkedCommuteRouteIds;
+          _shuttleRouteId = _linkedShuttleRouteIds.isNotEmpty
+              ? _linkedShuttleRouteIds.first
+              : null;
+          _hasShuttleRouteOverlay = updated.hasShuttleRouteOverlay;
+          _shuttleRegisteredStopIdsByRoute =
+              Map<String, List<String>>.from(
+            updated.shuttleRegisteredStopIdsByRoute,
+          );
+        });
+      },
+    );
   }
 
   Future<void> _submit() async {
@@ -314,29 +398,80 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
     setState(() => _notificationSettings = notificationSettings);
 
     final wageLabel = _salaryPayType.formatAmount(_wageController.text);
-    final result = await _updatePost(
-      original: widget.post,
-      title: _titleController.text,
-      workplace: _workplace,
-      hourlyWage: wageLabel,
-      workSchedule: _scheduleController.text,
-      jobDescription: _jobDescriptionController.text,
-      summary: _summaryController.text,
-      paymentSchedule: paymentSchedule,
-      workerCategory: _workerCategory,
-      status: _status,
-      notificationSettings: notificationSettings,
-      paymentRecord: paymentRecord,
-      branchId: _selectedBranch?.id,
-      branchName: _selectedBranch?.name,
-    );
+    final CorporateJobPostResult result;
+    if (_asCopy) {
+      result = await _createPost(
+        title: _titleController.text,
+        workplace: _workplace,
+        hourlyWage: wageLabel,
+        workSchedule: _scheduleController.text,
+        jobDescription: _jobDescriptionController.text,
+        summary: _jobDescriptionController.text,
+        paymentSchedule: paymentSchedule,
+        workerCategory: _workerCategory,
+        workCategoryId: _workCategoryId,
+        employmentType: _workerCategory.employmentType,
+        notificationSettings: notificationSettings,
+        registeredBy: registeredBy,
+        paymentRecord: paymentRecord,
+        branchId: _selectedBranch?.id,
+        branchName: _selectedBranch?.name,
+        commuteRouteId: _shuttleRouteId,
+        linkedCommuteRouteIds: _linkedShuttleRouteIds,
+        hasShuttleRouteOverlay: _linkedShuttleRouteIds.isEmpty
+            ? false
+            : _hasShuttleRouteOverlay,
+      );
+    } else {
+      result = await _updatePost(
+        original: widget.post.copyWith(
+          commuteRouteId: _shuttleRouteId,
+          linkedCommuteRouteIds: _linkedShuttleRouteIds,
+          shuttleRegisteredStopIdsByRoute: _shuttleRegisteredStopIdsByRoute,
+          hasShuttleRouteOverlay: _linkedShuttleRouteIds.isEmpty
+              ? false
+              : _hasShuttleRouteOverlay,
+        ),
+        title: _titleController.text,
+        workplace: _workplace,
+        hourlyWage: wageLabel,
+        workSchedule: _scheduleController.text,
+        jobDescription: _jobDescriptionController.text,
+        summary: _jobDescriptionController.text,
+        paymentSchedule: paymentSchedule,
+        workerCategory: _workerCategory,
+        workCategoryId: _workCategoryId,
+        status: _status,
+        notificationSettings: notificationSettings,
+        paymentRecord: paymentRecord,
+        branchId: _selectedBranch?.id,
+        branchName: _selectedBranch?.name,
+        commuteRouteId: _shuttleRouteId,
+        linkedCommuteRouteIds: _linkedShuttleRouteIds,
+        hasShuttleRouteOverlay: _linkedShuttleRouteIds.isEmpty
+            ? false
+            : _hasShuttleRouteOverlay,
+      );
+    }
 
     if (!mounted) return;
     setState(() => _submitting = false);
 
     if (!result.isSuccess) {
+      final message = result.message ?? '수정에 실패했습니다.';
+      final needsHeadOffice = message.contains('본사 주소');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message ?? '수정에 실패했습니다.')),
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          action: needsHeadOffice
+              ? SnackBarAction(
+                  label: '내정보에서 등록',
+                  onPressed: () => Navigator.of(context)
+                      .pushNamed(AppRoutes.corporateMyInfo),
+                )
+              : null,
+        ),
       );
       return;
     }
@@ -362,7 +497,7 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         elevation: 0,
         leading: const AppBackButton(),
         automaticallyImplyLeading: false,
-        title: const Text('일자리 수정'),
+        title: Text(_asCopy ? '공고 복사' : '일자리 수정'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -371,11 +506,12 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
           jobDescriptionController: _jobDescriptionController,
           wageController: _wageController,
           scheduleController: _scheduleController,
-          summaryController: _summaryController,
           workplace: _workplace,
           onSearchWorkplace: _searchWorkplace,
           workerCategory: _workerCategory,
           onWorkerCategoryChanged: _onWorkerCategoryChanged,
+          workCategoryId: _workCategoryId,
+          onWorkCategoryChanged: (id) => setState(() => _workCategoryId = id),
           salaryPayType: _salaryPayType,
           onSalaryPayTypeChanged: (type) =>
               setState(() => _salaryPayType = type),
@@ -389,39 +525,47 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
               setState(() => _paymentDayOfMonth = value),
           notificationSettings: _notificationSettings,
           onConfigurePushNotification: _configurePushNotification,
-          submitLabel: '수정 저장',
+          showExposureSection: false,
+          submitLabel: _asCopy ? '복사 등록' : '수정 저장',
           submitting: _submitting,
           onSubmit: _submit,
+          dailyWorkerAcknowledged: _dailyWorkerAcknowledged,
+          onDailyScheduleCommitted: _syncDailyPaymentDateFromSchedule,
+          paymentDateNegotiable: _paymentDateNegotiable,
+          onPaymentDateNegotiableChanged: (value) =>
+              setState(() => _paymentDateNegotiable = value),
           beforeSubmit: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const FieldLabel('공고 상태'),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.searchBarBorder),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<CorporateJobPostStatus>(
-                    isExpanded: true,
-                    value: _status,
-                    items: CorporateJobPostStatus.values
-                        .map(
-                          (status) => DropdownMenuItem(
-                            value: status,
-                            child: Text(status.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _status = value);
-                    },
+              if (!_asCopy) ...[
+                const FieldLabel('공고 상태'),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.searchBarBorder),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<CorporateJobPostStatus>(
+                      isExpanded: true,
+                      value: _status,
+                      items: CorporateJobPostStatus.values
+                          .map(
+                            (status) => DropdownMenuItem(
+                              value: status,
+                              child: Text(status.label),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _status = value);
+                      },
+                    ),
                   ),
                 ),
-              ),
+              ],
               if (_branches.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 if (_selectedBranch == null)
@@ -468,6 +612,19 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
               ],
             ],
           ),
+          afterSubmit: !_asCopy
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: _openPaidServices,
+                    icon: const Icon(Icons.payments_outlined),
+                    label: const Text('유료 서비스 (알림핀·정류장·결제)'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                )
+              : null,
         ),
       ),
     );

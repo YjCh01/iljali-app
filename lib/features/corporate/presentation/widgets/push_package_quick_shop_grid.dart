@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
@@ -7,7 +7,7 @@ import 'package:map/features/corporate/domain/entities/push_package_catalog.dart
 class PushPackageQuickShopGrid extends StatelessWidget {
   const PushPackageQuickShopGrid({
     super.key,
-    this.title = '지역 푸시권 충전',
+    this.title = '일자리 알림핀 충전',
     this.message,
     this.compact = false,
     this.onPurchased,
@@ -99,7 +99,7 @@ class PushPackageQuickShopGrid extends StatelessWidget {
         TextButton(
           onPressed: () => _openShop(context),
           child: const Text(
-            '지역 푸시권 상세·결제',
+            '일자리 알림핀 상세·결제',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
         ),

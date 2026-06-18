@@ -1,6 +1,6 @@
-import 'package:map/features/job_seeker/domain/entities/seeker_push_notification.dart';
+﻿import 'package:map/features/job_seeker/domain/entities/seeker_push_notification.dart';
 
-/// 수신 푸시 보관 — 30일 후 자동 삭제
+/// 수신 PUSH 보관 — 30일 후 자동 삭제
 abstract final class SeekerPushRetentionPolicy {
   static const retentionDays = 30;
 

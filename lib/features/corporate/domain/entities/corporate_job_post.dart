@@ -4,6 +4,10 @@ import 'package:map/features/corporate/domain/entities/push_notification_setting
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
+import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
+import 'package:map/features/commute/domain/entities/commute_route.dart';
+import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
+import 'package:map/features/commute/domain/utils/shuttle_route_entitlement.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 /// 채용 공고 고용 형태 — 일용직(출근 확인) · 상시직(재직 확인)
@@ -41,12 +45,21 @@ class CorporateJobPost {
     this.paymentDate,
     this.paymentMonthOffset,
     this.paymentDayOfMonth,
+    this.paymentDateNegotiable = false,
     this.notificationSettings,
     this.registeredBy,
+    this.recruiterEmail,
     this.paymentRecord,
     this.branchId,
     this.branchName,
     this.mapPinDisplayTier,
+    this.commuteRouteId,
+    this.linkedCommuteRouteIds = const [],
+    this.shuttleRegisteredStopIdsByRoute = const {},
+    this.shuttlePaidStopIdsByRoute = const {},
+    this.shuttleExposurePaidAt,
+    this.hasShuttleRouteOverlay = false,
+    this.workCategoryId,
   });
 
   final String id;
@@ -71,14 +84,41 @@ class CorporateJobPost {
   final SalaryPaymentMonthOffset? paymentMonthOffset;
   final int? paymentDayOfMonth;
 
+  /// 일용직 급여지급일 — 구인·구직자 협의
+  final bool paymentDateNegotiable;
+
   final JobPostNotificationSettings? notificationSettings;
   final CorporateMemberProfile? registeredBy;
+
+  /// 공고 등록 담당자 이메일 (결제·위임 라우팅)
+  final String? recruiterEmail;
   final JobPostPaymentRecord? paymentRecord;
   final String? branchId;
   final String? branchName;
 
   /// 등록 시점 지도 핀 등급
   final JobMapPinDisplayTier? mapPinDisplayTier;
+
+  /// 연결된 셔틀·통근 노선 ID (등록은 무료) — 대표 노선(첫 연결)
+  final String? commuteRouteId;
+
+  /// 이 공고에 등록된 노선 ID 목록
+  final List<String> linkedCommuteRouteIds;
+
+  /// 이 공고에 등록한 정류장 (노선 ID → 정류장 ID 목록)
+  final Map<String, List<String>> shuttleRegisteredStopIdsByRoute;
+
+  /// 결제 완료·노출 중인 정류장 (노선 ID → 정류장 ID 목록)
+  final Map<String, List<String>> shuttlePaidStopIdsByRoute;
+
+  /// 정류장 표시핀 최근 결제 시각 (노출 종료: D+1 23:59:59)
+  final DateTime? shuttleExposurePaidAt;
+
+  /// 유료 셔틀 노선 지도 노출 활성화 — true일 때만 구직자 지도에 정류장·노선 표시
+  final bool hasShuttleRouteOverlay;
+
+  /// 업무 카테고리 (업적 뱃지) — null이면 AI 자동 분류
+  final String? workCategoryId;
 
   final CorporateJobPostStatus status;
   final int applicantCount;
@@ -98,12 +138,21 @@ class CorporateJobPost {
     DateTime? paymentDate,
     SalaryPaymentMonthOffset? paymentMonthOffset,
     int? paymentDayOfMonth,
+    bool? paymentDateNegotiable,
     JobPostNotificationSettings? notificationSettings,
     CorporateMemberProfile? registeredBy,
+    String? recruiterEmail,
     JobPostPaymentRecord? paymentRecord,
     String? branchId,
     String? branchName,
     JobMapPinDisplayTier? mapPinDisplayTier,
+    String? commuteRouteId,
+    List<String>? linkedCommuteRouteIds,
+    Map<String, List<String>>? shuttleRegisteredStopIdsByRoute,
+    Map<String, List<String>>? shuttlePaidStopIdsByRoute,
+    DateTime? shuttleExposurePaidAt,
+    bool? hasShuttleRouteOverlay,
+    String? workCategoryId,
     CorporateJobPostStatus? status,
     int? applicantCount,
     DateTime? postedAt,
@@ -123,12 +172,26 @@ class CorporateJobPost {
       paymentDate: paymentDate ?? this.paymentDate,
       paymentMonthOffset: paymentMonthOffset ?? this.paymentMonthOffset,
       paymentDayOfMonth: paymentDayOfMonth ?? this.paymentDayOfMonth,
+      paymentDateNegotiable:
+          paymentDateNegotiable ?? this.paymentDateNegotiable,
       notificationSettings: notificationSettings ?? this.notificationSettings,
       registeredBy: registeredBy ?? this.registeredBy,
+      recruiterEmail: recruiterEmail ?? this.recruiterEmail,
       paymentRecord: paymentRecord ?? this.paymentRecord,
       branchId: branchId ?? this.branchId,
       branchName: branchName ?? this.branchName,
       mapPinDisplayTier: mapPinDisplayTier ?? this.mapPinDisplayTier,
+      commuteRouteId: commuteRouteId ?? this.commuteRouteId,
+      linkedCommuteRouteIds:
+          linkedCommuteRouteIds ?? this.linkedCommuteRouteIds,
+      shuttleRegisteredStopIdsByRoute: shuttleRegisteredStopIdsByRoute ??
+          this.shuttleRegisteredStopIdsByRoute,
+      shuttlePaidStopIdsByRoute:
+          shuttlePaidStopIdsByRoute ?? this.shuttlePaidStopIdsByRoute,
+      shuttleExposurePaidAt: shuttleExposurePaidAt ?? this.shuttleExposurePaidAt,
+      hasShuttleRouteOverlay:
+          hasShuttleRouteOverlay ?? this.hasShuttleRouteOverlay,
+      workCategoryId: workCategoryId ?? this.workCategoryId,
       status: status ?? this.status,
       applicantCount: applicantCount ?? this.applicantCount,
       postedAt: postedAt ?? this.postedAt,
@@ -167,9 +230,166 @@ extension CorporateJobPostPaymentScheduleX on CorporateJobPost {
       paymentSchedule?.isComplete ?? false;
 }
 
+extension CorporateJobPostShuttleRoutesX on CorporateJobPost {
+  /// 저장된 복수 노선 또는 레거시 단일 [commuteRouteId]
+  List<String> get effectiveLinkedCommuteRouteIds {
+    final fromList = [
+      for (final id in linkedCommuteRouteIds)
+        if (id.trim().isNotEmpty) id.trim(),
+    ];
+    if (fromList.isNotEmpty) return fromList;
+    final single = commuteRouteId?.trim();
+    if (single != null && single.isNotEmpty) return [single];
+    return const [];
+  }
+
+  int get registeredShuttleStopCount {
+    var total = 0;
+    for (final stopIds in shuttleRegisteredStopIdsByRoute.values) {
+      total += stopIds.length;
+    }
+    return total;
+  }
+
+  bool get hasShuttlePinRegistration =>
+      effectiveLinkedCommuteRouteIds.isNotEmpty && registeredShuttleStopCount > 0;
+}
+
+extension CorporateJobPostShuttleExposureX on CorporateJobPost {
+  bool get _hasShuttlePaidExposureMetadata =>
+      shuttlePaidStopIdsByRoute.isNotEmpty ||
+      ShuttleExposurePolicy.isActive(shuttleExposurePaidAt);
+
+  DateTime? get shuttleExposureExpiresAt => shuttleExposurePaidAt == null
+      ? null
+      : ShuttleExposurePolicy.expiresAtFromPayment(shuttleExposurePaidAt!);
+
+  bool get isShuttleExposureActive {
+    if (!hasShuttleRouteOverlay) return false;
+    if (ShuttleExposurePolicy.isActive(shuttleExposurePaidAt)) return true;
+    // 결제 정류장 목록만 있고 paidAt 미기록 — resolve 전에도 노출 중으로 간주
+    if (shuttleExposurePaidAt == null &&
+        shuttlePaidStopIdsByRoute.isNotEmpty) {
+      return true;
+    }
+    // 구버전: overlay만 켜진 공고 — 등록 정류장 전체를 노출 중으로 간주
+    return shuttleExposurePaidAt == null &&
+        shuttlePaidStopIdsByRoute.isEmpty &&
+        registeredShuttleStopCount > 0;
+  }
+
+  bool isShuttleStopExposureLocked(String routeId, String stopId) {
+    if (!isShuttleExposureActive) return false;
+    final registered = shuttleRegisteredStopIdsByRoute[routeId] ?? const [];
+    if (!registered.contains(stopId)) return false;
+
+    final paid = shuttlePaidStopIdsByRoute[routeId] ?? const [];
+    if (paid.contains(stopId)) return true;
+    // 구버전 overlay-only: 정류장별 결제 목록 없음 → 등록 정류장 전체 잠금
+    if (shuttlePaidStopIdsByRoute.isEmpty) return true;
+    return false;
+  }
+
+  int get unpaidRegisteredShuttleStopCount {
+    if (!hasShuttleRouteOverlay || !isShuttleExposureActive) {
+      return registeredShuttleStopCount;
+    }
+    if (shuttlePaidStopIdsByRoute.isEmpty) return 0;
+
+    var unpaid = 0;
+    for (final entry in shuttleRegisteredStopIdsByRoute.entries) {
+      final paid = (shuttlePaidStopIdsByRoute[entry.key] ?? const []).toSet();
+      for (final stopId in entry.value) {
+        if (!paid.contains(stopId)) unpaid++;
+      }
+    }
+    return unpaid;
+  }
+
+  /// overlay는 켜졌으나 결제 메타가 비어 있을 때 등록 정류장으로 보정
+  CorporateJobPost resolveShuttleExposureMetadata() {
+    final hasPaidMap = shuttlePaidStopIdsByRoute.isNotEmpty;
+    if (!hasShuttleRouteOverlay && !hasPaidMap) {
+      return this;
+    }
+    if (registeredShuttleStopCount == 0 && !hasPaidMap) {
+      return this;
+    }
+    if (hasPaidMap && shuttleExposurePaidAt != null) {
+      return hasShuttleRouteOverlay
+          ? this
+          : copyWith(hasShuttleRouteOverlay: true);
+    }
+
+    return copyWith(
+      hasShuttleRouteOverlay: hasShuttleRouteOverlay || hasPaidMap,
+      shuttlePaidStopIdsByRoute: hasPaidMap
+          ? shuttlePaidStopIdsByRoute
+          : shuttleRegisteredStopIdsByRoute,
+      shuttleExposurePaidAt: shuttleExposurePaidAt ?? postedAt,
+    );
+  }
+
+  /// 이 공고에 기존 결제 메타가 있을 때만 노선 [exposureActivated]와 동기화.
+  /// 노선 플래그는 회사 단위이므로 미결제 공고에는 복사하지 않음.
+  CorporateJobPost reconcileShuttleExposureWithRoutes(
+    Iterable<CommuteRoute> routes,
+  ) {
+    if (!_hasShuttlePaidExposureMetadata) return this;
+
+    final routesById = {for (final route in routes) route.id: route};
+    final paidByRoute = Map<String, List<String>>.from(
+      shuttlePaidStopIdsByRoute,
+    );
+    var changed = false;
+
+    for (final routeId in effectiveLinkedCommuteRouteIds) {
+      final route = routesById[routeId];
+      if (route == null) continue;
+      final registered =
+          (shuttleRegisteredStopIdsByRoute[routeId] ?? const []).toSet();
+      if (registered.isEmpty) continue;
+
+      final merged = <String>{...?paidByRoute[routeId]};
+      for (final stop in route.stops) {
+        if (ShuttleRouteStopPolicy.isWorkplaceStop(stop)) continue;
+        if (stop.exposureActivated &&
+            registered.contains(stop.id) &&
+            !merged.contains(stop.id)) {
+          merged.add(stop.id);
+          changed = true;
+        }
+      }
+      if (merged.isNotEmpty) {
+        final next = merged.toList(growable: false);
+        if (!_sameStopIdList(paidByRoute[routeId], next)) {
+          changed = true;
+        }
+        paidByRoute[routeId] = next;
+      }
+    }
+
+    if (!changed) return resolveShuttleExposureMetadata();
+
+    return copyWith(
+      shuttlePaidStopIdsByRoute: paidByRoute,
+      hasShuttleRouteOverlay: hasShuttleRouteOverlay || paidByRoute.isNotEmpty,
+    ).resolveShuttleExposureMetadata();
+  }
+}
+
+bool _sameStopIdList(List<String>? a, List<String> b) {
+  if (a == null) return false;
+  if (a.length != b.length) return false;
+  return a.toSet().containsAll(b);
+}
+
 extension CorporateJobPostMapPinX on CorporateJobPost {
   JobMapPinDisplayTier get effectiveMapPinTier =>
       MapPinTierResolver.resolve(post: this);
+
+  bool get showsShuttleRouteOverlay =>
+      ShuttleRouteEntitlement.postEligible(this);
 }
 
 extension CorporateJobPostDisplayX on CorporateJobPost {

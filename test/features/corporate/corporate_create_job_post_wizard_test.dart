@@ -1,43 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:map/features/corporate/presentation/pages/corporate_create_job_post_page.dart';
+import 'package:map/core/config/product_feature_flags.dart';
+import 'package:map/core/constants/app_routes.dart';
+import 'package:map/features/corporate/domain/entities/job_post_write_draft.dart';
+import 'package:map/features/corporate/presentation/pages/corporate_job_post_write_page.dart';
 import 'package:map/features/corporate/presentation/widgets/create_job_post/partnership_tier_cards.dart';
 
 void main() {
-  testWidgets('create job post opens plan intro without partnership question',
-      (tester) async {
+  testWidgets('create job post route opens write page directly', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: CorporateCreateJobPostPage()),
+      MaterialApp(
+        home: const Scaffold(body: SizedBox.shrink()),
+        routes: {
+          AppRoutes.corporateCreateJobPost: (_) => CorporateJobPostWritePage(
+                draft: JobPostWriteDraft(
+                  workerCategory: ProductFeatureFlags.defaultWorkerCategory,
+                ),
+              ),
+        },
+      ),
     );
+
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.pushNamed(AppRoutes.corporateCreateJobPost);
     await tester.pumpAndSettle();
 
-    expect(find.text('일자리 프로모션 제휴사이신가요?'), findsNothing);
-    expect(find.text('네'), findsNothing);
-    expect(find.text('아니오'), findsNothing);
-    expect(
-      find.textContaining('공고 등록은 완전 무료입니다. 등록 후 근무지 1km 무료 푸시'),
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('추가 모집지역은 지역 푸시권으로 설정하거나 모집하기 발송 시 사용됩니다.'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('현재 기본 플랜'), findsOneWidget);
-    expect(find.text('공고 등록하기'), findsOneWidget);
-    expect(find.text('지역 푸시권 보기'), findsOneWidget);
-  });
-
-  testWidgets('create job post shows package options when expanded',
-      (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: CorporateCreateJobPostPage()),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('지역 푸시권 보기'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('10회 팩'), findsOneWidget);
+    expect(find.text('일자리 내용 작성'), findsOneWidget);
+    expect(find.text('직접 입력으로 등록'), findsNothing);
   });
 
   testWidgets('comparisonOnly shows package shop button', (tester) async {
@@ -60,7 +49,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('지역 푸시권 보기'));
+    await tester.tap(find.text('일자리 알림핀 보기'));
     await tester.pump();
 
     expect(shopTapped, isTrue);

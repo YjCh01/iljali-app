@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/corporate_attendance_record.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
@@ -9,14 +10,18 @@ class CorporateAttendanceCard extends StatelessWidget {
     required this.record,
     this.onTap,
     this.onEmployerConfirm,
+    this.onMarkNoShow,
   });
 
   final CorporateAttendanceRecord record;
   final VoidCallback? onTap;
   final VoidCallback? onEmployerConfirm;
+  final VoidCallback? onMarkNoShow;
 
   @override
   Widget build(BuildContext context) {
+    final coach = _AttendanceCoach.fromRecord(record);
+
     return CorporateSurfaceCard(
       onTap: onTap,
       child: Column(
@@ -47,6 +52,21 @@ class CorporateAttendanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _Line(icon: Icons.work_outline_rounded, text: record.jobTitle),
+          if (record.workAgreementComplete) ...[
+            const SizedBox(height: 8),
+            Text(
+              record.countdownLabel != null
+                  ? '출근까지 ${record.countdownLabel}'
+                  : '근무예정 합의 완료',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: record.countdownLabel != null
+                    ? AppColors.primary.withValues(alpha: 0.95)
+                    : AppColors.textSecondary.withValues(alpha: 0.9),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
@@ -56,51 +76,67 @@ class CorporateAttendanceCard extends StatelessWidget {
                   time: record.checkInLabel,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _TimeBox(
-                  label: '퇴근',
-                  time: record.checkOutLabel,
-                ),
-              ),
             ],
           ),
-          if (record.awaitingEmployerConfirm) ...[
-            const SizedBox(height: 8),
-            Text(
-              '구직자 출근 체크 완료 · 기업 확인이 필요합니다',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary.withValues(alpha: 0.95),
-              ),
-            ),
-          ],
-          if (record.awaitingSeekerCheckIn) ...[
-            const SizedBox(height: 8),
-            Text(
-              '기업 출근 확인 완료 · 구직자 출근 체크 대기',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary.withValues(alpha: 0.95),
-              ),
-            ),
-          ],
-          if (record.canEmployerConfirm) ...[
+          if (coach != null) ...[
             const SizedBox(height: 12),
-            FilledButton(
-              onPressed: onEmployerConfirm ?? onTap,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-              ),
-              child: Text(
-                record.awaitingEmployerConfirm ? '출근 확인' : '출근 확인 (구직자 대기)',
-              ),
+            _AttendanceCoachBubble(
+              title: coach.title,
+              message: coach.message,
             ),
           ],
-          if (record.needsCommissionPayment && record.commissionAmountKrw != null) ...[
+          if (record.canMarkNoShow || coach?.showConfirmButton == true) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (record.canMarkNoShow)
+                  OutlinedButton(
+                    onPressed: onMarkNoShow,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFC62828),
+                      side: const BorderSide(color: Color(0xFFE57373)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      minimumSize: const Size(0, 36),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('노쇼'),
+                  ),
+                const Spacer(),
+                if (coach?.showConfirmButton == true)
+                  FilledButton(
+                    onPressed: coach!.confirmEnabled
+                        ? (onEmployerConfirm ?? onTap)
+                        : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor:
+                          AppColors.primary.withValues(alpha: 0.35),
+                      disabledForegroundColor: Colors.white.withValues(alpha: 0.9),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      minimumSize: const Size(0, 36),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      '출근 확정',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          if (ProductFeatureFlags.isHiringCommissionEnabled &&
+              record.needsCommissionPayment &&
+              record.commissionAmountKrw != null) ...[
             const SizedBox(height: 12),
             FilledButton(
               onPressed: onTap,
@@ -113,7 +149,8 @@ class CorporateAttendanceCard extends StatelessWidget {
               ),
             ),
           ],
-          if (record.escalationLevel >= 2) ...[
+          if (ProductFeatureFlags.isHiringCommissionEnabled &&
+              record.escalationLevel >= 2) ...[
             const SizedBox(height: 8),
             Text(
               record.escalationLevel >= 3
@@ -130,6 +167,155 @@ class CorporateAttendanceCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AttendanceCoach {
+  const _AttendanceCoach({
+    required this.title,
+    required this.message,
+    required this.showConfirmButton,
+    required this.confirmEnabled,
+  });
+
+  final String title;
+  final String message;
+  final bool showConfirmButton;
+  final bool confirmEnabled;
+
+  static _AttendanceCoach? fromRecord(CorporateAttendanceRecord record) {
+    if (record.awaitingEmployerConfirm) {
+      return const _AttendanceCoach(
+        title: '출근 체크 완료',
+        message: '현장(근무지 200m 이내)에서 출근 확정을 눌러주세요.',
+        showConfirmButton: true,
+        confirmEnabled: true,
+      );
+    }
+    if (record.awaitingSeekerCheckIn) {
+      return const _AttendanceCoach(
+        title: '출근 확정 완료',
+        message: '구직자 출근 체크를 기다리는 중입니다.',
+        showConfirmButton: false,
+        confirmEnabled: false,
+      );
+    }
+    if (record.canEmployerConfirm) {
+      return const _AttendanceCoach(
+        title: '아직 출근 전',
+        message: '지원자가 현장에서 출근 확인하면 출근 확정을 눌러주세요.',
+        showConfirmButton: true,
+        confirmEnabled: false,
+      );
+    }
+    return null;
+  }
+}
+
+class _AttendanceCoachBubble extends StatelessWidget {
+  const _AttendanceCoachBubble({
+    required this.title,
+    required this.message,
+  });
+
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.primaryLight.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 18,
+                color: AppColors.primary.withValues(alpha: 0.9),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary.withValues(alpha: 0.98),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      message,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        color: AppColors.textSecondary.withValues(alpha: 0.95),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          left: 28,
+          bottom: -7,
+          child: CustomPaint(
+            size: const Size(14, 8),
+            painter: _BubbleTailPainter(
+              color: AppColors.primaryLight.withValues(alpha: 0.14),
+              borderColor: AppColors.primaryLight.withValues(alpha: 0.4),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BubbleTailPainter extends CustomPainter {
+  _BubbleTailPainter({
+    required this.color,
+    required this.borderColor,
+  });
+
+  final Color color;
+  final Color borderColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+
+    canvas.drawPath(path, Paint()..color = color);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = borderColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _StatusBadge extends StatelessWidget {

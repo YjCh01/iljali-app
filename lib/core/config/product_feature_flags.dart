@@ -32,6 +32,12 @@ abstract final class ProductFeatureFlags {
     defaultValue: true,
   );
 
+  /// 일용직 채용 성공 수수료 — 제휴 연계 채널 전용. 메인 앱 기본 비활성.
+  static const bool enableHiringCommission = bool.fromEnvironment(
+    'ENABLE_HIRING_COMMISSION',
+    defaultValue: false,
+  );
+
   static bool get isWorkerGeneralEnabled => enableWorkerGeneral;
 
   static bool get isWorkerContractEnabled => enableWorkerContract;
@@ -42,8 +48,10 @@ abstract final class ProductFeatureFlags {
 
   static bool get isEnterpriseOutsourcingEnabled => enableEnterpriseOutsourcing;
 
+  static bool get isHiringCommissionEnabled => enableHiringCommission;
+
   static WorkerCategory get defaultWorkerCategory =>
-      isWorkerGeneralEnabled ? WorkerCategory.general : WorkerCategory.daily;
+      isWorkerGeneralEnabled ? WorkerCategory.general : WorkerCategory.shortTerm;
 
   static bool isWorkerCategoryAllowed(WorkerCategory category) =>
       allowedWorkerCategories.contains(category);
@@ -51,6 +59,7 @@ abstract final class ProductFeatureFlags {
   static List<WorkerCategory> get allowedWorkerCategories => [
         if (enableWorkerGeneral) WorkerCategory.general,
         WorkerCategory.daily,
+        WorkerCategory.shortTerm,
         if (enableWorkerContract) WorkerCategory.contract,
       ];
 
@@ -146,6 +155,23 @@ abstract final class ProductFeatureFlags {
             ],
             reEnableSteps:
                 '기본값 true. 비활성화했던 경우 --dart-define=ENABLE_ENTERPRISE_OUTSOURCING=true.',
+          ),
+        if (!enableHiringCommission)
+          const DisabledFeature(
+            id: 'hiring_commission',
+            displayName: '일용직 채용 성공 수수료',
+            description:
+                '출근 확인 후 채용 수수료 결제·미결제 배너·에스컬레이션 — 제휴 채널용',
+            flagKey: 'ENABLE_HIRING_COMMISSION',
+            affectedFiles: [
+              'lib/core/hiring/local_hiring_repository.dart',
+              'lib/features/corporate/presentation/pages/tabs/corporate_attendance_tab.dart',
+              'lib/features/corporate/presentation/pages/tabs/corporate_chat_tab.dart',
+              'lib/features/corporate/presentation/pages/corporate_payment_management_page.dart',
+              'lib/features/corporate/presentation/pages/corporate_welcome_onboarding_page.dart',
+            ],
+            reEnableSteps:
+                '제휴 연계 채널 빌드 시 --dart-define=ENABLE_HIRING_COMMISSION=true 추가.',
           ),
       ];
 

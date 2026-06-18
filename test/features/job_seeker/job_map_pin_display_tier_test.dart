@@ -1,0 +1,38 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
+import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
+
+void main() {
+  test('resolves packageActive for package-credit holders', () {
+    const profile = CorporateMemberProfile(
+      companyName: '테스트',
+      businessRegistrationNumber: '1112223334',
+      department: '채용',
+      contactPersonName: '담당',
+      handlerCode: '1111',
+      pushWallet: EmployerPushWallet(packageCredits: 1),
+    );
+
+    expect(
+      MapPinTierResolver.resolveFromProfile(registeredBy: profile),
+      JobMapPinDisplayTier.packageActive,
+    );
+  });
+
+  test('resolves premiumPartner for 100-pack holders', () {
+    const profile = CorporateMemberProfile(
+      companyName: '테스트',
+      businessRegistrationNumber: '1112223334',
+      department: '채용',
+      contactPersonName: '담당',
+      handlerCode: '1111',
+      pushWallet: EmployerPushWallet(purchased100PackBundle: true),
+    );
+
+    expect(
+      MapPinTierResolver.resolveFromProfile(registeredBy: profile),
+      JobMapPinDisplayTier.premiumPartner,
+    );
+  });
+}

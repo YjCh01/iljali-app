@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/api/iljari_api_client.dart';
+import 'package:map/core/config/env_config.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/payment_method.dart';
+import 'package:map/features/corporate/domain/entities/payment_product_category.dart';
 import 'package:map/features/corporate/domain/entities/payment_request.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/entities/recruitment_product_kind.dart';
+import 'package:map/features/corporate/domain/services/corporate_tax_document_service.dart';
 import 'package:map/features/corporate/domain/services/payment_flow_helper.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 
@@ -36,7 +41,7 @@ class PushPackagePurchaseService {
     required PaymentMethod method,
     int quantity = 1,
   }) async {
-    final qty = _resolveQuantity(offer, quantity);
+    final qty = offer.supportsQuantitySelector ? quantity.clamp(1, 99) : 1;
     final totalKrw = offer.priceKrw * qty;
     final totalCredits = offer.packageCount * qty;
 
@@ -56,10 +61,48 @@ class PushPackagePurchaseService {
       );
     }
 
+    if (EnvConfig.isComplianceApiEnabled &&
+        offer.kind == RecruitmentProductKind.exposureOnly) {
+      try {
+        await IljariApiClient().addPackageCredits(
+          companyKey: profile.companyKey,
+          count: totalCredits,
+          locationSlots: totalCredits,
+        );
+      } on Object {
+        return PushPackagePurchaseResult(
+          success: false,
+          message: '결제는 완료됐지만 서버 지갑 충전에 실패했습니다. 고객센터로 문의해 주세요.',
+          transactionId: payment.transactionId ?? request.orderId,
+        );
+      }
+    }
+
     await _walletService.addPurchase(
       profile: profile,
       offer: offer,
       quantity: qty,
+    );
+
+    final category = switch (offer.kind) {
+      RecruitmentProductKind.pushOnly => PaymentProductCategory.pushTicket,
+      RecruitmentProductKind.exposureWithPush =>
+        PaymentProductCategory.pushNotification,
+      RecruitmentProductKind.exposureOnly =>
+        PaymentProductCategory.pushPackage,
+    };
+
+    await CorporateTaxDocumentService().recordPayment(
+      context: PaymentRequestContext(
+        orderId: request.orderId,
+        productName: request.productName,
+        amountKrw: totalKrw,
+        method: method,
+        category: category,
+        transactionId: payment.transactionId,
+        profile: profile,
+        buyerEmail: AuthSession.instance.currentUser?.email,
+      ),
     );
 
     await _clearLegacySubscription(profile);
@@ -67,13 +110,8 @@ class PushPackagePurchaseService {
     return PushPackagePurchaseResult(
       success: true,
       transactionId: payment.transactionId ?? request.orderId,
-      message: '${offer.label} $totalCredits회가 충전되었습니다.',
+      message: '${offer.productName} $totalCredits회가 충전되었습니다.',
     );
-  }
-
-  int _resolveQuantity(PushPackageBundleOffer offer, int quantity) {
-    if (offer.id != PushPackageCatalog.singlePackageId) return 1;
-    return quantity.clamp(1, 99);
   }
 
   Future<void> _clearLegacySubscription(CorporateMemberProfile profile) async {

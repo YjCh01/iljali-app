@@ -1,14 +1,38 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
-import 'package:map/core/constants/app_strings.dart';
-import 'package:map/core/widgets/mvp_feedback.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
+import 'package:map/features/work_category/domain/entities/seeker_work_achievement.dart';
+import 'package:map/features/work_category/domain/services/work_achievement_service.dart';
+import 'package:map/features/work_category/presentation/widgets/seeker_work_achievement_preview_row.dart';
 
-/// 구직자 6번 탭 — 프로필·설정 (↔ 기업 더보기)
-class IndividualMoreTab extends StatelessWidget {
-  const IndividualMoreTab({super.key});
+/// 구직자 6번 탭 — 프로필·설정
+class IndividualMoreTab extends StatefulWidget {
+  const IndividualMoreTab({super.key, this.onOpenVaultTab});
+
+  final VoidCallback? onOpenVaultTab;
+
+  @override
+  State<IndividualMoreTab> createState() => _IndividualMoreTabState();
+}
+
+class _IndividualMoreTabState extends State<IndividualMoreTab> {
+  SeekerWorkAchievementSummary? _achievements;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAchievements();
+  }
+
+  Future<void> _loadAchievements() async {
+    final email = AuthSession.instance.currentUser?.email;
+    if (email == null) return;
+    final summary = await WorkAchievementService().loadSummary(email);
+    if (!mounted) return;
+    setState(() => _achievements = summary);
+  }
 
   Future<void> _logout(BuildContext context) async {
     await AuthSession.instance.signOut();
@@ -49,19 +73,49 @@ class IndividualMoreTab extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 10),
-                Text(
-                  AppStrings.platformDescription,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.4,
-                    color: AppColors.textSecondary.withValues(alpha: 0.95),
+                if (_achievements != null) ...[
+                  const SizedBox(height: 14),
+                  const Divider(height: 1),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '내 업무 업적',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  SeekerWorkAchievementPreviewRow(
+                    summary: _achievements!,
+                    onTapViewAll: () async {
+                      await Navigator.of(context).pushNamed(
+                        AppRoutes.seekerWorkAchievements,
+                      );
+                      if (mounted) _loadAchievements();
+                    },
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 16),
+          _MenuTile(
+            icon: Icons.emoji_events_outlined,
+            title: '업무 업적 전체 보기',
+            onTap: () async {
+              await Navigator.of(context).pushNamed(
+                AppRoutes.seekerWorkAchievements,
+              );
+              if (mounted) _loadAchievements();
+            },
+          ),
+          _MenuTile(
+            icon: Icons.badge_outlined,
+            title: '신분증·통장 등록',
+            onTap: () => Navigator.of(context).pushNamed(
+              AppRoutes.seekerMyDocuments,
+            ),
+          ),
           _MenuTile(
             icon: Icons.health_and_safety_outlined,
             title: '건강보험 재직 인증하기',
@@ -71,7 +125,7 @@ class IndividualMoreTab extends StatelessWidget {
           ),
           _MenuTile(
             icon: Icons.notifications_active_outlined,
-            title: '푸시 알림',
+            title: 'PUSH 알림',
             onTap: () => Navigator.of(context).pushNamed(
               AppRoutes.seekerPushInbox,
             ),
@@ -79,17 +133,28 @@ class IndividualMoreTab extends StatelessWidget {
           _MenuTile(
             icon: Icons.notifications_outlined,
             title: '알림 설정',
-            onTap: () => showMvpInfoSnackBar(context, '알림 설정'),
+            onTap: () => Navigator.of(context).pushNamed(
+              AppRoutes.seekerNotificationSettings,
+            ),
           ),
           _MenuTile(
             icon: Icons.bookmark_outline_rounded,
-            title: '저장한 공고',
-            onTap: () => showMvpInfoSnackBar(context, '저장한 공고'),
+            title: '나의 보관함',
+            onTap: widget.onOpenVaultTab ?? () {},
           ),
           _MenuTile(
             icon: Icons.help_outline_rounded,
             title: '고객센터',
-            onTap: () => showMvpInfoSnackBar(context, '고객센터'),
+            onTap: () => Navigator.of(context).pushNamed(
+              AppRoutes.customerSupport,
+            ),
+          ),
+          _MenuTile(
+            icon: Icons.description_outlined,
+            title: '약관 및 정책',
+            onTap: () => Navigator.of(context).pushNamed(
+              AppRoutes.legalDocuments,
+            ),
           ),
           const SizedBox(height: 12),
           OutlinedButton(

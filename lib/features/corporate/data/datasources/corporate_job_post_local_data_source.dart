@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/utils/job_post_limit_policy.dart';
 
@@ -17,6 +18,10 @@ class CorporateJobPostLocalDataSourceImpl
   const CorporateJobPostLocalDataSourceImpl();
 
   static final List<CorporateJobPost> _posts = [];
+
+  /// 테스트 격리용 — in-memory 공고 목록 초기화
+  @visibleForTesting
+  static void clearInMemoryStoreForTest() => _posts.clear();
 
   @override
   Future<List<CorporateJobPost>> fetchJobPosts() async =>

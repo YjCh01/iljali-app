@@ -6,7 +6,6 @@ import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
-import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_home_shell_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -48,7 +47,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
     }
 
-    expect(find.text(PushPackageCatalog.defaultPlanLabel), findsWidgets);
+    expect(find.text('공고 등록 무료'), findsWidgets);
     expect(find.text('Starter'), findsNothing);
 
     final profile = AuthSession.instance.currentUser!.corporateProfile!;
@@ -65,6 +64,6 @@ void main() {
     }
 
     expect(find.text('Starter'), findsNothing);
-    expect(find.text(PushPackageCatalog.defaultPlanLabel), findsWidgets);
+    expect(find.text('공고 등록 무료'), findsWidgets);
   });
 }

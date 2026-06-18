@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
@@ -15,8 +16,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('loadWallet grants signup bonus even when profile caches empty wallet',
-      () async {
+  test('loadWallet grants signup bonus as package credits', () async {
     const profile = CorporateMemberProfile(
       companyName: '테스트',
       businessRegistrationNumber: '9998887776',
@@ -44,14 +44,54 @@ void main() {
 
     final wallet = await service.loadWallet(profile);
 
-    expect(wallet.signupBonusRemaining, PushPackageCatalog.signupBonusPushes);
-    expect(wallet.availablePushCredits, 1);
-    expect(wallet.jobPostRegistrationQuotaMax, 1);
+    expect(wallet.signupBonusRemaining, 0);
+    expect(wallet.packageCredits, PushPackageCatalog.signupBonusPushes);
+    expect(wallet.availablePushCredits, PushPackageCatalog.signupBonusPushes);
     expect(
-      AuthSession.instance.currentUser?.corporateProfile?.pushWallet
-          ?.signupBonusRemaining,
+      wallet.jobPostRegistrationQuotaMax,
       PushPackageCatalog.signupBonusPushes,
     );
+    expect(
+      AuthSession
+          .instance.currentUser?.corporateProfile?.pushWallet?.packageCredits,
+      PushPackageCatalog.signupBonusPushes,
+    );
+  });
+
+  test('loadWallet grants verification bonus once after verification',
+      () async {
+    const profile = CorporateMemberProfile(
+      companyName: '검증회사',
+      businessRegistrationNumber: '1231231231',
+      department: '채용',
+      contactPersonName: '검증담당',
+      handlerCode: '2222',
+      verificationStatus: BusinessVerificationStatus.verified,
+      pushWallet: EmployerPushWallet(),
+    );
+    await AuthSession.instance.signIn(
+      AuthUser(
+        name: '검증',
+        email: 'verified@example.com',
+        memberType: MemberType.corporate,
+        corporateProfile: profile,
+      ),
+    );
+    final service = PushWalletService(
+      repository: await PushWalletRepository.create(),
+      bonusLedger: await CompanyBonusLedgerRepository.create(),
+    );
+
+    final first = await service.loadWallet(profile);
+    expect(
+      first.packageCredits,
+      PushPackageCatalog.signupBonusPushes +
+          PushPackageCatalog.verificationBonusPushes,
+    );
+    final second = await service.loadWallet(
+      AuthSession.instance.currentUser!.corporateProfile!,
+    );
+    expect(second.packageCredits, first.packageCredits);
   });
 
   test('loadWallet strips orphan package credits for new accounts', () async {
@@ -90,17 +130,17 @@ void main() {
 
     expect(wallet.packageCredits, 0);
     expect(wallet.locationSlotsFromPackages, 0);
-    expect(wallet.availablePushCredits, 1);
-    expect(wallet.jobPostRegistrationQuotaMax, 1);
+    expect(wallet.availablePushCredits, 0);
+    expect(wallet.jobPostRegistrationQuotaMax, 0);
   });
 
-  test('jobPostRegistrationQuotaMax is daily free plus package credits', () {
+  test('jobPostRegistrationQuotaMax equals package credits only', () {
     const wallet = EmployerPushWallet(
       packageCredits: 3,
     );
 
-    expect(wallet.availablePushCredits, 4);
-    expect(wallet.jobPostRegistrationQuotaMax, 4);
+    expect(wallet.availablePushCredits, 3);
+    expect(wallet.jobPostRegistrationQuotaMax, 3);
   });
 
   test('addPurchase applies single package quantity to wallet', () async {
@@ -134,8 +174,12 @@ void main() {
       quantity: 3,
     );
 
-    expect(wallet.packageCredits, 3);
-    expect(wallet.locationSlotsFromPackages, 3);
-    expect(wallet.lifetimePackagesPurchased, 3);
+    expect(wallet.packageCredits, PushPackageCatalog.signupBonusPushes + 3);
+    expect(
+      wallet.locationSlotsFromPackages,
+      PushPackageCatalog.signupBonusPushes + 3,
+    );
+    expect(wallet.lifetimePackagesPurchased,
+        PushPackageCatalog.signupBonusPushes + 3);
   });
 }

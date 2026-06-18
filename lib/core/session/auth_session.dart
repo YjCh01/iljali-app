@@ -5,6 +5,8 @@ import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/features/corporate/data/repositories/corporate_account_registry.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
+import 'package:map/features/corporate/domain/services/corporate_org_join_service.dart';
+import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 앱 내 mock 인증 세션 (로컬 저장)
@@ -18,6 +20,7 @@ class AuthSession {
   static const _keyPhone = 'auth_phone';
   static const _keyMemberType = 'auth_member_type';
   static const _keyCorporateProfile = 'auth_corporate_profile';
+  static const _keySeekerProfile = 'auth_seeker_profile';
 
   AuthUser? _user;
 
@@ -51,7 +54,20 @@ class AuthSession {
       corporateProfile: _decodeCorporateProfile(
         prefs.getString(_keyCorporateProfile),
       ),
+      seekerProfile: _decodeSeekerProfile(
+        prefs.getString(_keySeekerProfile),
+      ),
     );
+  }
+
+  SeekerMemberProfile? _decodeSeekerProfile(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      return SeekerMemberProfile.fromJson(map);
+    } on Object {
+      return null;
+    }
   }
 
   CorporateMemberProfile? _decodeCorporateProfile(String? raw) {
@@ -87,6 +103,18 @@ class AuthSession {
     } else {
       await prefs.remove(_keyCorporateProfile);
     }
+    final seekerProfile = user.seekerProfile;
+    if (seekerProfile != null) {
+      await prefs.setString(
+        _keySeekerProfile,
+        jsonEncode(seekerProfile.toJson()),
+      );
+    } else {
+      await prefs.remove(_keySeekerProfile);
+    }
+    if (user.isCorporate && user.corporateProfile != null) {
+      await const CorporateOrgJoinService().syncCurrentUser();
+    }
   }
 
   Future<void> signOut() async {
@@ -97,6 +125,7 @@ class AuthSession {
     await prefs.remove(_keyPhone);
     await prefs.remove(_keyMemberType);
     await prefs.remove(_keyCorporateProfile);
+    await prefs.remove(_keySeekerProfile);
   }
 
   Future<void> updateCorporateProfile(CorporateMemberProfile profile) async {
@@ -104,6 +133,7 @@ class AuthSession {
     if (user == null || !user.isCorporate) return;
     await signIn(user.copyWith(corporateProfile: profile));
     corporateProfileRevision.value++;
+    await const CorporateOrgJoinService().syncCurrentUser();
   }
 
   /// SharedPreferences에 저장된 프로필을 세션에 다시 반영

@@ -4,7 +4,7 @@ import 'package:map/features/corporate/presentation/widgets/push_credit_visual_t
 
 void main() {
   group('PushCreditVisualTheme', () {
-    test('fromWallet uses basic grey when only signup bonus', () {
+    test('fromWallet uses basic grey when no package credits', () {
       const wallet = EmployerPushWallet(signupBonusRemaining: 5);
       final theme = PushCreditVisualTheme.fromWallet(wallet);
       expect(theme.tier, PushCreditVisualTier.basic);
@@ -27,26 +27,19 @@ void main() {
       expect(theme.tier, PushCreditVisualTier.premium100);
     });
 
-    test('fromNextPushConsume uses basic when daily free available', () {
+    test('fromNextPushConsume uses package when credits available', () {
       const wallet = EmployerPushWallet(
         signupBonusRemaining: 5,
         packageCredits: 10,
       );
       final theme = PushCreditVisualTheme.fromNextPushConsume(wallet);
-      expect(theme.tier, PushCreditVisualTier.basic);
+      expect(theme.tier, PushCreditVisualTier.package);
     });
 
-    test('fromNextPushConsume uses package when only package credits left', () {
-      final today = DateTime.now();
-      final dayKey =
-          '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-      final wallet = EmployerPushWallet(
-        signupBonusRemaining: 0,
-        packageCredits: 3,
-        lastFreePushDayKey: dayKey,
-      );
+    test('fromNextPushConsume uses basic when no credits', () {
+      const wallet = EmployerPushWallet(signupBonusRemaining: 0);
       final theme = PushCreditVisualTheme.fromNextPushConsume(wallet);
-      expect(theme.tier, PushCreditVisualTier.package);
+      expect(theme.tier, PushCreditVisualTier.basic);
     });
   });
 }

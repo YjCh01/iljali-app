@@ -30,7 +30,8 @@ void main() {
 | `ENABLE_PREMIUM_PARTNER_WIZARD` | **true** | 제휴사(쿠팡·다이소 등) 위저드 유지 |
 | `ENABLE_ENTERPRISE_OUTSOURCING` | **true** | 아웃소싱·도급 플로우 유지 |
 
-허용 고용 유형: **일용직만** (`WorkerCategory.daily`).
+허용 고용 유형: **일용직 · 단기알바** (`WorkerCategory.daily`, `WorkerCategory.shortTerm`).  
+단기알바는 주5일·교대 등 유연 일정, 일용직은 달력 날짜 지정.
 
 ## 현재 비활성 기능 (MVP 기본)
 

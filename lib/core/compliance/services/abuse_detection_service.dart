@@ -2,7 +2,7 @@ import 'package:map/core/compliance/data/compliance_repository.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 
-/// 푸시-연락-매칭 이상 패턴 감지 (MVP)
+/// PUSH-연락-매칭 이상 패턴 감지 (MVP)
 class AbuseDetectionService {
   AbuseDetectionService({ComplianceRepository? repository})
       : _repository = repository;
@@ -28,8 +28,7 @@ class AbuseDetectionService {
     if (chatNoSchedule.isNotEmpty) {
       alerts.add(AbuseAlert(
         type: AbuseAlertType.chatWithoutSchedule,
-        message:
-            '채팅만 ${chatNoSchedule.length}건, 출근 예정 전환 없음 — 오프플랫폼 유도 의심',
+        message: '채팅만 ${chatNoSchedule.length}건, 출근 예정 전환 없음 — 오프플랫폼 유도 의심',
         severity: AbuseSeverity.medium,
         applicationIds: chatNoSchedule.map((a) => a.id).toList(),
       ));
@@ -44,8 +43,7 @@ class AbuseDetectionService {
     if (scheduledNoCheckIn.isNotEmpty) {
       alerts.add(AbuseAlert(
         type: AbuseAlertType.scheduledNoCheckIn,
-        message:
-            '출근 예정 ${scheduledNoCheckIn.length}건 — 출근 미확인(회피) 패턴',
+        message: '출근 예정 ${scheduledNoCheckIn.length}건 — 출근 미확인(회피) 패턴',
         severity: AbuseSeverity.high,
         applicationIds: scheduledNoCheckIn.map((a) => a.id).toList(),
       ));
@@ -61,8 +59,45 @@ class AbuseDetectionService {
       ));
     }
 
+    final repeatedUnpaid = companyApps.where(
+      (a) =>
+          a.isMutuallyConfirmed &&
+          a.needsCommissionPayment &&
+          a.escalationLevel >= 2,
+    );
+    if (repeatedUnpaid.isNotEmpty) {
+      alerts.add(AbuseAlert(
+        type: AbuseAlertType.repeatedCheckInNoPayment,
+        message: '반복 출근 확인·수수료 미결제 ${repeatedUnpaid.length}건 — 담합·회피 의심',
+        severity: AbuseSeverity.critical,
+        applicationIds: repeatedUnpaid.map((a) => a.id).toList(),
+      ));
+    }
+
+    final repo = await _repo();
+    final verifications = await repo.fetchAttendanceVerifications();
+    final mockAttempts = verifications.where(
+      (v) =>
+          v['isMocked'] == true &&
+          v['companyKey'] == companyKey &&
+          DateTime.tryParse(v['at'] as String? ?? '')?.isAfter(
+                DateTime.now().subtract(const Duration(days: 7)),
+              ) ==
+              true,
+    );
+    if (mockAttempts.isNotEmpty) {
+      alerts.add(AbuseAlert(
+        type: AbuseAlertType.mockLocationAttempt,
+        message: '모의 GPS 출근 시도 ${mockAttempts.length}건 (최근 7일)',
+        severity: AbuseSeverity.high,
+        applicationIds: mockAttempts
+            .map((v) => v['applicationId'] as String? ?? '')
+            .where((id) => id.isNotEmpty)
+            .toList(),
+      ));
+    }
+
     if (alerts.isNotEmpty) {
-      final repo = await _repo();
       for (final alert in alerts) {
         await repo.addAbuseFlag({
           'type': alert.type.name,
@@ -83,6 +118,9 @@ enum AbuseAlertType {
   unpaidCommission,
   offPlatformContact,
   industryFlag,
+  workplaceMismatch,
+  mockLocationAttempt,
+  repeatedCheckInNoPayment,
 }
 
 enum AbuseSeverity { low, medium, high, critical }
@@ -101,18 +139,37 @@ class AbuseAlert {
   final List<String> applicationIds;
 }
 
+extension AbuseDetectionWorkplaceMismatch on AbuseDetectionService {
+  Future<void> reportWorkplaceMismatch({
+    required String companyKey,
+    required String headOfficeAddress,
+    required String workplaceAddress,
+    String? reason,
+    int? distanceMeters,
+  }) async {
+    final repo = await _repo();
+    await repo.addAbuseFlag({
+      'type': AbuseAlertType.workplaceMismatch.name,
+      'severity': AbuseSeverity.high.name,
+      'companyKey': companyKey,
+      'headOfficeAddress': headOfficeAddress,
+      'workplaceAddress': workplaceAddress,
+      if (distanceMeters != null) 'distanceMeters': distanceMeters,
+      'message': reason ?? '실근무지와 사업자 소재지 불일치 감지 — 노출 제한 및 관리자 검토 필요',
+    });
+  }
+}
+
 /// 채팅 메시지 연락처·오프플랫폼 유도 필터
 abstract final class ChatContactFilter {
   static final _phonePattern = RegExp(
     r'(\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4})|(\d{10,11})',
   );
-  static final _kakaoPattern = RegExp(r'카카오|kakao|오픈채팅|open\.kakao', caseSensitive: false);
+  static final _kakaoPattern =
+      RegExp(r'카카오|kakao|오픈채팅|open\.kakao', caseSensitive: false);
   static final _urlPattern = RegExp(r'https?://|www\.', caseSensitive: false);
 
   static String? validateOutbound(String text) {
-    if (_phonePattern.hasMatch(text)) {
-      return '전화번호는 파트너십 가입·출근 확정 후 공개됩니다.';
-    }
     if (_kakaoPattern.hasMatch(text)) {
       return '외부 메신저 유도는 제한됩니다. 플랫폼 내 채팅을 이용해 주세요.';
     }
@@ -121,4 +178,8 @@ abstract final class ChatContactFilter {
     }
     return null;
   }
+
+  /// 채팅에 전화번호가 포함됐는지 (차단하지 않고 감사 로그용)
+  static bool containsPhoneNumber(String text) =>
+      _phonePattern.hasMatch(text);
 }

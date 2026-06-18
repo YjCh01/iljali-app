@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/services/corporate_onboarding_service.dart';
 
 /// 기업회원 가입 직후 — 서비스 차별점 3단계 소개
@@ -23,8 +24,8 @@ class _CorporateWelcomeOnboardingPageState
 
   static List<_OnboardingSlide> get _slides {
     if (ProductFeatureFlags.isPermanentHireEnabled) {
-      return const [
-        _OnboardingSlide(
+      final slides = <_OnboardingSlide>[
+        const _OnboardingSlide(
           icon: Icons.work_outline_rounded,
           title: '일용직·상시직,\n한곳에서 매칭',
           body: '단기 출근이 필요한 날은 일용직 공고로,\n'
@@ -32,23 +33,48 @@ class _CorporateWelcomeOnboardingPageState
               '하나의 기업 계정으로 모두 운영할 수 있습니다.',
         ),
         _OnboardingSlide(
+          icon: Icons.campaign_outlined,
+          title: '일자리 알림핀\n가입 2 + 검증 5',
+          body: '공고 등록은 무료입니다.\n'
+              '가입 시 알림핀 ${PushPackageCatalog.signupBonusPushes}회, '
+              '사업자 인증 완료 시 ${PushPackageCatalog.verificationBonusPushes}회가 '
+              '사업자번호당 지급됩니다.\n'
+              '일자리 알림핀·PUSH 알림권은 이용권 구매로 확장할 수 있습니다.',
+        ),
+        const _OnboardingSlide(
           icon: Icons.map_outlined,
           title: '지도 기반\n스마트 채용',
           body: '근무지 도로명 주소를 기준으로\n'
               '공고 노출 범위 설정으로 주변 구직자에게 공고를 알립니다.\n'
-              '공고 등록은 완전 무료, 추가 모집지역은 지역 푸시권으로 확장하세요.',
-        ),
-        _OnboardingSlide(
-          icon: Icons.verified_user_outlined,
-          title: '투명한 수수료\n·컴플라이언스',
-          body: '일용직은 출근 확인 시, 상시직은 건강보험 재직 확인 후\n'
-              '30일마다 수수료가 정산됩니다.\n'
-              '기본 플랜에서도 지원자 연락·채팅을 이용할 수 있습니다.',
+              '근무지 1km 무료 노출, 일자리 알림핀은 설정 시 이용하세요.',
         ),
       ];
+      if (ProductFeatureFlags.isHiringCommissionEnabled) {
+        slides.add(
+          const _OnboardingSlide(
+            icon: Icons.verified_user_outlined,
+            title: '투명한 수수료\n·컴플라이언스',
+            body: '일용직은 출근 확인 시, 상시직은 건강보험 재직 확인 후\n'
+                '30일마다 수수료가 정산됩니다.\n'
+                '기본 플랜에서도 지원자 연락·채팅을 이용할 수 있습니다.',
+          ),
+        );
+      } else {
+        slides.add(
+          const _OnboardingSlide(
+            icon: Icons.campaign_outlined,
+            title: '노출·도달\n유료 서비스',
+            body: '공고 등록은 무료입니다.\n'
+                '일자리 알림핀·정류장 표시핀으로 지도 노출을 넓히고, '
+                'PUSH 이용권으로 원하는 위치에 바로 알릴 수 있습니다.\n'
+                '공고 작성·수정 화면 하단에서 설정하세요.',
+          ),
+        );
+      }
+      return slides;
     }
-    return const [
-      _OnboardingSlide(
+    return [
+      const _OnboardingSlide(
         icon: Icons.work_outline_rounded,
         title: '일용직 현장,\n한곳에서 매칭',
         body: '물류·식품 공장 등 현장 일용직 공고를\n'
@@ -56,17 +82,28 @@ class _CorporateWelcomeOnboardingPageState
             '도급·아웃소싱 인력 투입에도 활용할 수 있습니다.',
       ),
       _OnboardingSlide(
+        icon: Icons.campaign_outlined,
+        title: '일자리 알림핀\n가입 2 + 검증 5',
+        body: '공고 등록은 무료입니다.\n'
+            '가입 시 알림핀 ${PushPackageCatalog.signupBonusPushes}회, '
+            '사업자 인증 완료 시 ${PushPackageCatalog.verificationBonusPushes}회가 '
+            '사업자번호당 지급됩니다.\n'
+            '일자리 알림핀·PUSH 알림권은 이용권 구매로 확장할 수 있습니다.',
+      ),
+      const _OnboardingSlide(
         icon: Icons.map_outlined,
         title: '지도 기반\n스마트 채용',
         body: '근무지 도로명 주소를 기준으로\n'
             '공고 노출 범위 설정으로 주변 구직자에게 공고를 알립니다.\n'
-            '공고 등록은 완전 무료, 추가 모집지역은 지역 푸시권으로 확장하세요.',
+            '근무지 1km 무료 노출, 일자리 알림핀은 설정 시 이용하세요.',
       ),
-      _OnboardingSlide(
-        icon: Icons.verified_user_outlined,
-        title: '투명한 수수료\n·컴플라이언스',
-        body: '일용직은 출근 확인 시 수수료가 정산됩니다.\n'
-            '기본 플랜에서도 지원자 연락·채팅을 이용할 수 있습니다.',
+      const _OnboardingSlide(
+        icon: Icons.campaign_outlined,
+        title: '노출·도달\n유료 서비스',
+        body: '공고 등록은 무료입니다.\n'
+            '일자리 알림핀·정류장 표시핀으로 지도 노출을 넓히고, '
+            'PUSH 이용권으로 원하는 위치에 바로 알릴 수 있습니다.\n'
+            '공고 작성·수정 화면 하단에서 설정하세요.',
       ),
     ];
   }

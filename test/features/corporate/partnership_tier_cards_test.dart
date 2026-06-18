@@ -24,16 +24,15 @@ void main() {
       ),
     );
 
-    expect(find.text(PushPackageCatalog.defaultPlanLabel), findsOneWidget);
+    expect(find.text('1회'), findsOneWidget);
     expect(find.text('10회 팩'), findsOneWidget);
-    expect(find.textContaining('45,000원 / 반경1km'), findsOneWidget);
-    expect(find.text('30회 팩'), findsOneWidget);
     expect(find.text('100회 팩'), findsOneWidget);
-    expect(find.text('지역 푸시권 보기'), findsOneWidget);
+    expect(find.text('30회 팩'), findsNothing);
+    expect(find.text('일자리 알림핀 보기'), findsOneWidget);
     expect(find.text('BASIC'), findsNothing);
     expect(find.text('Starter'), findsNothing);
 
-    await tester.tap(find.text('지역 푸시권 보기'));
+    await tester.tap(find.text('일자리 알림핀 보기'));
     await tester.pump();
 
     expect(shopTapped, isTrue);

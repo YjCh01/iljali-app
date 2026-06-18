@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/session/auth_session.dart';
@@ -209,7 +210,9 @@ class _CorporateRoiDashboardPageState extends State<CorporateRoiDashboardPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '푸시·구독·출근 수수료를 합산한 실제 지출입니다.',
+                                ProductFeatureFlags.isHiringCommissionEnabled
+                                    ? 'PUSH·구독·출근 수수료를 합산한 실제 지출입니다.'
+                                    : 'PUSH·구독 등 노출·도달 유료 서비스 지출입니다.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   height: 1.4,
@@ -219,7 +222,7 @@ class _CorporateRoiDashboardPageState extends State<CorporateRoiDashboardPage> {
                               ),
                               const SizedBox(height: 10),
                               _MetricRow(
-                                label: '푸시',
+                                label: 'PUSH',
                                 value: metrics.pushSpendKrw > 0
                                     ? '${_formatKrw(metrics.pushSpendKrw)}원'
                                     : '—',
@@ -230,12 +233,13 @@ class _CorporateRoiDashboardPageState extends State<CorporateRoiDashboardPage> {
                                     ? '${_formatKrw(metrics.subscriptionSpendKrw)}원'
                                     : '—',
                               ),
-                              _MetricRow(
-                                label: '출근 수수료',
-                                value: metrics.commissionSpendKrw > 0
-                                    ? '${_formatKrw(metrics.commissionSpendKrw)}원'
-                                    : '—',
-                              ),
+                              if (ProductFeatureFlags.isHiringCommissionEnabled)
+                                _MetricRow(
+                                  label: '출근 수수료',
+                                  value: metrics.commissionSpendKrw > 0
+                                      ? '${_formatKrw(metrics.commissionSpendKrw)}원'
+                                      : '—',
+                                ),
                             ],
                           ),
                         ),
@@ -576,7 +580,9 @@ class _BranchRoiTile extends StatelessWidget {
                     ? '${_krw(row.commissionSpendKrw)}원'
                     : '—',
               ),
-              if (row.savingsVsBasicKrw > 0 && row.checkIns > 0)
+              if (ProductFeatureFlags.isHiringCommissionEnabled &&
+                  row.savingsVsBasicKrw > 0 &&
+                  row.checkIns > 0)
                 _BranchStatChip(
                   label: '플랜 절감',
                   value: '${_krw(row.savingsVsBasicKrw)}원',

@@ -1,5 +1,6 @@
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
+import 'package:map/features/attendance/domain/entities/check_in_method.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 
 /// 지원·채팅·예정자·출근·수수료까지 이어지는 채용 건
@@ -18,6 +19,7 @@ class HiringApplication {
     this.employmentType = JobEmploymentType.daily,
     this.workDate,
     this.companyKey,
+    this.recruiterEmail,
     this.branchId,
     this.branchName,
     this.workplaceLatitude,
@@ -31,6 +33,24 @@ class HiringApplication {
     this.commissionPaidAt,
     this.commissionDueAt,
     this.escalationLevel = 0,
+    this.seekerWorkAgreedAt,
+    this.employerWorkAgreedAt,
+    this.noShowMarkedAt,
+    this.agreementCancelledAt,
+    this.scheduleChangedAt,
+    this.selectedShiftDate,
+    this.shiftSlot,
+    this.shuttleBookingId,
+    this.preferredStopId,
+    this.checkedOutAt,
+    this.checkInMethod,
+    this.seekerClockInVerifiedAt,
+    this.employerClockInVerifiedAt,
+    this.employerClockInLatitude,
+    this.employerClockInLongitude,
+    this.geofenceVerified = false,
+    this.seekerGeofenceDistanceM,
+    this.employerGeofenceDistanceM,
   });
 
   final String id;
@@ -46,6 +66,9 @@ class HiringApplication {
   final JobEmploymentType employmentType;
   final DateTime? workDate;
   final String? companyKey;
+
+  /// 공고 등록·출근 확인 담당자 이메일 (결제 위임·라우팅용)
+  final String? recruiterEmail;
   final String? branchId;
   final String? branchName;
   final double? workplaceLatitude;
@@ -59,6 +82,39 @@ class HiringApplication {
   final DateTime? commissionPaidAt;
   final DateTime? commissionDueAt;
   final int escalationLevel;
+  final DateTime? seekerWorkAgreedAt;
+  final DateTime? employerWorkAgreedAt;
+  final DateTime? noShowMarkedAt;
+  final DateTime? agreementCancelledAt;
+  final DateTime? scheduleChangedAt;
+
+  /// 희망 근무일 (ISO yyyy-MM-dd)
+  final String? selectedShiftDate;
+
+  /// day | night | any
+  final String? shiftSlot;
+  final String? shuttleBookingId;
+  final String? preferredStopId;
+  final DateTime? checkedOutAt;
+  final CheckInMethod? checkInMethod;
+
+  /// 구직자 지오펜스 출근 확인 시각
+  final DateTime? seekerClockInVerifiedAt;
+
+  /// 기업 지오펜스 출근 확인 시각
+  final DateTime? employerClockInVerifiedAt;
+
+  final double? employerClockInLatitude;
+  final double? employerClockInLongitude;
+
+  /// 쌍방 지오펜스 검증 완료 (상호 출근 확인 시 true)
+  final bool geofenceVerified;
+
+  final double? seekerGeofenceDistanceM;
+  final double? employerGeofenceDistanceM;
+
+  bool get isWorkAgreementComplete =>
+      seekerWorkAgreedAt != null && employerWorkAgreedAt != null;
 
   bool get isScheduled =>
       status == HiringApplicationStatus.scheduled ||
@@ -70,8 +126,23 @@ class HiringApplication {
   bool get employerConfirmed => employerConfirmedAt != null;
 
   bool get isMutuallyConfirmed =>
-      mutuallyConfirmedAt != null ||
-      (status == HiringApplicationStatus.checkedIn && checkedInAt != null);
+      mutuallyConfirmedAt != null &&
+      seekerCheckedIn &&
+      employerConfirmed;
+
+  /// 지오펜스 요건 충족 (레거시·좌표 없음·완화 환경 포함)
+  bool get isGeofenceRequirementMet {
+    if (!hasWorkplaceCoordinate) return true;
+    if (geofenceVerified) return true;
+    // 레거시: 지오펜스 도입 전 상호 확인 건
+    if (mutuallyConfirmedAt != null &&
+        seekerClockInVerifiedAt == null &&
+        employerClockInVerifiedAt == null) {
+      return true;
+    }
+    return seekerClockInVerifiedAt != null &&
+        employerClockInVerifiedAt != null;
+  }
 
   bool get awaitingEmployerConfirm =>
       seekerCheckedIn && !employerConfirmed && !isMutuallyConfirmed;
@@ -82,6 +153,7 @@ class HiringApplication {
   bool get needsCommissionPayment =>
       employmentType == JobEmploymentType.daily &&
       isMutuallyConfirmed &&
+      isGeofenceRequirementMet &&
       status == HiringApplicationStatus.checkedIn &&
       commissionPaidAt == null;
 
@@ -100,10 +172,12 @@ class HiringApplication {
       employmentType == JobEmploymentType.permanent;
 
   HiringApplication copyWith({
+    String? seekerPhoneMasked,
     HiringApplicationStatus? status,
     DateTime? workDate,
     JobEmploymentType? employmentType,
     String? companyKey,
+    String? recruiterEmail,
     String? branchId,
     String? branchName,
     double? workplaceLatitude,
@@ -117,6 +191,29 @@ class HiringApplication {
     DateTime? commissionPaidAt,
     DateTime? commissionDueAt,
     int? escalationLevel,
+    DateTime? seekerWorkAgreedAt,
+    DateTime? employerWorkAgreedAt,
+    DateTime? noShowMarkedAt,
+    DateTime? agreementCancelledAt,
+    DateTime? scheduleChangedAt,
+    String? selectedShiftDate,
+    String? shiftSlot,
+    String? shuttleBookingId,
+    String? preferredStopId,
+    DateTime? checkedOutAt,
+    CheckInMethod? checkInMethod,
+    DateTime? seekerClockInVerifiedAt,
+    DateTime? employerClockInVerifiedAt,
+    double? employerClockInLatitude,
+    double? employerClockInLongitude,
+    bool? geofenceVerified,
+    double? seekerGeofenceDistanceM,
+    double? employerGeofenceDistanceM,
+    bool clearSeekerWorkAgreedAt = false,
+    bool clearEmployerWorkAgreedAt = false,
+    bool clearNoShowMarkedAt = false,
+    bool clearAgreementCancelledAt = false,
+    bool clearScheduleChangedAt = false,
   }) {
     return HiringApplication(
       id: id,
@@ -125,13 +222,14 @@ class HiringApplication {
       companyName: companyName,
       seekerEmail: seekerEmail,
       seekerName: seekerName,
-      seekerPhoneMasked: seekerPhoneMasked,
+      seekerPhoneMasked: seekerPhoneMasked ?? this.seekerPhoneMasked,
       appliedAt: appliedAt,
       status: status ?? this.status,
       workSchedule: workSchedule,
       employmentType: employmentType ?? this.employmentType,
       workDate: workDate ?? this.workDate,
       companyKey: companyKey ?? this.companyKey,
+      recruiterEmail: recruiterEmail ?? this.recruiterEmail,
       branchId: branchId ?? this.branchId,
       branchName: branchName ?? this.branchName,
       workplaceLatitude: workplaceLatitude ?? this.workplaceLatitude,
@@ -145,6 +243,39 @@ class HiringApplication {
       commissionPaidAt: commissionPaidAt ?? this.commissionPaidAt,
       commissionDueAt: commissionDueAt ?? this.commissionDueAt,
       escalationLevel: escalationLevel ?? this.escalationLevel,
+      seekerWorkAgreedAt: clearSeekerWorkAgreedAt
+          ? null
+          : (seekerWorkAgreedAt ?? this.seekerWorkAgreedAt),
+      employerWorkAgreedAt: clearEmployerWorkAgreedAt
+          ? null
+          : (employerWorkAgreedAt ?? this.employerWorkAgreedAt),
+      noShowMarkedAt:
+          clearNoShowMarkedAt ? null : (noShowMarkedAt ?? this.noShowMarkedAt),
+      agreementCancelledAt: clearAgreementCancelledAt
+          ? null
+          : (agreementCancelledAt ?? this.agreementCancelledAt),
+      scheduleChangedAt: clearScheduleChangedAt
+          ? null
+          : (scheduleChangedAt ?? this.scheduleChangedAt),
+      selectedShiftDate: selectedShiftDate ?? this.selectedShiftDate,
+      shiftSlot: shiftSlot ?? this.shiftSlot,
+      shuttleBookingId: shuttleBookingId ?? this.shuttleBookingId,
+      preferredStopId: preferredStopId ?? this.preferredStopId,
+      checkedOutAt: checkedOutAt ?? this.checkedOutAt,
+      checkInMethod: checkInMethod ?? this.checkInMethod,
+      seekerClockInVerifiedAt:
+          seekerClockInVerifiedAt ?? this.seekerClockInVerifiedAt,
+      employerClockInVerifiedAt:
+          employerClockInVerifiedAt ?? this.employerClockInVerifiedAt,
+      employerClockInLatitude:
+          employerClockInLatitude ?? this.employerClockInLatitude,
+      employerClockInLongitude:
+          employerClockInLongitude ?? this.employerClockInLongitude,
+      geofenceVerified: geofenceVerified ?? this.geofenceVerified,
+      seekerGeofenceDistanceM:
+          seekerGeofenceDistanceM ?? this.seekerGeofenceDistanceM,
+      employerGeofenceDistanceM:
+          employerGeofenceDistanceM ?? this.employerGeofenceDistanceM,
     );
   }
 
@@ -162,6 +293,7 @@ class HiringApplication {
         'employmentType': employmentType.name,
         'workDate': workDate?.toIso8601String(),
         'companyKey': companyKey,
+        if (recruiterEmail != null) 'recruiterEmail': recruiterEmail,
         'branchId': branchId,
         'branchName': branchName,
         'workplaceLatitude': workplaceLatitude,
@@ -175,6 +307,25 @@ class HiringApplication {
         'commissionPaidAt': commissionPaidAt?.toIso8601String(),
         'commissionDueAt': commissionDueAt?.toIso8601String(),
         'escalationLevel': escalationLevel,
+        'seekerWorkAgreedAt': seekerWorkAgreedAt?.toIso8601String(),
+        'employerWorkAgreedAt': employerWorkAgreedAt?.toIso8601String(),
+        'noShowMarkedAt': noShowMarkedAt?.toIso8601String(),
+        'agreementCancelledAt': agreementCancelledAt?.toIso8601String(),
+        'scheduleChangedAt': scheduleChangedAt?.toIso8601String(),
+        if (selectedShiftDate != null) 'selectedShiftDate': selectedShiftDate,
+        if (shiftSlot != null) 'shiftSlot': shiftSlot,
+        if (shuttleBookingId != null) 'shuttleBookingId': shuttleBookingId,
+        if (preferredStopId != null) 'preferredStopId': preferredStopId,
+        'checkedOutAt': checkedOutAt?.toIso8601String(),
+        if (checkInMethod != null) 'checkInMethod': checkInMethod!.code,
+        'seekerClockInVerifiedAt': seekerClockInVerifiedAt?.toIso8601String(),
+        'employerClockInVerifiedAt':
+            employerClockInVerifiedAt?.toIso8601String(),
+        'employerClockInLatitude': employerClockInLatitude,
+        'employerClockInLongitude': employerClockInLongitude,
+        'geofenceVerified': geofenceVerified,
+        'seekerGeofenceDistanceM': seekerGeofenceDistanceM,
+        'employerGeofenceDistanceM': employerGeofenceDistanceM,
       };
 
   factory HiringApplication.fromJson(Map<String, dynamic> json) {
@@ -197,6 +348,7 @@ class HiringApplication {
       ),
       workDate: DateTime.tryParse(json['workDate'] as String? ?? ''),
       companyKey: json['companyKey'] as String?,
+      recruiterEmail: json['recruiterEmail'] as String?,
       branchId: json['branchId'] as String?,
       branchName: json['branchName'] as String?,
       workplaceLatitude: (json['workplaceLatitude'] as num?)?.toDouble(),
@@ -213,6 +365,37 @@ class HiringApplication {
           DateTime.tryParse(json['commissionPaidAt'] as String? ?? ''),
       commissionDueAt: DateTime.tryParse(json['commissionDueAt'] as String? ?? ''),
       escalationLevel: json['escalationLevel'] as int? ?? 0,
+      seekerWorkAgreedAt:
+          DateTime.tryParse(json['seekerWorkAgreedAt'] as String? ?? ''),
+      employerWorkAgreedAt:
+          DateTime.tryParse(json['employerWorkAgreedAt'] as String? ?? ''),
+      noShowMarkedAt: DateTime.tryParse(json['noShowMarkedAt'] as String? ?? ''),
+      agreementCancelledAt:
+          DateTime.tryParse(json['agreementCancelledAt'] as String? ?? ''),
+      scheduleChangedAt:
+          DateTime.tryParse(json['scheduleChangedAt'] as String? ?? ''),
+      selectedShiftDate: json['selectedShiftDate'] as String?,
+      shiftSlot: json['shiftSlot'] as String?,
+      shuttleBookingId: json['shuttleBookingId'] as String?,
+      preferredStopId: json['preferredStopId'] as String?,
+      checkedOutAt: DateTime.tryParse(json['checkedOutAt'] as String? ?? ''),
+      checkInMethod:
+          CheckInMethod.fromCode(json['checkInMethod'] as String?),
+      seekerClockInVerifiedAt: DateTime.tryParse(
+        json['seekerClockInVerifiedAt'] as String? ?? '',
+      ),
+      employerClockInVerifiedAt: DateTime.tryParse(
+        json['employerClockInVerifiedAt'] as String? ?? '',
+      ),
+      employerClockInLatitude:
+          (json['employerClockInLatitude'] as num?)?.toDouble(),
+      employerClockInLongitude:
+          (json['employerClockInLongitude'] as num?)?.toDouble(),
+      geofenceVerified: json['geofenceVerified'] as bool? ?? false,
+      seekerGeofenceDistanceM:
+          (json['seekerGeofenceDistanceM'] as num?)?.toDouble(),
+      employerGeofenceDistanceM:
+          (json['employerGeofenceDistanceM'] as num?)?.toDouble(),
     );
   }
 }

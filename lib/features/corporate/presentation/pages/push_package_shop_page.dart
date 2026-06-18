@@ -1,17 +1,19 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/core/widgets/push_wallet_bonus_feedback.dart';
+import 'package:map/core/widgets/transient_snack_bar.dart';
 import 'package:map/features/corporate/domain/entities/payment_method.dart';
 import 'package:map/features/corporate/domain/entities/payment_method_option.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/services/push_package_purchase_service.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
-import 'package:map/features/corporate/presentation/widgets/map_pin_tier_preview.dart';
+import 'package:map/features/corporate/presentation/pages/corporate_tax_documents_page.dart';
 import 'package:map/features/corporate/presentation/widgets/payment/payment_amount_breakdown.dart';
 import 'package:map/features/corporate/presentation/widgets/payment/payment_method_selection_section.dart';
 
-/// 푸시·거점 패키지 상점 (단품 + 번들)
+/// PUSH·거점 패키지 상점 (단품 + 번들)
 class PushPackageShopPage extends StatefulWidget {
   const PushPackageShopPage({super.key, this.initialOfferId});
 
@@ -27,25 +29,30 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
 
   late PushPackageBundleOffer _selected;
   PaymentMethod _method = PaymentMethodCatalog.defaultMethod;
-  int _singleQuantity = 1;
+  int _purchaseQuantity = 1;
   bool _processing = false;
   String? _error;
-  String? _walletSummary;
 
   @override
   void initState() {
     super.initState();
     _selected = PushPackageCatalog.findById(widget.initialOfferId ?? '') ??
-        PushPackageCatalog.allOffers.first;
+        PushPackageCatalog.jobPinOffers.first;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      clearSnackBarQueue(context);
+    });
     _loadWallet();
   }
 
-  Future<void> _loadWallet() async {
+  Future<void> _loadWallet({bool showBonusSnackBar = true}) async {
     final profile = AuthSession.instance.currentUser?.corporateProfile;
     if (profile == null) return;
-    final wallet = await _walletService.loadWallet(profile);
+    final outcome = await _walletService.loadWalletDetailed(profile);
     if (!mounted) return;
-    setState(() => _walletSummary = PushWalletService.walletSummary(wallet));
+    if (showBonusSnackBar) {
+      showPushWalletBonusSnackBar(context, outcome);
+    }
   }
 
   Future<void> _purchase() async {
@@ -72,15 +79,16 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
     setState(() => _processing = false);
 
     if (result.success) {
-      await _loadWallet();
+      await _loadWallet(showBonusSnackBar: false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.message ??
-                '지역 푸시권 $_checkoutQuantity회가 충전되었습니다. 바로 모집할 수 있어요.',
-          ),
-          behavior: SnackBarBehavior.floating,
+      clearSnackBarQueue(context);
+      showTransientSnackBar(
+        context,
+        result.message ??
+            '${_selected.productName} $_checkoutQuantity회가 지갑에 충전되었습니다.',
+        action: SnackBarAction(
+          label: '증빙',
+          onPressed: () => openCorporateTaxDocuments(context),
         ),
       );
       Navigator.of(context).pop(true);
@@ -90,22 +98,27 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
     setState(() => _error = result.message);
   }
 
-  bool get _isSingleSelected =>
-      _selected.id == PushPackageCatalog.singlePackageId;
+  bool get _supportsQuantityStepper => _selected.supportsQuantitySelector;
 
-  int get _checkoutQuantity => _isSingleSelected ? _singleQuantity : 1;
+  int get _checkoutQuantity =>
+      _supportsQuantityStepper ? _purchaseQuantity : 1;
 
-  int get _checkoutTotalKrw => _isSingleSelected
-      ? PushPackageCatalog.singlePackagePriceKrw * _singleQuantity
-      : _selected.priceKrw;
+  int get _checkoutTotalKrw => _selected.priceKrw * _checkoutQuantity;
 
   String get _checkoutProductLabel => _checkoutQuantity > 1
       ? '${_selected.productName} ×$_checkoutQuantity'
       : _selected.productName;
 
-  void _changeSingleQuantity(int delta) {
+  void _changePurchaseQuantity(int delta) {
     setState(() {
-      _singleQuantity = (_singleQuantity + delta).clamp(1, 99);
+      _purchaseQuantity = (_purchaseQuantity + delta).clamp(1, 99);
+    });
+  }
+
+  void _selectOffer(PushPackageBundleOffer offer) {
+    setState(() {
+      _selected = offer;
+      _purchaseQuantity = 1;
     });
   }
 
@@ -119,7 +132,7 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
         elevation: 0,
         leading: const AppBackButton(),
         automaticallyImplyLeading: false,
-        title: const Text('지역 푸시권'),
+        title: const Text('이용권 상점'),
       ),
       body: Column(
         children: [
@@ -128,239 +141,42 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
               padding: const EdgeInsets.all(20),
               children: [
                 const Text(
-                  '지역 푸시권',
+                  '이용권 상점',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '지역 푸시권 1회 = 추가 모집지역 푸시 1곳 (1km). '
-                  '근무지 ${PushPackageCatalog.pushRadiusLabel}는 기본 포함 · '
-                  '하루 ${PushPackageCatalog.dailyFreePush}회 무료 푸시 · 공고 등록 무료.',
+                  '결제 후 이용권이 지갑에 충전됩니다. '
+                  '노출 활성화·PUSH 발송은 공고목록에서 진행하세요.\n'
+                  '근무지 ${PushPackageCatalog.pushRadiusLabel}는 공고 등록 시 기본 포함 · '
+                  '노출 종료 ${PushPackageCatalog.exposureEndsLabel}.',
                   style: TextStyle(
                     fontSize: 14,
                     height: 1.45,
                     color: AppColors.textSecondary.withValues(alpha: 0.95),
                   ),
                 ),
-                if (_walletSummary != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '현재 · $_walletSummary',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: AppColors.searchBarBorder,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        '지도 핀 노출 등급',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary.withValues(alpha: 0.95),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '공고는 채용 완료까지 지도에 핀으로 노출됩니다. '
-                        '100회 팩 구매 시 모든 공고가 황금핀(◆)으로 표시됩니다.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.4,
-                          color: AppColors.textSecondary.withValues(alpha: 0.95),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const MapPinTierPreviewRow(),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 20),
-                ...PushPackageCatalog.allOffers.map((offer) {
-                  final selected = offer.id == _selected.id;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _processing
-                            ? null
-                            : () => setState(() => _selected = offer),
-                        borderRadius: BorderRadius.circular(14),
-                        child: Ink(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: selected
-                                  ? AppColors.primary
-                                  : Colors.grey.withValues(alpha: 0.25),
-                              width: selected ? 2 : 1,
-                            ),
-                            color: selected
-                                ? AppColors.primaryLight.withValues(alpha: 0.12)
-                                : AppColors.surface,
-                          ),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      offer.label,
-                                      style: const TextStyle(
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                  if (offer.discountPercent > 0)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE8FBEA),
-                                        borderRadius: BorderRadius.circular(999),
-                                        border: Border.all(
-                                          color: const Color(0xFF34D399)
-                                              .withValues(alpha: 0.6),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.sell_outlined,
-                                            size: 14,
-                                            color: Colors.green.shade700,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '-${offer.discountPercent}%',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w800,
-                                              color: Colors.green.shade800,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  if (selected) ...[
-                                    const SizedBox(width: 8),
-                                    const Icon(
-                                      Icons.check_circle_rounded,
-                                      color: AppColors.primary,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                offer.packageCount == 1
-                                    ? offer.marketingLine
-                                    : offer.cardDetailLine,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary
-                                      .withValues(alpha: 0.95),
-                                ),
-                              ),
-                              if (offer.packageCount == 1) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  offer.priceLabel,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                if (selected) const SizedBox(height: 36),
-                              ],
-                              if (offer.extraBenefitLines.isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                ...offer.extraBenefitLines.map(
-                                  (line) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Icon(
-                                          Icons.auto_awesome,
-                                          size: 14,
-                                          color: const Color(0xFFFFB800),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Expanded(
-                                          child: Text(
-                                            line,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              height: 1.35,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.textPrimary
-                                                  .withValues(alpha: 0.9),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                              ),
-                              if (offer.packageCount == 1 && selected)
-                                Positioned(
-                                  right: 0,
-                                  bottom: 0,
-                                  child: GestureDetector(
-                                    onTap: () {},
-                                    child: _PackageQuantityStepper(
-                                    quantity: _singleQuantity,
-                                    onDecrement: _processing
-                                        ? null
-                                        : () => _changeSingleQuantity(-1),
-                                    onIncrement: _processing
-                                        ? null
-                                        : () => _changeSingleQuantity(1),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
+                for (final section in PushPackageCatalog.shopSections) ...[
+                  _ShopSectionHeader(title: section.title),
+                  const SizedBox(height: 10),
+                  ...PushPackageCatalog.resolveShopSectionOffers(section).map(
+                    (offer) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _OfferCard(
+                        offer: offer,
+                        selected: offer.id == _selected.id,
+                        processing: _processing,
+                        purchaseQuantity: _purchaseQuantity,
+                        onTap: () => _selectOffer(offer),
+                        onDecrement: () => _changePurchaseQuantity(-1),
+                        onIncrement: () => _changePurchaseQuantity(1),
                       ),
                     ),
-                  );
-                }),
-                const SizedBox(height: 12),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                const SizedBox(height: 4),
                 PaymentMethodSelectionSection(
                   selectedMethod: _method,
                   onMethodSelected:
@@ -383,28 +199,203 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
             ],
             totalKrw: _checkoutTotalKrw,
             totalLabel: '총 결제금액',
-          ),
-          Container(
-            color: AppColors.surface,
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            child: SafeArea(
-              top: false,
-              child: FilledButton(
-                onPressed: _processing ? null : _purchase,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(52),
+            action: FilledButton(
+              onPressed: _processing ? null : _purchase,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(52),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Text(
-                  _processing
-                      ? '결제 중...'
-                      : '${PushPackageCatalog.krwSuffix(_checkoutTotalKrw)} · ${_selected.label} 구매',
-                ),
+              ),
+              child: Text(
+                _processing
+                    ? '결제 중...'
+                    : '${PushPackageCatalog.krwSuffix(_checkoutTotalKrw)} · '
+                        '${_selected.productName} 구매',
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ShopSectionHeader extends StatelessWidget {
+  const _ShopSectionHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        color: AppColors.textPrimary,
+      ),
+    );
+  }
+}
+
+class _OfferCard extends StatelessWidget {
+  const _OfferCard({
+    required this.offer,
+    required this.selected,
+    required this.processing,
+    required this.purchaseQuantity,
+    required this.onTap,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  final PushPackageBundleOffer offer;
+  final bool selected;
+  final bool processing;
+  final int purchaseQuantity;
+  final VoidCallback onTap;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayTitle =
+        offer.packageCount == 1 ? offer.productName : offer.label;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: processing ? null : onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? AppColors.primary
+                  : Colors.grey.withValues(alpha: 0.25),
+              width: selected ? 2 : 1,
+            ),
+            color: selected
+                ? AppColors.primaryLight.withValues(alpha: 0.12)
+                : AppColors.surface,
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          displayTitle,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      if (offer.discountPercent > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8FBEA),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: const Color(0xFF34D399)
+                                  .withValues(alpha: 0.6),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.sell_outlined,
+                                size: 14,
+                                color: Colors.green.shade700,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '-${offer.discountPercent}%',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.green.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (selected) ...[
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.primary,
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (offer.packageCount == 1 &&
+                      offer.marketingLine.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      offer.marketingLine,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color:
+                            AppColors.textSecondary.withValues(alpha: 0.95),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    offer.priceLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (selected) const SizedBox(height: 36),
+                  if (offer.extraBenefitLines.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    ...offer.extraBenefitLines.map(
+                      (line) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          line,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.35,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                AppColors.textPrimary.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (offer.supportsQuantitySelector && selected)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: _PackageQuantityStepper(
+                    quantity: purchaseQuantity,
+                    onDecrement: processing ? null : onDecrement,
+                    onIncrement: processing ? null : onIncrement,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

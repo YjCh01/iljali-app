@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 
 import 'package:intl/intl.dart';
 import 'package:map/features/corporate/domain/services/roi_metrics_service.dart';
@@ -96,7 +96,7 @@ class RoiPdfService {
           ],
           row('지원 건수', '${metrics.applications}건'),
           row('출근 확인', '${metrics.checkIns}건'),
-          row('푸시 비용', '${_krw.format(metrics.pushSpendKrw)}원'),
+          row('PUSH 비용', '${_krw.format(metrics.pushSpendKrw)}원'),
           row('파트너십 비용', '${_krw.format(metrics.subscriptionSpendKrw)}원'),
           row('출근 수수료(실제/추정)', '${_krw.format(metrics.commissionSpendKrw)}원'),
           row(
@@ -143,7 +143,7 @@ class RoiPdfService {
           pw.SizedBox(height: 16),
           pw.Text(
             '본 문서는 일자리 앱 ROI 대시보드에서 자동 생성되었습니다. '
-            '지역 푸시권 비용과 출근 확인 수수료(10,000원/건 기준) 절감 효과를 내부 보고용으로 활용하세요.',
+            '일자리 알림핀 비용과 출근 확인 수수료(10,000원/건 기준) 절감 효과를 내부 보고용으로 활용하세요.',
             style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey600),
           ),
         ],

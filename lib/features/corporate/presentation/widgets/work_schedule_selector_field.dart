@@ -4,6 +4,7 @@ import 'package:map/core/widgets/korean_calendar.dart';
 import 'package:map/core/widgets/scroll_time_picker.dart';
 import 'package:map/features/corporate/domain/entities/work_schedule_spec.dart';
 import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
+import 'package:map/features/corporate/presentation/widgets/work_schedule_field_preview.dart';
 
 /// 근무 일정 선택 — 요일 고정 / 교대 순환 / 날짜 맞춤 / 일용직 날짜 선택
 class WorkScheduleSelectorField extends StatefulWidget {
@@ -11,11 +12,14 @@ class WorkScheduleSelectorField extends StatefulWidget {
     super.key,
     required this.controller,
     this.dailyOnly = false,
+    this.onDailyScheduleCommitted,
   });
 
   final TextEditingController controller;
   /// 일용직 — 탭 없이 달력에서 근무일만 하루씩 선택
   final bool dailyOnly;
+  /// 일용직 근무일 적용 시 부모에 알림 (급여지급일 자동 설정 등)
+  final VoidCallback? onDailyScheduleCommitted;
 
   @override
   State<WorkScheduleSelectorField> createState() =>
@@ -24,6 +28,7 @@ class WorkScheduleSelectorField extends StatefulWidget {
 
 class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
   WorkScheduleSpec _spec = WorkScheduleSpec();
+  bool _previewExpanded = false;
 
   static const _monFri = {0, 1, 2, 3, 4};
   static const _monSat = {0, 1, 2, 3, 4, 5};
@@ -45,6 +50,7 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
 
   void _onExternalChange() {
     _loadFromController();
+    _previewExpanded = false;
     if (mounted) setState(() {});
   }
 
@@ -100,13 +106,10 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
       _spec = _spec.withDerivedDailyBounds();
     }
     widget.controller.text = WorkScheduleCodec.encode(_spec);
+    if (_spec.mode == WorkScheduleMode.dailyPick) {
+      widget.onDailyScheduleCommitted?.call();
+    }
     setState(() {});
-  }
-
-  String _fieldLabel() {
-    final committed = widget.controller.text.trim();
-    if (committed.isNotEmpty) return committed;
-    return widget.dailyOnly ? '근무일 선택' : '근무 일정 선택';
   }
 
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -224,6 +227,8 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
   void _toggleDailyWorkDay(DateTime day) {
     final normalized = _dateOnly(day);
     final dates = Set<DateTime>.from(_spec.selectedWorkDates);
+    final hours = Map<String, DailyDayHours>.from(_spec.dailyHoursByDate);
+    final key = WorkScheduleSpec.dateKey(normalized);
     final exists = dates.any(
       (d) =>
           d.year == normalized.year &&
@@ -237,10 +242,20 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
             d.month == normalized.month &&
             d.day == normalized.day,
       );
+      hours.remove(key);
     } else {
       dates.add(normalized);
+      hours[key] = DailyDayHours(
+        start: _spec.dayStart,
+        end: _spec.dayEnd,
+      );
     }
-    _spec = _spec.copyWith(selectedWorkDates: dates).withDerivedDailyBounds();
+    _spec = _spec
+        .copyWith(
+          selectedWorkDates: dates,
+          dailyHoursByDate: hours,
+        )
+        .withDerivedDailyBounds();
   }
 
   void _selectDay(BuildContext context, DateTime day) {
@@ -301,16 +316,33 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
   Future<void> _pickTime({
     required bool isStart,
     required bool isNight,
+    DateTime? dailyDate,
   }) async {
-    final initial = isNight
-        ? (isStart ? _spec.nightStart : _spec.nightEnd)
-        : (isStart ? _spec.dayStart : _spec.dayEnd);
+    final initial = dailyDate != null
+        ? () {
+            final hours = _spec.hoursForDate(dailyDate);
+            return isStart ? hours.start : hours.end;
+          }()
+        : isNight
+            ? (isStart ? _spec.nightStart : _spec.nightEnd)
+            : (isStart ? _spec.dayStart : _spec.dayEnd);
     final picked = await showScrollTimePicker(
       context: context,
       initialTime: initial,
     );
     if (picked == null) return;
     setState(() {
+      if (dailyDate != null) {
+        final key = WorkScheduleSpec.dateKey(dailyDate);
+        final current = _spec.hoursForDate(dailyDate);
+        final next = isStart
+            ? current.copyWith(start: picked)
+            : current.copyWith(end: picked);
+        final hours = Map<String, DailyDayHours>.from(_spec.dailyHoursByDate)
+          ..[key] = next;
+        _spec = _spec.copyWith(dailyHoursByDate: hours);
+        return;
+      }
       if (isNight) {
         _spec = _spec.copyWith(
           nightStart: isStart ? picked : _spec.nightStart,
@@ -726,22 +758,146 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              await _pickTime(isStart: true, isNight: false);
-                              refresh();
-                            },
-                            icon: const Icon(Icons.wb_sunny_outlined, size: 18),
-                            label: Text(
-                              '주 ${_padTime(_spec.dayStart)}~${_padTime(_spec.dayEnd)}',
-                            ),
+                    if (isDaily) ...[
+                      if (_spec.selectedWorkDates.isEmpty)
+                        Text(
+                          '근무일을 선택하면 날짜별 시간을 설정할 수 있습니다.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary.withValues(alpha: 0.9),
+                          ),
+                        )
+                      else
+                        Text(
+                          '날짜마다 근무 시간을 다르게 설정할 수 있습니다.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary.withValues(alpha: 0.9),
                           ),
                         ),
-                      ],
-                    ),
+                      const SizedBox(height: 8),
+                      if (_spec.selectedWorkDates.isEmpty) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await _pickTime(isStart: true, isNight: false);
+                                  refresh();
+                                },
+                                icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+                                label: Text('기본 시작 ${_padTime(_spec.dayStart)}'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await _pickTime(isStart: false, isNight: false);
+                                  refresh();
+                                },
+                                icon: const Icon(Icons.schedule_outlined, size: 18),
+                                label: Text('기본 종료 ${_padTime(_spec.dayEnd)}'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else
+                        ...(() {
+                          final sorted = _spec.selectedWorkDates.toList()
+                            ..sort((a, b) => a.compareTo(b));
+                          return sorted.map((date) {
+                            final hours = _spec.hoursForDate(date);
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    WorkSchedulePreviewFormatter.formatChipDate(
+                                      date,
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: () async {
+                                            await _pickTime(
+                                              isStart: true,
+                                              isNight: false,
+                                              dailyDate: date,
+                                            );
+                                            refresh();
+                                          },
+                                          icon: const Icon(
+                                            Icons.wb_sunny_outlined,
+                                            size: 18,
+                                          ),
+                                          label: Text(
+                                            '시작 ${_padTime(hours.start)}',
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: () async {
+                                            await _pickTime(
+                                              isStart: false,
+                                              isNight: false,
+                                              dailyDate: date,
+                                            );
+                                            refresh();
+                                          },
+                                          icon: const Icon(
+                                            Icons.schedule_outlined,
+                                            size: 18,
+                                          ),
+                                          label: Text(
+                                            '종료 ${_padTime(hours.end)}',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          });
+                        })(),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await _pickTime(isStart: true, isNight: false);
+                                refresh();
+                              },
+                              icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+                              label: Text('시작 ${_padTime(_spec.dayStart)}'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await _pickTime(isStart: false, isNight: false);
+                                refresh();
+                              },
+                              icon: const Icon(Icons.schedule_outlined, size: 18),
+                              label: Text('종료 ${_padTime(_spec.dayEnd)}'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     if (!isDaily && _spec.mode == WorkScheduleMode.rotatingShift) ...[
                       const SizedBox(height: 8),
                       Row(
@@ -754,9 +910,19 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                               },
                               icon: const Icon(Icons.nightlight_round,
                                   size: 18),
-                              label: Text(
-                                '야 ${_padTime(_spec.nightStart)}~${_padTime(_spec.nightEnd)}',
-                              ),
+                              label: Text('야간 시작 ${_padTime(_spec.nightStart)}'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await _pickTime(isStart: false, isNight: true);
+                                refresh();
+                              },
+                              icon: const Icon(Icons.schedule_outlined,
+                                  size: 18),
+                              label: Text('야간 종료 ${_padTime(_spec.nightEnd)}'),
                             ),
                           ),
                         ],
@@ -827,57 +993,88 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
 
   @override
   Widget build(BuildContext context) {
-    final label = _fieldLabel();
-    final hasValue = widget.controller.text.trim().isNotEmpty;
+    final raw = widget.controller.text.trim();
+    final hasValue = raw.isNotEmpty;
+    final previewModel = WorkSchedulePreviewFormatter.fromRaw(raw);
+    final needsExpand = previewModel?.needsExpand ?? false;
 
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: _openSheet,
-        borderRadius: BorderRadius.circular(14),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            onTap: _openSheet,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: hasValue
-                  ? AppColors.primary.withValues(alpha: 0.4)
-                  : AppColors.searchBarBorder,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                widget.dailyOnly
-                    ? Icons.calendar_month_rounded
-                    : Icons.event_repeat_rounded,
-                color: hasValue
-                    ? AppColors.primary
-                    : AppColors.textSecondary.withValues(alpha: 0.8),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight:
-                        hasValue ? FontWeight.w600 : FontWeight.w400,
-                    color: hasValue
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary.withValues(alpha: 0.9),
-                  ),
+            child: Ink(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: hasValue
+                      ? AppColors.primary.withValues(alpha: 0.4)
+                      : AppColors.searchBarBorder,
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded,
-                  color: AppColors.textSecondary),
-            ],
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      widget.dailyOnly
+                          ? Icons.calendar_month_rounded
+                          : Icons.event_repeat_rounded,
+                      color: hasValue
+                          ? AppColors.primary
+                          : AppColors.textSecondary.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: WorkScheduleFieldPreview(
+                      raw: raw,
+                      expanded: _previewExpanded,
+                      placeholder: widget.dailyOnly
+                          ? '근무일 선택'
+                          : '근무 일정 선택',
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+        if (needsExpand)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () =>
+                  setState(() => _previewExpanded = !_previewExpanded),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.only(top: 4, right: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: AppColors.primary,
+              ),
+              child: Text(
+                _previewExpanded ? '접기' : '일정 더 보기',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

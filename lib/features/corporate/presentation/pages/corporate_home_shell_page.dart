@@ -7,6 +7,7 @@ import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/presentation/navigation/corporate_job_post_flow_result.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_applicants_tab.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_attendance_tab.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_chat_tab.dart';
@@ -14,6 +15,7 @@ import 'package:map/features/corporate/presentation/pages/tabs/corporate_home_ta
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_job_posts_tab.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_more_tab.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_bottom_nav.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_create_job_post_entry_sheet.dart';
 
 /// 기업회원 메인 셸 — 하단 6탭 + 홈 대시보드
 class CorporateHomeShellPage extends StatefulWidget {
@@ -28,33 +30,21 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   int _jobPostsRevision = 0;
   int _chatRevision = 0;
   int _hiringRevision = 0;
-  int _homeRevision = 0;
   String? _applicantsFocusJobPostId;
   String? _applicantsFocusJobTitle;
+  String? _mapFocusPostId;
   late List<Widget> _tabs;
 
   @override
   void initState() {
     super.initState();
-    AuthSession.instance.corporateProfileRevision
-        .addListener(_onCorporateProfileChanged);
     _rebuildTabs();
     _syncPermanentCommission();
   }
 
   @override
   void dispose() {
-    AuthSession.instance.corporateProfileRevision
-        .removeListener(_onCorporateProfileChanged);
     super.dispose();
-  }
-
-  void _onCorporateProfileChanged() {
-    if (!mounted) return;
-    setState(() {
-      _homeRevision++;
-      _rebuildTabs();
-    });
   }
 
   Future<void> _syncPermanentCommission() async {
@@ -71,19 +61,18 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   void _rebuildTabs() {
     _tabs = [
       CorporateHomeTab(
-        key: ValueKey('corp-home-$_homeRevision'),
+        key: const ValueKey('corp-home'),
         onCreateJobPost: _openCreateJobPost,
         onSetupProfile: _openProfileSetup,
-        onReviewApplicants: () => _switchTab(2),
         onOpenJobPosts: () => _switchTab(1),
-        onOpenApplicants: () => _switchTab(2),
-        onOpenAttendance: () => _switchTab(3),
-        onOpenPackageShop: _openPackageShop,
         onOpenChat: () => _switchTab(4),
+        focusPostId: _mapFocusPostId,
+        onFocusConsumed: _clearMapFocus,
       ),
       CorporateJobPostsTab(
         key: ValueKey(_jobPostsRevision),
         onViewApplicants: _openApplicantsForJob,
+        onViewPostOnMap: _viewPostOnMap,
       ),
       CorporateApplicantsTab(
         key: ValueKey(_hiringRevision),
@@ -95,8 +84,11 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
         key: const ValueKey('corporate_attendance'),
         isActive: _currentIndex == 3,
       ),
-      CorporateChatTab(key: ValueKey(_chatRevision)),
-      const CorporateMoreTab(),
+      CorporateChatTab(
+        key: ValueKey(_chatRevision),
+        isActive: _currentIndex == 4,
+      ),
+      CorporateMoreTab(key: const ValueKey('corp-more')),
     ];
   }
 
@@ -129,16 +121,17 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
     });
   }
 
-  Future<void> _openPackageShop() async {
-    final purchased = await Navigator.of(context).pushNamed<bool>(
-      AppRoutes.corporatePushPackageShop,
-    );
-    if (purchased == true && mounted) {
-      setState(() {
-        _homeRevision++;
-        _rebuildTabs();
-      });
-    }
+  void _viewPostOnMap(CorporateJobPost post) {
+    setState(() {
+      _mapFocusPostId = post.id;
+      _currentIndex = 0;
+      _rebuildTabs();
+    });
+  }
+
+  void _clearMapFocus() {
+    if (_mapFocusPostId == null) return;
+    setState(() => _mapFocusPostId = null);
   }
 
   Future<void> _openProfileSetup() async {
@@ -151,24 +144,55 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   }
 
   Future<void> _openCreateJobPost() async {
-    final created = await Navigator.of(context).pushNamed<bool>(
+    final entry = await showCorporateCreateJobPostEntrySheet(context);
+    if (!mounted || entry == null) return;
+
+    if (entry == CorporateCreateJobPostEntry.import) {
+      final created = await Navigator.of(context).pushNamed<bool>(
+        AppRoutes.corporateJobPostImport,
+      );
+      if (created == true && mounted) {
+        JobBoardRefresh.markUpdated();
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('공고가 등록되었습니다. 내 공고 탭에서 확인하세요.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        setState(() {
+          _jobPostsRevision++;
+          _chatRevision++;
+          _rebuildTabs();
+          _currentIndex = 1;
+        });
+      }
+      return;
+    }
+
+    final flowResult =
+        await Navigator.of(context).pushNamed<CorporateJobPostFlowResult>(
       AppRoutes.corporateCreateJobPost,
     );
-    if (created == true && mounted) {
+    if (flowResult != null && mounted) {
       JobBoardRefresh.markUpdated();
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('공고가 등록되었습니다. 구직자 지도·목록에 반영됩니다.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      final tab = flowResult.shellTabIndex.clamp(0, _tabs.length - 1);
+      if (tab == 1) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('공고가 등록되었습니다. 내 공고 탭에서 확인하세요.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
       setState(() {
         _jobPostsRevision++;
         _chatRevision++;
         _rebuildTabs();
-        _currentIndex = 1;
+        _currentIndex = tab;
       });
     }
   }
@@ -192,9 +216,11 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
         elevation: 0,
         automaticallyImplyLeading: false,
         leading: const AppRootLeading(),
-        title: const Text(
-          '기업회원',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: Text(
+          AuthSession.instance.currentUser?.corporateProfile?.companyName ??
+              AuthSession.instance.currentUser?.name ??
+              '기업',
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
           IconButton(

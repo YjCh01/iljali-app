@@ -11,7 +11,7 @@ void main() {
     await AuthSession.instance.signOut();
   });
 
-  testWidgets('job posts tab shows expandable speed dial', (tester) async {
+  testWidgets('job posts tab has no floating speed dial', (tester) async {
     await AuthSession.instance.signIn(
       const AuthUser(
         name: '강남물류',
@@ -30,19 +30,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('공고 등록'), findsNothing);
-
-    await tester.tap(find.byIcon(Icons.add_rounded));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-
-    expect(find.text('공고 등록'), findsOneWidget);
-    expect(find.text('공고 수정'), findsOneWidget);
-    expect(find.byType(CorporateJobPostSpeedDial), findsOneWidget);
-
-    final fabCenter = tester.getCenter(find.byIcon(Icons.close_rounded));
-    final createCenter = tester.getCenter(find.text('공고 등록'));
-    expect(createCenter.dy, lessThan(fabCenter.dy));
-    expect(createCenter.dx, closeTo(fabCenter.dx, 72));
+    expect(find.text('등록된 공고가 없습니다'), findsOneWidget);
+    expect(find.text('공고 등록하기'), findsOneWidget);
+    expect(find.byType(CorporateJobPostSpeedDial), findsNothing);
+    expect(find.byIcon(Icons.add_rounded), findsNothing);
   });
 }

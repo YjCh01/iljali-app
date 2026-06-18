@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/dev/dev_auth_service.dart';
+import 'package:map/core/dev/dev_test_accounts.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/constants/app_routes.dart';
@@ -76,16 +78,37 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _submitting = true);
 
-    await AuthSession.instance.signIn(
-      AuthUser(
-        name: _emailController.text.trim().split('@').first,
-        email: _emailController.text.trim(),
-        memberType: widget.memberType,
-      ),
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final devAccount = DevTestAccounts.matchCredentials(
+      email: email,
+      password: password,
     );
 
-    if (widget.memberType == MemberType.corporate) {
-      await AuthSession.instance.ensureCorporateProfile();
+    if (DevAuthService.isEnabled && devAccount != null) {
+      if (devAccount.memberType != widget.memberType) {
+        if (!mounted) return;
+        setState(() => _submitting = false);
+        _showValidationSnackBar(
+          devAccount.memberType == MemberType.corporate
+              ? '해당 계정은 기업회원 로그인에서 이용하세요.'
+              : '해당 계정은 개인회원 로그인에서 이용하세요.',
+        );
+        return;
+      }
+      await DevAuthService.signIn(devAccount);
+    } else {
+      await AuthSession.instance.signIn(
+        AuthUser(
+          name: email.split('@').first,
+          email: email,
+          memberType: widget.memberType,
+        ),
+      );
+
+      if (widget.memberType == MemberType.corporate) {
+        await AuthSession.instance.ensureCorporateProfile();
+      }
     }
 
     if (!mounted) return;

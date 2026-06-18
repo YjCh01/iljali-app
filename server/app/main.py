@@ -13,6 +13,12 @@ from app.push_wallet_models import (  # noqa: F401
     CompanyBonusLedgerRow,
     EmployerPushWalletRow,
 )
+from app.job_sync_models import (  # noqa: F401
+    ChatMessageRow,
+    JobApplicationRow,
+    JobPostRow,
+    PaymentOrderRow,
+)
 from app.permanent_commission_models import (  # noqa: F401
     InsuranceVerificationLog,
     MonthlyCommission,
@@ -22,10 +28,15 @@ from app.jobs.scheduler import start_reverify_scheduler, stop_reverify_scheduler
 from app.routers import (
     addresses,
     admin,
+    chat_sync,
     compliance,
+    hiring,
     insurance_auth,
+    job_board,
+    job_import,
     metrics,
     ocr,
+    notifications,
     payment_webhook,
     payments,
     permanent_commission,
@@ -68,6 +79,11 @@ app.include_router(metrics.router)
 app.include_router(permanent_commission.router)
 app.include_router(insurance_auth.router)
 app.include_router(push_wallet.router)
+app.include_router(notifications.router)
+app.include_router(job_board.router)
+app.include_router(job_import.router)
+app.include_router(hiring.router)
+app.include_router(chat_sync.router)
 
 
 @app.get("/health")
@@ -76,6 +92,8 @@ def health():
         "status": "ok",
         "nts_configured": bool(settings.nts_api_key),
         "toss_configured": bool(settings.toss_secret_key),
+        "toss_client_configured": bool(settings.toss_client_key),
+        "database_url": settings.database_url.split("://", 1)[0],
         "insurance_cert_provider": (
             "codef"
             if settings.codef_client_id

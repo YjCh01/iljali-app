@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/geo/device_location_service.dart';
+import 'package:map/core/hiring/attendance_proximity_service.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/hiring_refresh.dart';
@@ -10,14 +12,16 @@ import 'package:map/core/trust/company_rating_prompt_service.dart';
 import 'package:map/core/trust/presentation/company_rating_dialog.dart';
 import 'package:map/core/trust/presentation/employer_trust_section.dart';
 import 'package:map/core/trust/local_company_rating_repository.dart';
+import 'package:map/features/attendance/presentation/widgets/attendance_month_calendar.dart';
+import 'package:map/features/attendance/presentation/widgets/attendance_proximity_banner.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 import 'package:map/features/hiring/presentation/pages/shift_check_in_page.dart';
 
-/// 구직자 4번 탭 — 근무·출근 (예정자 → 출근 체크)
+/// 구직자 4번 탭 — 근무·출근 (달력 + 300m 출근 안내)
 class IndividualWorkTab extends StatefulWidget {
   const IndividualWorkTab({super.key, this.isActive = false});
 
-  /// 활성 탭일 때만 자동 평가 프롬프트
+  /// 활성 탭일 때만 자동 평가·위치 프롬프트
   final bool isActive;
 
   @override
@@ -27,6 +31,9 @@ class IndividualWorkTab extends StatefulWidget {
 class _IndividualWorkTabState extends State<IndividualWorkTab> {
   List<HiringApplication> _shifts = [];
   bool _loading = true;
+  DateTime _selectedDay = DateTime.now();
+  HiringApplication? _proximityShift;
+  AttendanceProximityResult? _proximityResult;
 
   @override
   void initState() {
@@ -51,6 +58,8 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
       setState(() {
         _shifts = [];
         _loading = false;
+        _proximityShift = null;
+        _proximityResult = null;
       });
       return;
     }
@@ -61,11 +70,131 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
       _shifts = shifts;
       _loading = false;
     });
+    await _evaluateProximity();
+    if (!mounted) return;
     await CompanyRatingPromptService.promptIfNeeded(
       context,
       shifts: shifts,
       isActive: widget.isActive,
     );
+  }
+
+  Future<void> _evaluateProximity() async {
+    final today = DateTime.now();
+    final candidates = _shifts.where((shift) {
+      if (shift.workDate == null) return false;
+      final date = shift.workDate!;
+      if (date.year != today.year ||
+          date.month != today.month ||
+          date.day != today.day) {
+        return false;
+      }
+      return shift.status == HiringApplicationStatus.scheduled &&
+          !shift.seekerCheckedIn;
+    }).toList();
+
+    if (candidates.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _proximityShift = null;
+          _proximityResult = null;
+        });
+      }
+      return;
+    }
+
+    final position = await DeviceLocationService.getCurrentPositionDetailed();
+    for (final shift in candidates) {
+      final workplace = shift.workplaceCoordinate;
+      final result = AttendanceProximityService.evaluate(
+        current: position?.coordinate,
+        workplace: workplace,
+        isMocked: position?.isMocked ?? false,
+      );
+      if (result.shouldPrompt) {
+        if (!mounted) return;
+        setState(() {
+          _proximityShift = shift;
+          _proximityResult = result;
+        });
+        return;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _proximityShift = null;
+        _proximityResult = null;
+      });
+    }
+  }
+
+  List<HiringApplication> get _selectedDayShifts {
+    final selected = DateTime(
+      _selectedDay.year,
+      _selectedDay.month,
+      _selectedDay.day,
+    );
+    return _shifts.where((shift) {
+      final date = shift.workDate;
+      if (date == null) return false;
+      final normalized = DateTime(date.year, date.month, date.day);
+      return normalized == selected;
+    }).toList();
+  }
+
+  List<AttendanceCalendarDayEntry> get _calendarEntries {
+    final grouped = <DateTime, List<HiringApplication>>{};
+    for (final shift in _shifts) {
+      final date = shift.workDate;
+      if (date == null) continue;
+      final key = DateTime(date.year, date.month, date.day);
+      grouped.putIfAbsent(key, () => []).add(shift);
+    }
+
+    return grouped.entries.map((entry) {
+      AttendanceDayMarker marker = AttendanceDayMarker.none;
+      for (final shift in entry.value) {
+        marker = _preferMarker(marker, _markerForShift(shift));
+      }
+      return AttendanceCalendarDayEntry(
+        date: entry.key,
+        marker: marker,
+        count: entry.value.length,
+      );
+    }).toList();
+  }
+
+  AttendanceDayMarker _markerForShift(HiringApplication shift) {
+    if (shift.status == HiringApplicationStatus.noShow) {
+      return AttendanceDayMarker.absent;
+    }
+    if (shift.isMutuallyConfirmed ||
+        shift.status == HiringApplicationStatus.checkedIn ||
+        shift.status == HiringApplicationStatus.commissionPaid) {
+      return AttendanceDayMarker.checkedIn;
+    }
+    if (shift.awaitingEmployerConfirm || shift.awaitingSeekerCheckIn) {
+      return AttendanceDayMarker.pending;
+    }
+    if (shift.status == HiringApplicationStatus.scheduled) {
+      return AttendanceDayMarker.scheduled;
+    }
+    return AttendanceDayMarker.none;
+  }
+
+  AttendanceDayMarker _preferMarker(
+    AttendanceDayMarker current,
+    AttendanceDayMarker next,
+  ) {
+    const priority = [
+      AttendanceDayMarker.none,
+      AttendanceDayMarker.scheduled,
+      AttendanceDayMarker.pending,
+      AttendanceDayMarker.checkedIn,
+      AttendanceDayMarker.absent,
+    ];
+    return priority.indexOf(next) > priority.indexOf(current) ? next : current;
   }
 
   String _statusLabel(HiringApplication shift) {
@@ -126,13 +255,15 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
                 icon: Icons.event_available_outlined,
                 title: '출근 예정 일정이 없습니다',
                 message:
-                    '푸시 알림을 받고 지원한 뒤\n기업과 채팅하거나 즉시 확정되면\n여기에 일정이 표시됩니다.',
+                    'PUSH 알림을 받고 지원한 뒤\n기업과 채팅하거나 즉시 확정되면\n여기에 일정이 표시됩니다.',
               ),
             ],
           ),
         ),
       );
     }
+
+    final selectedShifts = _selectedDayShifts;
 
     return ColoredBox(
       color: AppColors.background,
@@ -143,124 +274,152 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
-            const Text(
-              '나의 근무 일정',
-              style: TextStyle(
-                fontSize: 18,
+            if (_proximityShift != null && _proximityResult != null) ...[
+              AttendanceProximityBanner(
+                result: _proximityResult!,
+                companyLabel: _proximityShift!.companyName,
+                onCheckIn: () => _openCheckIn(_proximityShift!),
+              ),
+              const SizedBox(height: 14),
+            ],
+            AttendanceMonthCalendar(
+              entries: _calendarEntries,
+              selectedDay: _selectedDay,
+              onDaySelected: (day) => setState(() => _selectedDay = day),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              '${_selectedDay.month}월 ${_selectedDay.day}일 일정',
+              style: const TextStyle(
+                fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
               ),
             ),
-            const SizedBox(height: 14),
-            ..._shifts.map(
-              (shift) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: CorporateSurfaceCard(
-                  onTap: shift.status == HiringApplicationStatus.scheduled &&
-                          !shift.seekerCheckedIn
-                      ? () => _openCheckIn(shift)
-                      : null,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 52,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          shift.workDate != null
-                              ? LocalHiringRepository.formatWorkDate(
-                                  shift.workDate!,
-                                )
-                              : '--',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                            height: 1.3,
+            const SizedBox(height: 12),
+            if (selectedShifts.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  '선택한 날짜에 근무 일정이 없습니다.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                  ),
+                ),
+              )
+            else
+              ...selectedShifts.map(
+                (shift) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: CorporateSurfaceCard(
+                    onTap: shift.status == HiringApplicationStatus.scheduled &&
+                            !shift.seekerCheckedIn
+                        ? () => _openCheckIn(shift)
+                        : null,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 52,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.primaryLight.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${shift.companyName} · ${shift.postTitle}',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              shift.workSchedule,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary
-                                    .withValues(alpha: 0.95),
-                              ),
-                            ),
-                            if (shift.companyKey != null) ...[
-                              const SizedBox(height: 8),
-                              EmployerTrustSection(
-                                companyKey: shift.companyKey,
-                                compact: true,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            _statusLabel(shift),
+                          child: Text(
+                            shift.workDate != null
+                                ? LocalHiringRepository.formatWorkDate(
+                                    shift.workDate!,
+                                  )
+                                : '--',
+                            textAlign: TextAlign.center,
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w700,
                               color: AppColors.primary,
+                              height: 1.3,
                             ),
                           ),
-                          if (shift.status ==
-                                  HiringApplicationStatus.scheduled &&
-                              !shift.seekerCheckedIn)
-                            TextButton(
-                              onPressed: () => _openCheckIn(shift),
-                              child: const Text('출근'),
-                            ),
-                          if (shift.awaitingEmployerConfirm)
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${shift.companyName} · ${shift.postTitle}',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                shift.workSchedule,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary
+                                      .withValues(alpha: 0.95),
+                                ),
+                              ),
+                              if (shift.companyKey != null) ...[
+                                const SizedBox(height: 8),
+                                EmployerTrustSection(
+                                  companyKey: shift.companyKey,
+                                  compact: true,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
                             Text(
-                              '기업 확인 대기',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary
-                                    .withValues(alpha: 0.9),
+                              _statusLabel(shift),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
                               ),
                             ),
-                          FutureBuilder<bool>(
-                            future: _canRateEmployer(shift),
-                            builder: (context, snapshot) {
-                              if (snapshot.data != true) {
-                                return const SizedBox.shrink();
-                              }
-                              return TextButton(
-                                onPressed: () => _rateEmployer(shift),
-                                child: const Text('고용주 평가'),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
+                            if (shift.status ==
+                                    HiringApplicationStatus.scheduled &&
+                                !shift.seekerCheckedIn)
+                              TextButton(
+                                onPressed: () => _openCheckIn(shift),
+                                child: const Text('출근'),
+                              ),
+                            if (shift.awaitingEmployerConfirm)
+                              Text(
+                                '기업 확인 대기',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary
+                                      .withValues(alpha: 0.9),
+                                ),
+                              ),
+                            FutureBuilder<bool>(
+                              future: _canRateEmployer(shift),
+                              builder: (context, snapshot) {
+                                if (snapshot.data != true) {
+                                  return const SizedBox.shrink();
+                                }
+                                return TextButton(
+                                  onPressed: () => _rateEmployer(shift),
+                                  child: const Text('고용주 평가'),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

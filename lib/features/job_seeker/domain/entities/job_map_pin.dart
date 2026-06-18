@@ -1,5 +1,7 @@
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
+import 'package:map/features/job_seeker/domain/entities/job_map_pin_ranking_context.dart';
+import 'package:map/features/job_seeker/domain/utils/job_map_pin_ranking_service.dart';
 
 /// 지도에 표시할 채용 공고 핀
 class JobMapPin {
@@ -35,4 +37,15 @@ class JobMapCluster {
   int get count => pins.length;
   bool get isSingle => pins.length == 1;
   JobMapPin get singlePin => pins.first;
+
+  /// 클러스터 목록 — [JobMapPinRankingService] 기준 상위 노출 순
+  List<JobMapPin> rankedPins({
+    JobMapPinRankingContext context = const JobMapPinRankingContext(),
+    DateTime? now,
+  }) =>
+      JobMapPinRankingService.rankClusterPins(
+        pins,
+        context: context,
+        now: now,
+      );
 }

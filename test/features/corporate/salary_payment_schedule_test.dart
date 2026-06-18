@@ -92,5 +92,28 @@ void main() {
       );
       expect(post.effectiveWorkerCategory, WorkerCategory.daily);
     });
+
+    test('shortTerm parses absolute date and negotiable', () {
+      final dated = CorporateJobPost(
+        id: 'p4',
+        title: 't',
+        workerCategory: WorkerCategory.shortTerm,
+        warehouseName: 'w',
+        hourlyWage: '10,000원',
+        workSchedule: '주5',
+        summary: 's',
+        paymentDate: DateTime(2026, 6, 15),
+        status: CorporateJobPostStatus.recruiting,
+        applicantCount: 0,
+        postedAt: _postedAt,
+      );
+      expect(dated.paymentScheduleDisplayLabel, '2026년 6월 15일');
+
+      final negotiable = dated.copyWith(
+        paymentDate: null,
+        paymentDateNegotiable: true,
+      );
+      expect(negotiable.paymentScheduleDisplayLabel, '협의');
+    });
   });
 }

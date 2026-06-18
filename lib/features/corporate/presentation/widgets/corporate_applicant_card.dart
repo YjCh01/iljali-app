@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
-import 'package:map/core/trust/presentation/seeker_trust_badge_row.dart';
-import 'package:map/core/trust/seeker_trust_service.dart';
 import 'package:map/features/corporate/domain/entities/corporate_applicant.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 
@@ -9,17 +7,20 @@ class CorporateApplicantCard extends StatelessWidget {
   const CorporateApplicantCard({
     super.key,
     required this.applicant,
+    this.onTap,
     this.onChat,
     this.onInstantAccept,
   });
 
   final CorporateApplicant applicant;
+  final VoidCallback? onTap;
   final VoidCallback? onChat;
   final VoidCallback? onInstantAccept;
 
   @override
   Widget build(BuildContext context) {
     return CorporateSurfaceCard(
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -45,20 +46,6 @@ class CorporateApplicantCard extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          if (applicant.seekerEmail != null &&
-              applicant.seekerEmail!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            FutureBuilder(
-              future: SeekerTrustService().summarize(applicant.seekerEmail!),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox.shrink();
-                return SeekerTrustBadgeRow(
-                  summary: snapshot.data!,
-                  compact: true,
-                );
-              },
-            ),
-          ],
           const SizedBox(height: 8),
           _Line(icon: Icons.work_outline_rounded, text: applicant.jobTitle),
           const SizedBox(height: 6),

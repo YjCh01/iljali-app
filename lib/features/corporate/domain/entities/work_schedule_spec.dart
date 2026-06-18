@@ -1,5 +1,31 @@
 import 'package:flutter/material.dart';
 
+/// 일용직 — 특정 근무일의 시작·종료 시각
+@immutable
+class DailyDayHours {
+  const DailyDayHours({required this.start, required this.end});
+
+  final TimeOfDay start;
+  final TimeOfDay end;
+
+  DailyDayHours copyWith({TimeOfDay? start, TimeOfDay? end}) {
+    return DailyDayHours(
+      start: start ?? this.start,
+      end: end ?? this.end,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is DailyDayHours &&
+        start == other.start &&
+        end == other.end;
+  }
+
+  @override
+  int get hashCode => Object.hash(start, end);
+}
+
 /// 근무 일정 표현 방식 (오늘근무·교대달력류 앱 패턴 참고)
 enum WorkScheduleMode {
   /// 고정 요일 — 월~금, 월~토 등
@@ -135,6 +161,7 @@ class WorkScheduleSpec {
     ],
     this.customExcludedDates = const {},
     this.selectedWorkDates = const {},
+    this.dailyHoursByDate = const {},
     this.dayStart = const TimeOfDay(hour: 9, minute: 0),
     this.dayEnd = const TimeOfDay(hour: 18, minute: 0),
     this.nightStart = const TimeOfDay(hour: 22, minute: 0),
@@ -160,12 +187,38 @@ class WorkScheduleSpec {
   /// 일용직 — 선택한 근무일
   final Set<DateTime> selectedWorkDates;
 
+  /// 일용직 — 날짜별 근무 시간 (키: yyyy-MM-dd). 없으면 [dayStart]/[dayEnd] 사용
+  final Map<String, DailyDayHours> dailyHoursByDate;
+
   final TimeOfDay dayStart;
   final TimeOfDay dayEnd;
   final TimeOfDay nightStart;
   final TimeOfDay nightEnd;
 
   static const weekdayLabels = ['월', '화', '수', '목', '금', '토', '일'];
+
+  static String dateKey(DateTime date) {
+    final d = DateTime(date.year, date.month, date.day);
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  DailyDayHours hoursForDate(DateTime date) {
+    return dailyHoursByDate[dateKey(date)] ??
+        DailyDayHours(start: dayStart, end: dayEnd);
+  }
+
+  bool get hasVariedDailyHours {
+    if (mode != WorkScheduleMode.dailyPick || selectedWorkDates.isEmpty) {
+      return false;
+    }
+    DailyDayHours? baseline;
+    for (final date in selectedWorkDates) {
+      final hours = hoursForDate(date);
+      baseline ??= hours;
+      if (hours != baseline) return true;
+    }
+    return false;
+  }
 
   static int weekdayIndex(DateTime date) => (date.weekday + 6) % 7;
 
@@ -203,6 +256,7 @@ class WorkScheduleSpec {
     List<ShiftSlotKind>? customCycle,
     Set<DateTime>? customExcludedDates,
     Set<DateTime>? selectedWorkDates,
+    Map<String, DailyDayHours>? dailyHoursByDate,
     TimeOfDay? dayStart,
     TimeOfDay? dayEnd,
     TimeOfDay? nightStart,
@@ -218,6 +272,7 @@ class WorkScheduleSpec {
       customCycle: customCycle ?? this.customCycle,
       customExcludedDates: customExcludedDates ?? this.customExcludedDates,
       selectedWorkDates: selectedWorkDates ?? this.selectedWorkDates,
+      dailyHoursByDate: dailyHoursByDate ?? this.dailyHoursByDate,
       dayStart: dayStart ?? this.dayStart,
       dayEnd: dayEnd ?? this.dayEnd,
       nightStart: nightStart ?? this.nightStart,
@@ -301,6 +356,15 @@ class WorkScheduleSpec {
     return copyWith(customExcludedDates: trimmed);
   }
 
+  WorkScheduleSpec trimDailyHoursToSelection() {
+    final keys = selectedWorkDates.map(dateKey).toSet();
+    final trimmed = {
+      for (final entry in dailyHoursByDate.entries)
+        if (keys.contains(entry.key)) entry.key: entry.value,
+    };
+    return copyWith(dailyHoursByDate: trimmed);
+  }
+
   WorkScheduleSpec withDerivedDailyBounds() {
     if (selectedWorkDates.isEmpty) {
       return copyWith(clearStartDate: true, clearEndDate: true);
@@ -309,6 +373,6 @@ class WorkScheduleSpec {
     return copyWith(
       startDate: sorted.first,
       endDate: sorted.last,
-    );
+    ).trimDailyHoursToSelection();
   }
 }

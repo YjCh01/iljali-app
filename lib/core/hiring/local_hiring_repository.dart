@@ -1,11 +1,19 @@
 import 'dart:convert';
 
 import 'package:intl/intl.dart';
+import 'package:map/core/hiring/attendance_geofence_service.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/hiring/commission_calculator.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
+import 'package:map/core/hiring/commission_chat_prompt_service.dart';
 import 'package:map/core/hiring/hiring_refresh.dart';
+import 'package:map/core/hiring/mutual_attendance_side_effects.dart';
+import 'package:map/features/corporate/domain/services/commission_payer_resolver.dart';
+import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/work_category/domain/services/work_achievement_service.dart';
+import 'package:map/features/attendance/domain/entities/check_in_method.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 지원·예정자·출근·수수료 — 기업/구직자 공유 로컬 저장 (MVP)
@@ -69,6 +77,33 @@ class LocalHiringRepository {
     return all.where((item) => item.needsCommissionPayment).toList();
   }
 
+  /// 결제 권한자 기준 미결제 수수료 (위임·본인 건)
+  Future<List<HiringApplication>> fetchPendingCommissionsForPayer(
+    String payerEmail,
+  ) async {
+    final pending = await fetchPendingCommissions();
+    if (payerEmail.trim().isEmpty) return pending;
+
+    final resolver = await _payerResolver();
+    final normalized = payerEmail.trim().toLowerCase();
+    final matched = <HiringApplication>[];
+    for (final app in pending) {
+      final resolved = await resolver.resolvePayerEmail(
+        companyKey: app.companyKey,
+        recruiterEmail: app.recruiterEmail,
+      );
+      if (resolved.trim().toLowerCase() == normalized) {
+        matched.add(app);
+      }
+    }
+    return matched;
+  }
+
+  Future<CommissionPayerResolver> _payerResolver() async {
+    // Deferred import avoided — direct service
+    return CommissionPayerResolver.create();
+  }
+
   Future<bool> hasApplied(String postId, String seekerEmail) async {
     final all = await fetchForSeeker(seekerEmail);
     return all.any((item) =>
@@ -85,6 +120,7 @@ class LocalHiringRepository {
     required String seekerPhoneMasked,
     required String workSchedule,
     String? companyKey,
+    String? recruiterEmail,
     String? branchId,
     String? branchName,
     double? workplaceLatitude,
@@ -92,6 +128,10 @@ class LocalHiringRepository {
     DateTime? suggestedWorkDate,
     String? hourlyWageText,
     JobEmploymentType employmentType = JobEmploymentType.daily,
+    String? selectedShiftDate,
+    String? shiftSlot,
+    String? shuttleBookingId,
+    String? preferredStopId,
   }) async {
     if (await hasApplied(postId, seekerEmail)) {
       throw StateError('already_applied');
@@ -111,6 +151,7 @@ class LocalHiringRepository {
       employmentType: employmentType,
       workDate: suggestedWorkDate,
       companyKey: companyKey,
+      recruiterEmail: recruiterEmail,
       branchId: branchId,
       branchName: branchName,
       workplaceLatitude: workplaceLatitude,
@@ -120,6 +161,10 @@ class LocalHiringRepository {
               ? CommissionCalculator.dailyWorkerFee()
               : CommissionCalculator.defaultKrw())
           : null,
+      selectedShiftDate: selectedShiftDate,
+      shiftSlot: shiftSlot,
+      shuttleBookingId: shuttleBookingId,
+      preferredStopId: preferredStopId,
     );
 
     await _upsert(application);
@@ -146,21 +191,91 @@ class LocalHiringRepository {
     final existing = await findById(applicationId);
     if (existing == null) throw StateError('not_found');
 
+    final now = DateTime.now();
     final scheduled = existing.copyWith(
       status: HiringApplicationStatus.scheduled,
       workDate: workDate ??
           existing.workDate ??
           DateTime.now().add(const Duration(days: 1)),
+      seekerWorkAgreedAt: existing.seekerWorkAgreedAt ?? now,
+      employerWorkAgreedAt: existing.employerWorkAgreedAt ?? now,
     );
     await _upsert(scheduled);
     HiringRefresh.markUpdated();
     return scheduled;
   }
 
+  /// 채팅 — 근무예정 합의 (쌍방)
+  Future<HiringApplication> confirmWorkScheduleAgreement({
+    required String applicationId,
+    required bool asEmployer,
+  }) async {
+    final existing = await findById(applicationId);
+    if (existing == null) throw StateError('not_found');
+    if (existing.status == HiringApplicationStatus.rejected ||
+        existing.status == HiringApplicationStatus.noShow) {
+      throw StateError('not_agreeable');
+    }
+
+    final now = DateTime.now();
+    var updated = existing.copyWith(
+      seekerWorkAgreedAt: asEmployer
+          ? existing.seekerWorkAgreedAt
+          : (existing.seekerWorkAgreedAt ?? now),
+      employerWorkAgreedAt: asEmployer
+          ? (existing.employerWorkAgreedAt ?? now)
+          : existing.employerWorkAgreedAt,
+    );
+
+    if (updated.isWorkAgreementComplete &&
+        updated.status == HiringApplicationStatus.applied) {
+      updated = updated.copyWith(status: HiringApplicationStatus.chatting);
+    }
+    if (updated.isWorkAgreementComplete &&
+        (updated.status == HiringApplicationStatus.chatting ||
+            updated.status == HiringApplicationStatus.applied)) {
+      updated = updated.copyWith(
+        status: HiringApplicationStatus.scheduled,
+        workDate: updated.workDate ?? DateTime.now().add(const Duration(days: 1)),
+      );
+    }
+
+    await _upsert(updated);
+    HiringRefresh.markUpdated();
+    return updated;
+  }
+
+  /// 구인자 노쇼 확정 — 즉시 처리
+  Future<HiringApplication> markNoShowByEmployer(String applicationId) async {
+    final existing = await findById(applicationId);
+    if (existing == null) throw StateError('not_found');
+    if (!existing.isWorkAgreementComplete) {
+      throw StateError('agreement_incomplete');
+    }
+    if (existing.status != HiringApplicationStatus.scheduled) {
+      throw StateError('not_scheduled');
+    }
+    if (existing.isMutuallyConfirmed) {
+      throw StateError('already_completed');
+    }
+
+    final now = DateTime.now();
+    final updated = existing.copyWith(
+      status: HiringApplicationStatus.noShow,
+      noShowMarkedAt: now,
+    );
+    await _upsert(updated);
+    HiringRefresh.markUpdated();
+    return updated;
+  }
+
   Future<HiringApplication> checkIn(
     String applicationId, {
     double? latitude,
     double? longitude,
+    CheckInMethod checkInMethod = CheckInMethod.gps,
+    bool geofenceVerified = false,
+    double? geofenceDistanceMeters,
   }) async {
     final existing = await findById(applicationId);
     if (existing == null) throw StateError('not_found');
@@ -171,22 +286,68 @@ class LocalHiringRepository {
       throw StateError('already_checked_in');
     }
 
+    if (existing.hasWorkplaceCoordinate &&
+        !AttendanceGeofenceService.allowsRelaxedVerification &&
+        !geofenceVerified) {
+      throw StateError('geofence_failed');
+    }
+
     final now = DateTime.now();
     final updated = existing.copyWith(
       checkedInAt: now,
       checkInLatitude: latitude,
       checkInLongitude: longitude,
+      checkInMethod: checkInMethod,
+      seekerClockInVerifiedAt: geofenceVerified ? now : null,
+      seekerGeofenceDistanceM: geofenceDistanceMeters,
     );
     final confirmed = _applyMutualConfirmation(updated, now: now);
     await _upsert(confirmed);
+    if (!existing.isMutuallyConfirmed && confirmed.isMutuallyConfirmed) {
+      await _handleMutualConfirmation(confirmed);
+    }
     HiringRefresh.markUpdated();
     return confirmed;
   }
 
-  /// 기업 출근 확인 — 구직자 선확인·기업 선확인 모두 지원
+  /// QR 코드로 출근 기록
+  Future<HiringApplication> checkInWithQr(
+    String applicationId, {
+    double? latitude,
+    double? longitude,
+    bool geofenceVerified = false,
+    double? geofenceDistanceMeters,
+  }) async {
+    return checkIn(
+      applicationId,
+      latitude: latitude,
+      longitude: longitude,
+      checkInMethod: CheckInMethod.qr,
+      geofenceVerified: geofenceVerified,
+      geofenceDistanceMeters: geofenceDistanceMeters,
+    );
+  }
+
+  Future<HiringApplication> approveApplication(String applicationId) async {
+    final existing = await findById(applicationId);
+    if (existing == null) throw StateError('not_found');
+    if (existing.status != HiringApplicationStatus.applied) {
+      throw StateError('not_pending');
+    }
+    final updated = existing.copyWith(status: HiringApplicationStatus.chatting);
+    await _upsert(updated);
+    HiringRefresh.markUpdated();
+    return updated;
+  }
+
+  /// 기업 출근 확인 — 구직자 선확인·기업 선확인 모두 지원 (지오펜스 필수)
   Future<HiringApplication> confirmEmployerAttendance(
-    String applicationId,
-  ) async {
+    String applicationId, {
+    double? latitude,
+    double? longitude,
+    bool geofenceVerified = false,
+    double? geofenceDistanceMeters,
+  }) async {
     final existing = await findById(applicationId);
     if (existing == null) throw StateError('not_found');
     if (existing.status != HiringApplicationStatus.scheduled) {
@@ -199,37 +360,34 @@ class LocalHiringRepository {
       throw StateError('already_employer_confirmed');
     }
 
+    if (existing.hasWorkplaceCoordinate &&
+        !AttendanceGeofenceService.allowsRelaxedVerification &&
+        !geofenceVerified) {
+      throw StateError('geofence_failed');
+    }
+
     final now = DateTime.now();
-    final updated = existing.copyWith(employerConfirmedAt: now);
+    final updated = existing.copyWith(
+      employerConfirmedAt: now,
+      employerClockInLatitude: latitude,
+      employerClockInLongitude: longitude,
+      employerClockInVerifiedAt: geofenceVerified ? now : null,
+      employerGeofenceDistanceM: geofenceDistanceMeters,
+    );
     final confirmed = _applyMutualConfirmation(updated, now: now);
     await _upsert(confirmed);
+    if (!existing.isMutuallyConfirmed && confirmed.isMutuallyConfirmed) {
+      await _handleMutualConfirmation(confirmed);
+    }
     HiringRefresh.markUpdated();
     return confirmed;
   }
 
-  /// 구직자 출근 후 48시간 기업 무응답 시 자동 기업 확인
+  /// 구직자 출근 후 기업 무응답 자동 확인 — 비활성 (상호 출근확정 필수)
   Future<List<HiringApplication>> autoConfirmSilentEmployers({
     Duration silenceThreshold = const Duration(hours: 48),
   }) async {
-    final all = await fetchAll();
-    final now = DateTime.now();
-    final autoConfirmed = <HiringApplication>[];
-
-    for (final item in all) {
-      if (item.status != HiringApplicationStatus.scheduled) continue;
-      if (!item.seekerCheckedIn || item.employerConfirmed) continue;
-      final checkedInAt = item.checkedInAt;
-      if (checkedInAt == null) continue;
-      if (now.difference(checkedInAt) < silenceThreshold) continue;
-
-      final updated = item.copyWith(employerConfirmedAt: now);
-      final confirmed = _applyMutualConfirmation(updated, now: now);
-      await _upsert(confirmed);
-      autoConfirmed.add(confirmed);
-    }
-
-    if (autoConfirmed.isNotEmpty) HiringRefresh.markUpdated();
-    return autoConfirmed;
+    return const [];
   }
 
   /// 미확인 출근 예정(구직자 미체크인) 건수 — 앱 잠금 판단용
@@ -260,13 +418,36 @@ class LocalHiringRepository {
     required DateTime now,
   }) {
     if (!app.seekerCheckedIn || !app.employerConfirmed) return app;
+    if (!app.isGeofenceRequirementMet &&
+        app.hasWorkplaceCoordinate &&
+        !AttendanceGeofenceService.allowsRelaxedVerification) {
+      return app;
+    }
+
+    final bothGeofenceVerified = !app.hasWorkplaceCoordinate ||
+        AttendanceGeofenceService.allowsRelaxedVerification ||
+        (app.seekerClockInVerifiedAt != null &&
+            app.employerClockInVerifiedAt != null);
+
+    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
+      return app.copyWith(
+        status: HiringApplicationStatus.commissionPaid,
+        mutuallyConfirmedAt: now,
+        geofenceVerified: bothGeofenceVerified,
+        commissionPaidAt: now,
+        commissionAmountKrw: 0,
+      );
+    }
 
     return app.copyWith(
       status: HiringApplicationStatus.checkedIn,
       mutuallyConfirmedAt: now,
+      geofenceVerified: bothGeofenceVerified,
       commissionDueAt: now.add(const Duration(minutes: 1)),
       commissionAmountKrw:
           app.commissionAmountKrw ?? CommissionCalculator.defaultKrw(),
+      recruiterEmail: app.recruiterEmail ??
+          AuthSession.instance.currentUser?.email,
     );
   }
 
@@ -282,6 +463,8 @@ class LocalHiringRepository {
       commissionPaidAt: DateTime.now(),
     );
     await _upsert(paid);
+    final prompt = await CommissionChatPromptService.create();
+    await prompt.dismiss(applicationId);
     HiringRefresh.markUpdated();
     return paid;
   }
@@ -352,6 +535,30 @@ class LocalHiringRepository {
 
   static String formatWorkDateFull(DateTime date) {
     return DateFormat('yyyy.MM.dd').format(date);
+  }
+
+  static Future<void> _handleMutualConfirmation(
+    HiringApplication application,
+  ) async {
+    await WorkAchievementService().tryAwardForApplication(application);
+    await MutualAttendanceSideEffects.handle(application);
+  }
+
+  /// Dev/test — idempotent insert (skips if same id exists).
+  Future<void> ensureSeedApplication(HiringApplication application) async {
+    final existing = await findById(application.id);
+    if (existing != null) {
+      if (existing.seekerPhoneMasked.contains('****') &&
+          !application.seekerPhoneMasked.contains('****')) {
+        await _upsert(
+          existing.copyWith(seekerPhoneMasked: application.seekerPhoneMasked),
+        );
+        HiringRefresh.markUpdated();
+      }
+      return;
+    }
+    await _upsert(application);
+    HiringRefresh.markUpdated();
   }
 
   Future<void> _purgePersistedDemoApplications() async {

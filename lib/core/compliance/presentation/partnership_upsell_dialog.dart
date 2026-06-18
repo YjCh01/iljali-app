@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/compliance/contact_entitlement.dart';
@@ -24,7 +24,7 @@ Future<void> showPartnershipUpsellDialog(
             if (showTierCards) ...[
               const SizedBox(height: 16),
               const Text(
-                '유료 지역 푸시권',
+                '일자리 알림핀',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
@@ -49,7 +49,7 @@ Future<void> showPartnershipUpsellDialog(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
           ),
-          child: const Text('지역 푸시권 구매'),
+          child: const Text('일자리 알림핀 구매'),
         ),
       ],
     ),

@@ -7,8 +7,11 @@ import 'package:map/core/hiring/monthly_commission.dart';
 import 'package:map/core/hiring/permanent_commission_calculator.dart';
 import 'package:map/core/hiring/permanent_employment_record.dart';
 import 'package:map/core/hiring/permanent_commission_sync_service.dart';
+import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/payment_method.dart';
+import 'package:map/features/corporate/domain/entities/payment_product_category.dart';
 import 'package:map/features/corporate/domain/entities/payment_request.dart';
+import 'package:map/features/corporate/domain/services/corporate_tax_document_service.dart';
 import 'package:map/features/corporate/domain/services/payment_flow_helper.dart';
 
 Future<bool?> showPermanentCommissionPaymentDialog(
@@ -76,6 +79,21 @@ class _PermanentCommissionPaymentDialogState
       chargedAt: DateTime.now(),
     );
     await PermanentCommissionSyncService().pushCommission(paid);
+
+    await CorporateTaxDocumentService().recordPayment(
+      context: PaymentRequestContext(
+        orderId: 'PERM-${widget.commission.id}',
+        productName:
+            '상시직 재직 확인 수수료 · ${widget.employment.seekerName}',
+        amountKrw: _amount,
+        method: _method,
+        category: PaymentProductCategory.permanentCommission,
+        transactionId: result.transactionId,
+        profile: AuthSession.instance.currentUser?.corporateProfile,
+        buyerEmail: AuthSession.instance.currentUser?.email,
+        referenceId: widget.commission.id,
+      ),
+    );
 
     if (!mounted) return;
     Navigator.of(context).pop(true);

@@ -11,11 +11,15 @@ class SeekerApplicationCard extends StatelessWidget {
     required this.item,
     required this.dateFormat,
     this.onTap,
+    this.subtitle,
+    this.shuttleReminder,
   });
 
   final JobApplication item;
   final DateFormat dateFormat;
   final VoidCallback? onTap;
+  final String? subtitle;
+  final String? shuttleReminder;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +44,48 @@ class SeekerApplicationCard extends StatelessWidget {
               color: AppColors.textSecondary.withValues(alpha: 0.95),
             ),
           ),
+          if (shuttleReminder != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.shade100),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.directions_bus,
+                    size: 16,
+                    color: Colors.red.shade700,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      shuttleReminder!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade900,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle!,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary.withValues(alpha: 0.9),
+              ),
+            ),
+          ],
           if (item.companyKey != null) ...[
             const SizedBox(height: 8),
             EmployerTrustSection(

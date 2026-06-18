@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/session/auth_session.dart';
@@ -62,7 +62,7 @@ class _CorporateBranchManagementPageState
           title: const Text('지점 한도 초과'),
           content: Text(
             '현재 지점 한도(${BranchPlanLimits.limitLabel(tier)})에 도달했습니다.\n'
-            '지역 푸시권을 구매해 지점을 추가하시겠습니까?',
+            '일자리 알림핀을 구매해 지점을 추가하시겠습니까?',
           ),
           actions: [
             TextButton(
@@ -71,7 +71,7 @@ class _CorporateBranchManagementPageState
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('지역 푸시권 상점'),
+              child: const Text('일자리 알림핀 상점'),
             ),
           ],
         ),

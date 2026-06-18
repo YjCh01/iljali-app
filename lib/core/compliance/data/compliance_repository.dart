@@ -14,6 +14,8 @@ class ComplianceRepository {
   static const _keyContactUsage = 'compliance_contact_usage_v1';
   static const _keyAbuseFlags = 'compliance_abuse_flags_v1';
   static const _keyContactEvents = 'compliance_contact_events_v1';
+  static const _keyAttendanceVerification =
+      'compliance_attendance_verification_v1';
 
   static Future<ComplianceRepository> create() async {
     final prefs = await SharedPreferences.getInstance();
@@ -105,6 +107,24 @@ class ComplianceRepository {
 
   Future<List<Map<String, dynamic>>> fetchContactEvents() async {
     final raw = _prefs.getString(_keyContactEvents);
+    if (raw == null || raw.isEmpty) return [];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return [];
+    return decoded.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+  }
+
+  Future<void> logAttendanceVerification(Map<String, dynamic> event) async {
+    final events = await fetchAttendanceVerifications();
+    events.insert(0, {
+      ...event,
+      'at': DateTime.now().toIso8601String(),
+    });
+    if (events.length > 500) events.removeRange(500, events.length);
+    await _prefs.setString(_keyAttendanceVerification, jsonEncode(events));
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAttendanceVerifications() async {
+    final raw = _prefs.getString(_keyAttendanceVerification);
     if (raw == null || raw.isEmpty) return [];
     final decoded = jsonDecode(raw);
     if (decoded is! List) return [];

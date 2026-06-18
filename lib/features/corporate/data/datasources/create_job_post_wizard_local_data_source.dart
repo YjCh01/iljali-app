@@ -57,6 +57,11 @@ class CreateJobPostWizardLocalDataSourceImpl
       icon: Icons.calendar_today_outlined,
     ),
     JobRoleOption(
+      id: 'worker_short_term',
+      label: '단기알바',
+      icon: Icons.event_repeat_outlined,
+    ),
+    JobRoleOption(
       id: 'worker_contract',
       label: '계약직',
       icon: Icons.assignment_outlined,

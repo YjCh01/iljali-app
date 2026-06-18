@@ -1,3 +1,7 @@
+import 'package:flutter/foundation.dart';
+import 'package:map/core/address/services/workplace_address_mismatch_service.dart';
+import 'package:map/core/compliance/services/abuse_detection_service.dart';
+import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
@@ -9,6 +13,7 @@ import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
+import 'package:map/features/work_category/domain/services/work_category_classifier_service.dart';
 
 String formatCorporateHourlyWage(String hourlyWage) {
   final trimmed = hourlyWage.trim();
@@ -31,17 +36,32 @@ String formatCorporateDailyWage(int amount) {
   DateTime? paymentDate,
   SalaryPaymentMonthOffset? paymentMonthOffset,
   int? paymentDayOfMonth,
+  bool paymentDateNegotiable,
 }) _paymentFieldsFromSchedule(SalaryPaymentSchedule schedule) {
   return switch (schedule) {
     SalaryPaymentAbsoluteDate(:final date) => (
         paymentDate: date,
         paymentMonthOffset: null,
         paymentDayOfMonth: null,
+        paymentDateNegotiable: false,
+      ),
+    SalaryPaymentDailyPerWorkDay(:final dates) => (
+        paymentDate: dates.isEmpty ? null : dates.last,
+        paymentMonthOffset: null,
+        paymentDayOfMonth: null,
+        paymentDateNegotiable: false,
       ),
     SalaryPaymentMonthlyRule(:final monthOffset, :final dayOfMonth) => (
         paymentDate: null,
         paymentMonthOffset: monthOffset,
         paymentDayOfMonth: dayOfMonth,
+        paymentDateNegotiable: false,
+      ),
+    SalaryPaymentNegotiable() => (
+        paymentDate: null,
+        paymentMonthOffset: null,
+        paymentDayOfMonth: null,
+        paymentDateNegotiable: true,
       ),
   };
 }
@@ -67,6 +87,10 @@ class CreateCorporateJobPostUseCase {
     JobPostPaymentRecord? paymentRecord,
     String? branchId,
     String? branchName,
+    String? commuteRouteId,
+    List<String> linkedCommuteRouteIds = const [],
+    bool hasShuttleRouteOverlay = false,
+    String? workCategoryId,
   }) {
     if (title.trim().isEmpty) {
       return Future.value(
@@ -78,8 +102,26 @@ class CreateCorporateJobPostUseCase {
         const CorporateJobPostResult.failure('근무지를 검색해 주세요.'),
       );
     }
-    if (hourlyWage.trim().isEmpty ||
-        salaryPayDigits(hourlyWage).isEmpty) {
+    final mismatch = WorkplaceAddressMismatchService.evaluate(
+      workplace: workplace,
+      profile: registeredBy,
+    );
+    if (!mismatch.allowed && registeredBy != null && !kDebugMode) {
+      final headOffice = registeredBy.businessHeadOfficeAddress?.trim();
+      if (headOffice == null || headOffice.isEmpty) {
+        return Future.value(
+          CorporateJobPostResult.failure(
+            mismatch.reason ??
+                '사업자 본사 주소를 먼저 등록해야 공고를 올릴 수 있습니다.',
+          ),
+        );
+      }
+      return _blockWorkplaceMismatch(
+        profile: registeredBy,
+        mismatch: mismatch,
+      );
+    }
+    if (hourlyWage.trim().isEmpty || salaryPayDigits(hourlyWage).isEmpty) {
       return Future.value(
         const CorporateJobPostResult.failure('급여를 입력해 주세요.'),
       );
@@ -90,12 +132,13 @@ class CreateCorporateJobPostUseCase {
       );
     }
     final jobDesc = jobDescription.trim();
-    final extraSummary = summary.trim();
-    if (jobDesc.isEmpty && extraSummary.isEmpty) {
+    if (jobDesc.isEmpty) {
       return Future.value(
-        const CorporateJobPostResult.failure('업무 내용 또는 내용 추가를 입력해 주세요.'),
+        const CorporateJobPostResult.failure('업무 내용을 입력해 주세요.'),
       );
     }
+    final resolvedSummary =
+        summary.trim().isEmpty ? jobDesc : summary.trim();
     if (!paymentSchedule.isComplete) {
       return Future.value(
         const CorporateJobPostResult.failure('급여지급일을 선택해 주세요.'),
@@ -105,6 +148,15 @@ class CreateCorporateJobPostUseCase {
     final paymentFields = _paymentFieldsFromSchedule(paymentSchedule);
     final mapPinTier = MapPinTierResolver.resolveForNewPost(
       registeredBy: registeredBy,
+      hourlyWage: hourlyWage,
+      workSchedule: workSchedule.trim(),
+    );
+
+    final resolvedWorkCategoryId = WorkCategoryClassifierService.resolveCategoryId(
+      selectedId: workCategoryId,
+      title: title.trim(),
+      jobDescription: jobDesc,
+      summary: resolvedSummary,
     );
 
     final postedAt = DateTime.now();
@@ -118,16 +170,22 @@ class CreateCorporateJobPostUseCase {
       dailyWage: dailyWage,
       workSchedule: workSchedule.trim(),
       jobDescription: jobDesc,
-      summary: extraSummary,
+      summary: resolvedSummary,
       paymentDate: paymentFields.paymentDate,
       paymentMonthOffset: paymentFields.paymentMonthOffset,
       paymentDayOfMonth: paymentFields.paymentDayOfMonth,
+      paymentDateNegotiable: paymentFields.paymentDateNegotiable,
       notificationSettings: notificationSettings,
       registeredBy: registeredBy,
+      recruiterEmail: AuthSession.instance.currentUser?.email,
       paymentRecord: paymentRecord,
       branchId: branchId,
       branchName: branchName,
       mapPinDisplayTier: mapPinTier,
+      commuteRouteId: commuteRouteId,
+      linkedCommuteRouteIds: linkedCommuteRouteIds,
+      hasShuttleRouteOverlay: hasShuttleRouteOverlay,
+      workCategoryId: resolvedWorkCategoryId,
       status: CorporateJobPostStatus.recruiting,
       applicantCount: 0,
       postedAt: postedAt,
@@ -136,6 +194,85 @@ class CreateCorporateJobPostUseCase {
 
     return _dataSource.createJobPost(post).then(
           (_) => CorporateJobPostResult.success(post),
+        );
+  }
+}
+
+class ReactivateCorporateJobPostUseCase {
+  const ReactivateCorporateJobPostUseCase(this._dataSource);
+
+  final CorporateJobPostLocalDataSource _dataSource;
+
+  Future<CorporateJobPostResult> call(CorporateJobPost original) {
+    final postedAt = DateTime.now();
+    final reactivated = original.copyWith(
+      postedAt: postedAt,
+      expiresAt: JobPostValidity.expiresAtFromRegistration(postedAt),
+      status: CorporateJobPostStatus.recruiting,
+    );
+
+    return _dataSource.updateJobPost(reactivated).then(
+          (_) => CorporateJobPostResult.success(reactivated),
+        );
+  }
+}
+
+class CloseCorporateJobPostUseCase {
+  const CloseCorporateJobPostUseCase(this._dataSource);
+
+  final CorporateJobPostLocalDataSource _dataSource;
+
+  Future<CorporateJobPostResult> call(CorporateJobPost post) {
+    if (post.status == CorporateJobPostStatus.closed) {
+      return Future.value(CorporateJobPostResult.success(post));
+    }
+    final closed = post.copyWith(status: CorporateJobPostStatus.closed);
+    return _dataSource.updateJobPost(closed).then(
+          (_) => CorporateJobPostResult.success(closed),
+        );
+  }
+}
+
+class DuplicateCorporateJobPostUseCase {
+  const DuplicateCorporateJobPostUseCase(this._dataSource);
+
+  final CorporateJobPostLocalDataSource _dataSource;
+
+  Future<CorporateJobPostResult> call(CorporateJobPost original) {
+    final postedAt = DateTime.now();
+    final duplicate = CorporateJobPost(
+      id: 'post_${postedAt.millisecondsSinceEpoch}',
+      title: original.title,
+      employmentType: original.employmentType,
+      workerCategory: original.workerCategory,
+      warehouseName: original.warehouseName,
+      hourlyWage: original.hourlyWage,
+      dailyWage: original.dailyWage,
+      workSchedule: original.workSchedule,
+      summary: original.summary,
+      jobDescription: original.jobDescription,
+      paymentDate: original.paymentDate,
+      paymentMonthOffset: original.paymentMonthOffset,
+      paymentDayOfMonth: original.paymentDayOfMonth,
+      notificationSettings: original.notificationSettings,
+      registeredBy: original.registeredBy,
+      recruiterEmail: AuthSession.instance.currentUser?.email ??
+          original.recruiterEmail,
+      branchId: original.branchId,
+      branchName: original.branchName,
+      mapPinDisplayTier: original.mapPinDisplayTier,
+      commuteRouteId: original.commuteRouteId,
+      linkedCommuteRouteIds: original.linkedCommuteRouteIds,
+      hasShuttleRouteOverlay: original.hasShuttleRouteOverlay,
+      workCategoryId: original.workCategoryId,
+      status: CorporateJobPostStatus.recruiting,
+      applicantCount: 0,
+      postedAt: postedAt,
+      expiresAt: JobPostValidity.expiresAtFromRegistration(postedAt),
+    );
+
+    return _dataSource.createJobPost(duplicate).then(
+          (_) => CorporateJobPostResult.success(duplicate),
         );
   }
 }
@@ -162,6 +299,10 @@ class UpdateCorporateJobPostUseCase {
     JobPostPaymentRecord? paymentRecord,
     String? branchId,
     String? branchName,
+    String? commuteRouteId,
+    List<String>? linkedCommuteRouteIds,
+    bool? hasShuttleRouteOverlay,
+    String? workCategoryId,
   }) {
     if (title.trim().isEmpty) {
       return Future.value(
@@ -173,11 +314,48 @@ class UpdateCorporateJobPostUseCase {
         const CorporateJobPostResult.failure('급여지급일을 선택해 주세요.'),
       );
     }
+    final mismatch = WorkplaceAddressMismatchService.evaluate(
+      workplace: workplace,
+      profile: original.registeredBy,
+    );
+    if (!mismatch.allowed && original.registeredBy != null && !kDebugMode) {
+      final headOffice =
+          original.registeredBy!.businessHeadOfficeAddress?.trim();
+      if (headOffice == null || headOffice.isEmpty) {
+        return Future.value(
+          CorporateJobPostResult.failure(
+            mismatch.reason ??
+                '사업자 본사 주소를 먼저 등록해야 공고를 올릴 수 있습니다.',
+          ),
+        );
+      }
+      return _blockWorkplaceMismatch(
+        profile: original.registeredBy!,
+        mismatch: mismatch,
+      );
+    }
 
     final paymentFields = _paymentFieldsFromSchedule(paymentSchedule);
     final profile = original.registeredBy;
     final mapPinTier = MapPinTierResolver.resolveForNewPost(
       registeredBy: profile,
+      hourlyWage: hourlyWage,
+      workSchedule: workSchedule.trim(),
+    );
+    final jobDesc = jobDescription.trim();
+    if (jobDesc.isEmpty) {
+      return Future.value(
+        const CorporateJobPostResult.failure('업무 내용을 입력해 주세요.'),
+      );
+    }
+    final resolvedSummary =
+        summary.trim().isEmpty ? jobDesc : summary.trim();
+
+    final resolvedWorkCategoryId = WorkCategoryClassifierService.resolveCategoryId(
+      selectedId: workCategoryId ?? original.workCategoryId,
+      title: title.trim(),
+      jobDescription: jobDesc,
+      summary: resolvedSummary,
     );
 
     final updated = CorporateJobPost(
@@ -189,26 +367,59 @@ class UpdateCorporateJobPostUseCase {
       hourlyWage: formatCorporateHourlyWage(hourlyWage),
       dailyWage: dailyWage ?? original.dailyWage,
       workSchedule: workSchedule.trim(),
-      jobDescription: jobDescription.trim(),
-      summary: summary.trim(),
+      jobDescription: jobDesc,
+      summary: resolvedSummary,
       paymentDate: paymentFields.paymentDate,
       paymentMonthOffset: paymentFields.paymentMonthOffset,
       paymentDayOfMonth: paymentFields.paymentDayOfMonth,
+      paymentDateNegotiable: paymentFields.paymentDateNegotiable,
       notificationSettings: notificationSettings,
       registeredBy: original.registeredBy,
+      recruiterEmail: original.recruiterEmail,
       paymentRecord: paymentRecord ?? original.paymentRecord,
       branchId: branchId ?? original.branchId,
       branchName: branchName ?? original.branchName,
       mapPinDisplayTier: mapPinTier,
+      commuteRouteId: commuteRouteId ?? original.commuteRouteId,
+      linkedCommuteRouteIds:
+          linkedCommuteRouteIds ?? original.linkedCommuteRouteIds,
+      shuttleRegisteredStopIdsByRoute: original.shuttleRegisteredStopIdsByRoute,
+      shuttlePaidStopIdsByRoute: original.shuttlePaidStopIdsByRoute,
+      shuttleExposurePaidAt: original.shuttleExposurePaidAt,
+      hasShuttleRouteOverlay:
+          hasShuttleRouteOverlay ?? original.hasShuttleRouteOverlay,
+      workCategoryId: resolvedWorkCategoryId,
       status: status,
       applicantCount: original.applicantCount,
       postedAt: original.postedAt,
+      expiresAt: original.expiresAt,
     );
 
     return _dataSource.updateJobPost(updated).then(
           (_) => CorporateJobPostResult.success(updated),
         );
   }
+}
+
+Future<CorporateJobPostResult> _blockWorkplaceMismatch({
+  required CorporateMemberProfile profile,
+  required WorkplaceAddressMismatchResult mismatch,
+}) async {
+  final reason = mismatch.reason ?? '사업자 본사 주소와 근무지가 일치하지 않아 공고 노출이 제한됩니다.';
+  final restricted = profile.copyWith(
+    requiresAdminReview: true,
+    adminReviewApproved: false,
+    adminReviewReason: reason,
+  );
+  await AuthSession.instance.updateCorporateProfile(restricted);
+  await AbuseDetectionService().reportWorkplaceMismatch(
+    companyKey: profile.companyKey,
+    headOfficeAddress: mismatch.headOfficeAddress ?? '',
+    workplaceAddress: mismatch.workplaceAddress ?? '',
+    reason: reason,
+    distanceMeters: mismatch.distanceMeters,
+  );
+  return CorporateJobPostResult.failure(reason);
 }
 
 class CorporateJobPostResult {

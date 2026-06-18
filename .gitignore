@@ -48,3 +48,6 @@ app.*.map.json
 # Environment
 .env
 .env.*
+
+# Legacy nested clone (same repo checked out inside workspace)
+/iljali-app/

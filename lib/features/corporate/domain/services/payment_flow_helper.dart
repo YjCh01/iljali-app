@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/config/payment_gateway_factory.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/corporate/data/services/remote_payments_gateway_service.dart';
 import 'package:map/features/corporate/data/services/toss_payments_gateway_service.dart';
 import 'package:map/features/corporate/domain/entities/payment_request.dart';
 import 'package:map/features/corporate/domain/services/payment_gateway_service.dart';
@@ -34,6 +35,14 @@ class PaymentFlowHelper {
     final result = await _gateway.requestPayment(enriched);
     if (!result.success) return result;
 
+    if (enriched.usesSavedCard) {
+      return PaymentResult(
+        success: true,
+        transactionId: result.transactionId ?? enriched.orderId,
+        mock: result.mock,
+      );
+    }
+
     if (result.mock || result.checkoutUrl == null) {
       return PaymentResult(
         success: true,
@@ -55,6 +64,14 @@ class PaymentFlowHelper {
 
     if (paymentKey == null || paymentKey.isEmpty) {
       return PaymentResult.fail('결제가 취소되었습니다.');
+    }
+
+    if (_gateway is RemotePaymentsGatewayService) {
+      return (_gateway as RemotePaymentsGatewayService).confirmViaServer(
+        paymentKey: paymentKey,
+        orderId: enriched.orderId,
+        amountKrw: enriched.amountKrw,
+      );
     }
 
     if (_gateway is TossPaymentsGatewayService) {

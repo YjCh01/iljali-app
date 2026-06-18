@@ -1,11 +1,13 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
 import 'package:map/features/corporate/presentation/widgets/create_job_post/partnership_tier_cards.dart';
 
-/// 푸시 정책 공식 안내 채팅 상세
+/// PUSH 정책 공식 안내 채팅 상세
 class PartnershipNoticeChatPage extends StatelessWidget {
   const PartnershipNoticeChatPage({
     super.key,
@@ -60,7 +62,7 @@ class PartnershipNoticeChatPage extends StatelessWidget {
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          '푸시 정책 안내',
+                          'PUSH 정책 안내',
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
@@ -95,25 +97,32 @@ class PartnershipNoticeChatPage extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             '※ 공고 등록: 완전 무료 · 사업자번호당 동시 노출 최대 10개\n'
-            '※ 무료 푸시: 근무지 1km · 하루 1회\n'
-            '※ 유료 지역 푸시권: 5,000원/회 · 10회 45,000원 · 30회 120,000원 · 100회 350,000원\n'
-            '※ 황금핀(◆): 100회 팩 구매자 전용',
+            '※ 가입 보너스: 일자리 알림핀 ${PushPackageCatalog.signupBonusPushes}회 · '
+            '검증 보너스 ${PushPackageCatalog.verificationBonusPushes}회\n'
+            '※ 노출(알림핀·정류장 표시핀): ${PushPackageCatalog.krwSuffix(PushPackageCatalog.exposureUnitPriceKrw)}/회 · '
+            '10회 ${PushPackageCatalog.krwSuffix(PushPackageCatalog.pack10Price(PushPackageCatalog.exposureUnitPriceKrw))}\n'
+            '※ 노출+PUSH: ${PushPackageCatalog.krwSuffix(PushPackageCatalog.exposureWithPushUnitPriceKrw)}/회 · '
+            '10회 ${PushPackageCatalog.krwSuffix(PushPackageCatalog.pack10Price(PushPackageCatalog.exposureWithPushUnitPriceKrw))}\n'
+            '※ PUSH 알림권: ${PushPackageCatalog.krwSuffix(PushPackageCatalog.pushOnlyUnitPriceKrw)}/회 · '
+            '노출 ${PushPackageCatalog.exposureEndsLabel}',
             style: TextStyle(
               fontSize: 12,
               height: 1.45,
               color: AppColors.textSecondary.withValues(alpha: 0.9),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            PremiumPartnershipPlans.commissionSavingsNote,
-            style: TextStyle(
-              fontSize: 11,
-              height: 1.4,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary.withValues(alpha: 0.9),
+          if (ProductFeatureFlags.isHiringCommissionEnabled) ...[
+            const SizedBox(height: 8),
+            Text(
+              PremiumPartnershipPlans.commissionSavingsNote,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary.withValues(alpha: 0.9),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

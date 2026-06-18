@@ -1,3 +1,4 @@
+import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
 
 /// 일용직(출근 확인) · 상시직(재직 확인) 중개 수수료
@@ -34,6 +35,9 @@ abstract final class CommissionCalculator {
 
   static int defaultKrw({PremiumPartnershipTier? plan}) =>
       dailyWorkerFee(plan: plan);
+
+  static int forApplication(HiringApplication app, {PremiumPartnershipTier? plan}) =>
+      app.commissionAmountKrw ?? defaultKrw(plan: plan);
 
   static String formatKrw(int amount) =>
       PartnershipPlanFormat.krwSuffix(amount);

@@ -9,6 +9,12 @@ class MockPaymentGatewayService implements PaymentGatewayService {
 
   @override
   Future<PaymentResult> requestPayment(PaymentRequest request) async {
+    if (request.usesSavedCard) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      final txnId =
+          'MOCK-BILLING-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+      return PaymentResult.ok(txnId);
+    }
     await Future<void>.delayed(const Duration(milliseconds: 900));
     final txnId =
         'MOCK-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';

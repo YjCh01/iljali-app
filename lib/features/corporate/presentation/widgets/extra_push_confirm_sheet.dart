@@ -1,14 +1,18 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/widgets/transient_snack_bar.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
+import 'package:map/features/corporate/domain/entities/exposure_activation_credit_mode.dart';
+import 'package:map/features/corporate/domain/services/exposure_activation_service.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
+import 'package:map/features/corporate/domain/utils/exposure_slot_policy.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/exposure_zone_add_row.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
@@ -45,8 +49,9 @@ Future<ExtraPushConfirmResult?> showExtraPushConfirmSheet(
   required CorporateJobPost post,
   required int availablePushCredits,
   ExtraPushSheetMode mode = ExtraPushSheetMode.dispatch,
-}) {
-  return showModalBottomSheet<ExtraPushConfirmResult>(
+}) async {
+  clearSnackBarQueue(context);
+  final result = await showModalBottomSheet<ExtraPushConfirmResult>(
     context: context,
     isScrollControlled: true,
     backgroundColor: AppColors.surface,
@@ -59,6 +64,10 @@ Future<ExtraPushConfirmResult?> showExtraPushConfirmSheet(
       mode: mode,
     ),
   );
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+  }
+  return result;
 }
 
 class _ExtraPushConfirmSheet extends StatefulWidget {
@@ -89,6 +98,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
   bool _showPurchasedHint = false;
   bool _zoneListExpanded = false;
   bool _mapPointerActive = false;
+  ExposureActivationCreditMode? _lastZoneActivationMode;
 
   int get _recruitZoneCount =>
       PushWalletCreditPolicy.recruitmentZoneCountFromPoints(_points);
@@ -193,7 +203,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
         latitude: base.latitude + dist * math.cos(angle),
         longitude: base.longitude + dist * math.sin(angle),
       ),
-      addressLabel: '모집지역 $n',
+      addressLabel: '일자리 알림핀 $n',
       radiusTier: PushRadiusTier.standard1km,
       isPrimary: false,
       isPremiumSlot: true,
@@ -201,9 +211,19 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
   }
 
   void _appendRecruitmentPointAfterPurchase() {
-    if (_points.length >= _maxPoints) return;
+    _appendRecruitmentPointAfterPurchaseInner(afterCreditConsumed: true);
+  }
+
+  void _appendRecruitmentPointAfterPurchaseInner({
+    bool afterCreditConsumed = false,
+  }) {
+    if (!afterCreditConsumed && _points.length >= _maxPoints) return;
     setState(() {
-      _points.add(_createRecruitmentPoint());
+      var point = _createRecruitmentPoint();
+      if (afterCreditConsumed) {
+        point = ExposureSlotPolicy.lockActivation(point);
+      }
+      _points.add(point);
       _activeIndex = _points.length - 1;
       _syncActiveFromPoint(_activeIndex);
       _showPurchasedHint = true;
@@ -213,11 +233,46 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
   Future<bool> _consumeCreditForNewZone() async {
     final profile = AuthSession.instance.currentUser?.corporateProfile;
     if (profile == null) return false;
-    final result =
-        await PushWalletService().tryConsumeRecruitmentCredit(profile);
+
+    final wallet = _wallet ?? await PushWalletService().loadWallet(profile);
+    final mode = await ExposureActivationService().pickCreditMode(
+      context,
+      wallet: wallet,
+      title: '일자리 알림핀 추가',
+      subtitle: '일자리 알림핀 설치에 사용할 이용권을 선택하세요.',
+    );
+    if (mode == null) return false;
+
+    final result = await ExposureActivationService().consumeCredit(
+      profile: profile,
+      mode: mode,
+    );
     if (!result.success) return false;
+    _lastZoneActivationMode = mode;
     await _refreshWallet();
     return true;
+  }
+
+  Future<void> _maybeSendIncludedPushForActivePoint() async {
+    if (_lastZoneActivationMode != ExposureActivationCreditMode.exposureWithPush) {
+      return;
+    }
+    _lastZoneActivationMode = null;
+
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (profile == null || !mounted) return;
+
+    final point = _points[_activeIndex];
+    final target = ExposureActivationService().targetFromPinPoint(
+      point: point,
+      index: _activeIndex,
+    );
+    await ExposureActivationService().sendIncludedPush(
+      context: context,
+      profile: profile,
+      post: widget.post,
+      target: target,
+    );
   }
 
   Future<void> _addRecruitmentZone() async {
@@ -241,10 +296,12 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     }
     setState(() {
       _submitting = false;
-      _points.add(_createRecruitmentPoint());
+      final point = ExposureSlotPolicy.lockActivation(_createRecruitmentPoint());
+      _points.add(point);
       _activeIndex = _points.length - 1;
       _syncActiveFromPoint(_activeIndex);
     });
+    await _maybeSendIncludedPushForActivePoint();
   }
 
   Future<void> _removeRecruitmentZone(int index) async {
@@ -271,7 +328,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
 
   String get _configureMapHint {
     if (_activeIndex == 0) {
-      return '근무지는 고정입니다. 모집지역 칩을 선택해 추가·위치를 지정하세요.';
+      return '근무지는 고정입니다. 일자리 알림핀을 선택해 위치를 지정하세요.';
     }
     return '${ExposurePointLabels.title(_activeIndex)} — 지도를 움직여 위치를 지정하세요.';
   }
@@ -283,7 +340,8 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     if (!mounted) return;
     setState(() {
       _wallet = wallet;
-      _availableCredits = wallet.packageRecruitCredits;
+      _availableCredits =
+          wallet.packageCredits + wallet.exposurePushBundleCredits;
     });
   }
 
@@ -300,7 +358,8 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     if (!mounted) return;
     setState(() {
       _wallet = wallet;
-      _availableCredits = wallet.packageRecruitCredits;
+      _availableCredits =
+          wallet.packageCredits + wallet.exposurePushBundleCredits;
       if (purchased == true &&
           wallet.packageRecruitCredits <= creditsBefore &&
           wallet.packageRecruitCredits > 0) {
@@ -317,6 +376,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     final consumed = await _consumeCreditForNewZone();
     if (!mounted || !consumed) return;
     _appendRecruitmentPointAfterPurchase();
+    await _maybeSendIncludedPushForActivePoint();
   }
 
   List<PushRadiusMapOverlayPoint> get _mapOverlays => [
@@ -335,14 +395,15 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     if (_submitting) return;
     _syncPointAtActiveIndex();
     setState(() => _submitting = true);
+    final points = (_isConfigureMode || _pointsChanged)
+        ? ExposureSlotPolicy.syncPaidRecruitmentActivations(_points)
+        : null;
     Navigator.of(context).pop(
       ExtraPushConfirmResult(
         coordinate: _center,
         radiusTier: _radiusTier,
         activePointIndex: _activeIndex,
-        updatedBasePoints: _isConfigureMode || _pointsChanged
-            ? List.unmodifiable(_points)
-            : null,
+        updatedBasePoints: points == null ? null : List.unmodifiable(points),
       ),
     );
   }
@@ -354,19 +415,24 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
       );
 
   bool get _canConfirmDispatch {
-    final paid = _wallet?.paidRecruitCreditsAvailable ?? 0;
+    final paid =
+        _wallet?.paidRecruitCreditsAvailable ?? _availableCredits;
     if (_creditsRequired > 0) {
       return paid >= _creditsRequired;
-    }
-    if (_activeIndex == 0) {
-      return (_wallet?.dailyFreePostingAvailable ?? false) ||
-          _availableCredits > 0;
     }
     return paid > 0;
   }
 
   bool get _canConfirm {
-    if (_isConfigureMode) return _points.isNotEmpty;
+    if (_isConfigureMode) {
+      if (_points.isEmpty) return false;
+      if (_creditsRequired > 0) {
+        final paid =
+            _wallet?.paidRecruitCreditsAvailable ?? _availableCredits;
+        return paid >= _creditsRequired;
+      }
+      return true;
+    }
     return _canConfirmDispatch;
   }
 
@@ -386,7 +452,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
         : (_wallet?.packageRecruitCredits ?? _availableCredits);
     final hasCredits = _isConfigureMode
         ? headerCredits > 0
-        : (_wallet?.dailyFreePostingAvailable ?? false) || headerCredits > 0;
+        : headerCredits > 0;
     final showCreditWarning = !_isConfigureMode && !canConfirm;
     final mapHeight = _isConfigureMode
         ? _kMapHeightCollapsed
@@ -430,7 +496,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _isConfigureMode ? '모집지역 설정' : '지원자 모집하기',
+                          _isConfigureMode ? '일자리 알림핀 설정' : '지원자 모집하기',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
@@ -507,7 +573,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                       ? '지도의 연한 영역을 탭하거나, 발송 지역 목록에서 선택하세요.'
                       : _activeIndex == 0
                           ? '근무지 주변에서 발송합니다.'
-                          : '지도를 움직여 모집지역 위치를 지정한 뒤 발송해 주세요.',
+                          : '지도를 움직여 일자리 알림핀 위치를 지정한 뒤 발송해 주세요.',
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.45,
@@ -536,9 +602,9 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                       Expanded(
                         child: Text(
                           creditsRequired > 0
-                              ? '모집지역 푸시 $creditsRequired회 필요 · '
-                                  '유료 이용권 ${_wallet?.paidRecruitCreditsAvailable ?? 0}회 보유'
-                              : '오늘 무료 근무지 푸시를 사용할 수 없습니다.',
+                              ? '일자리 알림핀 $creditsRequired회 필요 · '
+                                  '보유 ${_wallet?.paidRecruitCreditsAvailable ?? _availableCredits}회'
+                              : '일자리 알림핀이 부족합니다.',
                           style: TextStyle(
                             fontSize: 12,
                             height: 1.4,
@@ -553,7 +619,7 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
               ] else if (!_isConfigureMode && creditsRequired > 0) ...[
                 const SizedBox(height: 10),
                 Text(
-                  '이번 발송 시 모집지역 이용권 $creditsRequired회가 차감됩니다.',
+                  '이번 발송 시 일자리 알림핀 $creditsRequired회가 차감됩니다.',
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.4,
@@ -587,8 +653,8 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                       Expanded(
                         child: Text(
                           _points.length > 1
-                              ? '지역 푸시권이 충전되었습니다. 모집지역을 선택해 바로 발송해 보세요.'
-                              : '지역 푸시권이 충전되었습니다. 보유 횟수가 늘었습니다.',
+                              ? '일자리 알림핀이 충전되었습니다. 발송할 지역을 선택해 모집해 보세요.'
+                              : '일자리 알림핀이 충전되었습니다. 보유 횟수가 늘었습니다.',
                           style: TextStyle(
                             fontSize: 11,
                             height: 1.4,
@@ -599,16 +665,6 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                       ),
                     ],
                   ),
-                ),
-              ],
-              if (theme.showBasicPassNotice &&
-                  _activeIndex == 0 &&
-                  !_isConfigureMode) ...[
-                const SizedBox(height: 10),
-                BasicPassNoticeBanner(
-                  backgroundColor: theme.accentLight.withValues(alpha: 0.22),
-                  borderColor: theme.accent.withValues(alpha: 0.35),
-                  iconColor: theme.accent,
                 ),
               ],
               if (_isConfigureMode) ...[
@@ -812,8 +868,8 @@ class _ConfigureZoneSummary extends StatelessWidget {
               Expanded(
                 child: Text(
                   postingCredits > 0
-                      ? '지역 푸시권 $postingCredits회'
-                      : '지역 푸시권 없음',
+                      ? '일자리 알림핀 $postingCredits회'
+                      : '일자리 알림핀 없음',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -826,8 +882,8 @@ class _ConfigureZoneSummary extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '근무지 1 · 모집 $recruitZoneCount · '
-          '추가 가능 ${remainingAddSlots > 0 ? '$remainingAddSlots곳' : '없음'}',
+          '근무지 1 · 일자리 알림핀 $recruitZoneCount · '
+          '추가 가능 ${remainingAddSlots > 0 ? '$remainingAddSlots개' : '없음'}',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -838,7 +894,7 @@ class _ConfigureZoneSummary extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              '모집지역 추가 시 지역 푸시권 1회가 즉시 사용됩니다.',
+              '일자리 알림핀 추가 시 이용권 1회가 사용됩니다.',
               style: TextStyle(
                 fontSize: 11,
                 height: 1.4,
@@ -934,7 +990,7 @@ class _RecruitmentZoneRowListState extends State<_RecruitmentZoneRowList> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          '모집 지역',
+          '설정 목록',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
@@ -1075,16 +1131,17 @@ class _ZoneRow extends StatelessWidget {
                         color: selected ? theme.accent : AppColors.textPrimary,
                       ),
                     ),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textSecondary.withValues(alpha: 0.92),
+                    if (subtitle.isNotEmpty)
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary.withValues(alpha: 0.92),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1272,15 +1329,18 @@ class _RecruitmentZoneList extends StatelessWidget {
                                           : AppColors.textPrimary,
                                     ),
                                   ),
-                                  Text(
-                                    ExposurePointLabels.zoneRowSubtitle(index),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.textSecondary
-                                          .withValues(alpha: 0.9),
+                                  if (ExposurePointLabels
+                                      .zoneRowSubtitle(index)
+                                      .isNotEmpty)
+                                    Text(
+                                      ExposurePointLabels.zoneRowSubtitle(index),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textSecondary
+                                            .withValues(alpha: 0.9),
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -1338,7 +1398,7 @@ class _PackageShopLinkCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      '지역 푸시권 구매',
+                      '일자리 알림핀 구매',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -1347,7 +1407,7 @@ class _PackageShopLinkCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '추가 모집지역 푸시를 늘리려면 지역 푸시권을 구매하세요.',
+                      '일자리 알림핀·PUSH 알림권을 늘리려면 이용권을 충전하세요.',
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.35,

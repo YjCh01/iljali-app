@@ -1,19 +1,30 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/compliance/presentation/partnership_upsell_dialog.dart';
 import 'package:map/core/compliance/services/contact_entitlement_service.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/dev/dev_chat_test_support.dart';
+import 'package:map/core/hiring/hiring_application.dart';
+import 'package:map/core/hiring/commission_chat_prompt_service.dart';
+import 'package:map/core/hiring/hiring_refresh.dart';
+import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/core/session/member_type.dart';
+import 'package:map/features/chat/domain/services/chat_access_policy.dart';
 import 'package:map/features/corporate/data/datasources/corporate_chat_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
 import 'package:map/features/corporate/domain/usecases/get_corporate_chat_rooms_usecase.dart';
-import 'package:map/features/corporate/presentation/pages/partnership_notice_chat_page.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_chat_room_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
+import 'package:map/features/hiring/presentation/pages/application_chat_page.dart';
+import 'package:map/features/hiring/presentation/widgets/commission_payment_dialog.dart';
 
-/// 기업회원 5번 탭 — 지원자·운영팀 채팅방
+/// 기업회원 5번 탭 — 지원자 채팅방
 class CorporateChatTab extends StatefulWidget {
-  const CorporateChatTab({super.key});
+  const CorporateChatTab({super.key, this.isActive = false});
+
+  final bool isActive;
 
   @override
   State<CorporateChatTab> createState() => _CorporateChatTabState();
@@ -27,74 +38,126 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
   List<CorporateChatRoom> _rooms = [];
   bool _loading = true;
   bool _contactAllowed = false;
+  int _pendingCommissionCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.isActive) _load();
   }
 
   @override
   void didUpdateWidget(covariant CorporateChatTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _load();
+    if (!oldWidget.isActive && widget.isActive) {
+      _load();
+      return;
+    }
+    if (widget.isActive && HiringRefresh.consumeIfDirty()) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     final profile = AuthSession.instance.currentUser?.corporateProfile;
     var allowed = false;
-    if (profile != null) {
+    final devChatReady = await DevChatTestSupport.ensureCorporateChatReady();
+    if (devChatReady) {
+      allowed = true;
+    } else if (profile != null) {
       final access =
           await ContactEntitlementService().evaluateWithUsage(profile);
       allowed = access.allowed;
     }
     final rooms = await _getChatRooms();
+    final myEmail = AuthSession.instance.currentUser?.email ?? '';
+    final repo = await LocalHiringRepository.create();
+    final prompt = await CommissionChatPromptService.create();
+    final pendingCommissions = ProductFeatureFlags.isHiringCommissionEnabled
+        ? (myEmail.isNotEmpty
+            ? await repo.fetchPendingCommissionsForPayer(myEmail)
+            : await repo.fetchPendingCommissions())
+        : const <HiringApplication>[];
+    final promptIds = ProductFeatureFlags.isHiringCommissionEnabled
+        ? (myEmail.isNotEmpty
+            ? await prompt.consumePendingForEmail(myEmail)
+            : await prompt.consumePending())
+        : const <String>[];
+
     if (!mounted) return;
     setState(() {
       _contactAllowed = allowed;
-      _rooms = allowed
-          ? rooms
-          : rooms.where((r) => r.isOfficialNotice).toList();
+      _rooms = allowed ? rooms : const [];
+      _pendingCommissionCount = pendingCommissions.length;
       _loading = false;
     });
+
+    if (!allowed || !widget.isActive) return;
+
+    for (final applicationId in promptIds) {
+      final app = await repo.findById(applicationId);
+      if (app == null || !mounted) continue;
+      if (!app.needsCommissionPayment) continue;
+      await _showCommissionPrompt(app);
+      break;
+    }
   }
 
-  void _openRoom(CorporateChatRoom room) {
-    if (room.isOfficialNotice) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => PartnershipNoticeChatPage(room: room),
+  Future<void> _showCommissionPrompt(HiringApplication app) async {
+    if (!ProductFeatureFlags.isHiringCommissionEnabled || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${app.seekerName}님과 출근 확인이 완료되었습니다. 수수료 결제를 진행해 주세요.',
         ),
-      );
-      setState(() {
-        _rooms = _rooms.map((item) {
-          if (item.id != room.id) return item;
-          return CorporateChatRoom(
-            id: item.id,
-            applicantName: item.applicantName,
-            jobTitle: item.jobTitle,
-            lastMessage: item.lastMessage,
-            updatedAtLabel: item.updatedAtLabel,
-            unreadCount: 0,
-            kind: item.kind,
-            fullMessageBody: item.fullMessageBody,
-          );
-        }).toList();
-      });
-      return;
-    }
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: '결제',
+          onPressed: () async {
+            await showCommissionPaymentDialog(context, app);
+            if (mounted) await _load();
+          },
+        ),
+      ),
+    );
+    await showCommissionPaymentDialog(context, app);
+    if (mounted) await _load();
+  }
+
+  Future<void> _openRoom(CorporateChatRoom room) async {
     if (!_contactAllowed) {
-      final profile = AuthSession.instance.currentUser?.corporateProfile;
-      if (profile != null) {
-        ContactEntitlementService().evaluateWithUsage(profile).then((access) {
+      if (await DevChatTestSupport.ensureCorporateChatReady()) {
+        if (mounted) setState(() => _contactAllowed = true);
+      } else {
+        final profile = AuthSession.instance.currentUser?.corporateProfile;
+        if (profile != null) {
+          final access =
+              await ContactEntitlementService().evaluateWithUsage(profile);
           if (!mounted) return;
-          ensureContactAccess(context, access);
-        });
+          await ensureContactAccess(context, access);
+        }
+        return;
       }
+    }
+    final policy = ChatAccessPolicy.evaluatePair(
+      requester: MemberType.corporate,
+      peer: MemberType.individual,
+    );
+    if (!policy.allowed) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(policy.message ?? '채팅 접근이 제한되었습니다.')),
+      );
       return;
     }
-    showCorporateComingSoonSnackBar(context, '${room.applicantName} 채팅');
+    if (!mounted) return;
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => ApplicationChatPage(applicationId: room.id),
+      ),
+    );
+    if (updated == true && mounted) await _load();
   }
 
   @override
@@ -106,6 +169,13 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
       );
     }
 
+    final showRestriction = !_contactAllowed;
+    final showEmpty = _contactAllowed && _rooms.isEmpty;
+    final itemCount = (showRestriction ? 1 : 0) +
+        (_pendingCommissionCount > 0 ? 1 : 0) +
+        (showEmpty ? 1 : 0) +
+        _rooms.length;
+
     return ColoredBox(
       color: AppColors.background,
       child: RefreshIndicator(
@@ -114,46 +184,110 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
         child: ListView.separated(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          itemCount: (_contactAllowed ? 0 : 1) + _rooms.length,
+          itemCount: itemCount,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
-            if (!_contactAllowed && index == 0) {
-              return CorporateSurfaceCard(
-                onTap: () => Navigator.of(context)
-                    .pushNamed(AppRoutes.corporatePushPackageShop),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '지원자 채팅 이용 제한',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '계정·사업자 검증 상태를 확인해 주세요. '
-                      '지역 푸시권은 채용 알림 확장용입니다.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.45,
-                        color: AppColors.textSecondary.withValues(alpha: 0.95),
-                      ),
-                    ),
-                  ],
-                ),
-              );
+            var cursor = 0;
+            if (showRestriction) {
+              if (index == cursor) {
+                return _RestrictionCard(
+                  onOpenProfile: () =>
+                      Navigator.of(context).pushNamed(AppRoutes.corporateMyInfo),
+                );
+              }
+              cursor++;
             }
-            final roomIndex = _contactAllowed ? index : index - 1;
-            final room = _rooms[roomIndex];
+            if (_pendingCommissionCount > 0) {
+              if (index == cursor) {
+                return _CommissionBanner(count: _pendingCommissionCount);
+              }
+              cursor++;
+            }
+            if (showEmpty) {
+              if (index == cursor) {
+                return const _EmptyChatCard();
+              }
+              cursor++;
+            }
+            final room = _rooms[index - cursor];
             return CorporateChatRoomCard(
               room: room,
               onTap: () => _openRoom(room),
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _CommissionBanner extends StatelessWidget {
+  const _CommissionBanner({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return CorporateSurfaceCard(
+      child: Row(
+        children: [
+          const Icon(Icons.payments_outlined, color: Color(0xFFC62828)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '출근 확인 완료 · 수수료 결제 대기 $count건',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RestrictionCard extends StatelessWidget {
+  const _RestrictionCard({required this.onOpenProfile});
+
+  final VoidCallback onOpenProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    return CorporateSurfaceCard(
+      onTap: onOpenProfile,
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '지원자 채팅 이용 제한',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            '계정·사업자 검증을 완료하면 지원자와 채팅할 수 있습니다.',
+            style: TextStyle(fontSize: 13, height: 1.45),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyChatCard extends StatelessWidget {
+  const _EmptyChatCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CorporateSurfaceCard(
+      child: Text(
+        '아직 채팅 중인 지원자가 없습니다.\n지원자가 있으면 여기에 표시됩니다.',
+        style: TextStyle(fontSize: 14, height: 1.5),
       ),
     );
   }

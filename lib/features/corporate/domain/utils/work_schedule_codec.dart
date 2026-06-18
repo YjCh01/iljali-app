@@ -41,6 +41,15 @@ abstract final class WorkScheduleCodec {
       WorkScheduleMode.dailyPick => () {
           final sorted = spec.selectedWorkDates.toList()
             ..sort((a, b) => a.compareTo(b));
+          if (spec.hasVariedDailyHours) {
+            final dated = sorted
+                .map((date) {
+                  final hours = spec.hoursForDate(date);
+                  return '${_fmtDate(date)}@${_padTime(hours.start)}~${_padTime(hours.end)}';
+                })
+                .join(',');
+            return '일용 · $dated · 근무${sorted.length}일';
+          }
           final dates = sorted.map(_fmtDate).join(',');
           return '일용 · $dates · $dayTime · 근무${sorted.length}일';
         }(),
@@ -158,22 +167,42 @@ abstract final class WorkScheduleCodec {
   }
 
   static WorkScheduleSpec? _parseDailyPick(String text) {
-    final times = _timePattern.firstMatch(text);
     var dayStart = const TimeOfDay(hour: 9, minute: 0);
     var dayEnd = const TimeOfDay(hour: 18, minute: 0);
-    if (times != null) {
-      dayStart = _parseTime(times);
-      dayEnd = _parseTimeEnd(times);
-    }
 
     final workDates = <DateTime>{};
+    final dailyHours = <String, DailyDayHours>{};
     final sections = text.split('·').map((s) => s.trim()).toList();
     if (sections.isEmpty || !sections.first.startsWith('일용')) return null;
 
     final dateSection = sections.length > 1 ? sections[1] : '';
+    final perDayPattern = RegExp(
+      r'(\d{4})[./-](\d{1,2})[./-](\d{1,2})@(\d{1,2}:\d{2})~(\d{1,2}:\d{2})',
+    );
+    var hasPerDayTimes = false;
+
     for (final part in dateSection.split(',')) {
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) continue;
+
+      final withTime = perDayPattern.firstMatch(trimmed);
+      if (withTime != null) {
+        hasPerDayTimes = true;
+        final date = _parseDate(
+          withTime.group(1)!,
+          withTime.group(2)!,
+          withTime.group(3)!,
+        );
+        workDates.add(date);
+        final start = _parseTimeParts(withTime.group(4)!);
+        final end = _parseTimeParts(withTime.group(5)!);
+        dailyHours[WorkScheduleSpec.dateKey(date)] =
+            DailyDayHours(start: start, end: end);
+        continue;
+      }
+
       final full = RegExp(r'(\d{4})[./-](\d{1,2})[./-](\d{1,2})')
-          .firstMatch(part.trim());
+          .firstMatch(trimmed);
       if (full != null) {
         workDates.add(_parseDate(
           full.group(1)!,
@@ -184,10 +213,26 @@ abstract final class WorkScheduleCodec {
     }
     if (workDates.isEmpty) return null;
 
+    if (!hasPerDayTimes) {
+      for (final section in sections.skip(2)) {
+        final times = _timePattern.firstMatch(section);
+        if (times != null) {
+          dayStart = _parseTime(times);
+          dayEnd = _parseTimeEnd(times);
+          break;
+        }
+      }
+    } else if (dailyHours.isNotEmpty) {
+      final first = dailyHours.values.first;
+      dayStart = first.start;
+      dayEnd = first.end;
+    }
+
     final sorted = workDates.toList()..sort();
     return WorkScheduleSpec(
       mode: WorkScheduleMode.dailyPick,
       selectedWorkDates: workDates,
+      dailyHoursByDate: dailyHours,
       startDate: sorted.first,
       endDate: sorted.last,
       dayStart: dayStart,

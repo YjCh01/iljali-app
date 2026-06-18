@@ -13,9 +13,15 @@ class Settings(BaseSettings):
     )
     nts_api_url: str = "https://api.odcloud.kr/api/nts-businessman/v1/status"
     toss_secret_key: str = ""
+    toss_client_key: str = ""
     clova_ocr_invoke_url: str = ""
     clova_ocr_secret: str = ""
     toss_webhook_secret: str = ""
+
+    # 외부 공고 스크래핑
+    job_scrape_timeout_sec: float = 15.0
+    job_scrape_min_interval_sec: float = 1.0
+    job_scrape_blocklist: str = "localhost,127.0.0.1"
     cors_origins: str = "*"
     database_url: str = "sqlite:///./iljari_compliance.db"
 

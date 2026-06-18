@@ -13,12 +13,16 @@ import 'package:map/features/corporate/domain/entities/salary_payment_schedule.d
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
+import 'package:map/features/corporate/domain/utils/daily_worker_policy.dart';
 import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
 
 import 'package:map/core/constants/labor_constants.dart';
+import 'package:map/core/widgets/comma_number_input_formatter.dart';
 
-import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_service_action_style.dart';
+import 'package:map/features/corporate/presentation/widgets/work_schedule_field_preview.dart';
 import 'package:map/features/corporate/presentation/widgets/work_schedule_selector_field.dart';
+import 'package:map/features/work_category/presentation/widgets/work_category_picker_field.dart';
 
 
 
@@ -38,8 +42,6 @@ class CorporateJobPostForm extends StatefulWidget {
 
     required this.scheduleController,
 
-    required this.summaryController,
-
     required this.workplace,
 
     required this.onSearchWorkplace,
@@ -47,6 +49,10 @@ class CorporateJobPostForm extends StatefulWidget {
     required this.workerCategory,
 
     required this.onWorkerCategoryChanged,
+
+    this.workCategoryId,
+
+    required this.onWorkCategoryChanged,
 
     required this.salaryPayType,
 
@@ -76,6 +82,18 @@ class CorporateJobPostForm extends StatefulWidget {
 
     this.beforeSubmit,
 
+    this.afterSubmit,
+
+    this.showExposureSection = true,
+
+    this.dailyWorkerAcknowledged = true,
+
+    this.onDailyScheduleCommitted,
+
+    this.paymentDateNegotiable = false,
+
+    required this.onPaymentDateNegotiableChanged,
+
   });
 
 
@@ -88,8 +106,6 @@ class CorporateJobPostForm extends StatefulWidget {
 
   final TextEditingController scheduleController;
 
-  final TextEditingController summaryController;
-
   final WorkplaceAddress? workplace;
 
   final VoidCallback onSearchWorkplace;
@@ -97,6 +113,10 @@ class CorporateJobPostForm extends StatefulWidget {
   final WorkerCategory workerCategory;
 
   final ValueChanged<WorkerCategory> onWorkerCategoryChanged;
+
+  final String? workCategoryId;
+
+  final ValueChanged<String?> onWorkCategoryChanged;
 
   final SalaryPayType salaryPayType;
 
@@ -126,6 +146,19 @@ class CorporateJobPostForm extends StatefulWidget {
 
   final Widget? beforeSubmit;
 
+  final Widget? afterSubmit;
+
+  final bool showExposureSection;
+
+  /// 일용직 안내 확인 후에만 근무일정·급여 이하 입력 가능
+  final bool dailyWorkerAcknowledged;
+
+  final VoidCallback? onDailyScheduleCommitted;
+
+  final bool paymentDateNegotiable;
+
+  final ValueChanged<bool> onPaymentDateNegotiableChanged;
+
 
 
   @override
@@ -137,9 +170,19 @@ class CorporateJobPostForm extends StatefulWidget {
 
 
 class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
+  bool get _dailyFieldsBlocked =>
+      widget.workerCategory.usesDailyPickSchedule &&
+      !widget.dailyWorkerAcknowledged;
+
+  Widget _wrapDailyGated(Widget child) {
+    if (!_dailyFieldsBlocked) return child;
+    return Opacity(
+      opacity: 0.45,
+      child: IgnorePointer(child: child),
+    );
+  }
 
   @override
-
   Widget build(BuildContext context) {
 
     return Column(
@@ -187,6 +230,17 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
           decoration: _inputDecoration('담당 업무, 근무 조건 등'),
 
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            '구직자 공고 상세 화면에 표시됩니다.',
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              color: AppColors.textSecondary.withValues(alpha: 0.9),
+            ),
+          ),
+        ),
 
         const SizedBox(height: 16),
 
@@ -227,15 +281,34 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
         ),
 
+        if (_dailyFieldsBlocked) ...[
+          const SizedBox(height: 8),
+          Text(
+            '일용직 안내를 확인하면 근무 일정·급여 항목을 입력할 수 있습니다.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: AppColors.textSecondary.withValues(alpha: 0.9),
+            ),
+          ),
+        ],
+
+        _wrapDailyGated(Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
         const SizedBox(height: 16),
 
         const FieldLabel('근무 일정'),
 
-        WorkScheduleSelectorField(controller: widget.scheduleController, dailyOnly: widget.workerCategory == WorkerCategory.daily),
+        WorkScheduleSelectorField(
+          controller: widget.scheduleController,
+          dailyOnly: widget.workerCategory.usesDailyPickSchedule,
+          onDailyScheduleCommitted: widget.onDailyScheduleCommitted,
+        ),
 
         const SizedBox(height: 16),
 
-        const FieldLabel('급여'),
+        const FieldLabel('급여 (단위: 원)'),
 
         Row(
 
@@ -271,7 +344,12 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
                 onChanged: (value) {
                   if (value == null || value == widget.salaryPayType) return;
-                  widget.wageController.clear();
+                  if (value == SalaryPayType.hourly) {
+                    widget.wageController.text =
+                        LaborConstants.defaultHourlyWageFieldText;
+                  } else {
+                    widget.wageController.clear();
+                  }
                   widget.onSalaryPayTypeChanged(value);
                 },
 
@@ -291,11 +369,11 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
                 keyboardType: TextInputType.number,
 
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: const [CommaNumberInputFormatter()],
 
                 decoration: _inputDecoration(
 
-                  '예: ${LaborConstants.defaultHourlyWageText}',
+                  '예: ${LaborConstants.defaultHourlyWageFieldText}',
 
                 ),
 
@@ -307,18 +385,32 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
         ),
 
+        _PremiumWageMapHint(
+          salaryPayType: widget.salaryPayType,
+        ),
+
         const SizedBox(height: 16),
 
         const FieldLabel('급여지급일'),
 
-        if (widget.workerCategory == WorkerCategory.daily)
+        if (widget.workerCategory.usesAbsolutePaymentDate)
 
-          _PaymentDateField(
+          ListenableBuilder(
+            listenable: widget.scheduleController,
+            builder: (context, _) => _DailyPaymentDatesField(
+              workScheduleRaw: widget.scheduleController.text,
+              negotiable: widget.paymentDateNegotiable,
+              onNegotiableChanged: widget.onPaymentDateNegotiableChanged,
+            ),
+          )
 
+        else if (widget.workerCategory.usesCalendarPaymentDate)
+
+          _CalendarPaymentDateField(
             paymentDate: widget.paymentDate,
-
-            onTap: widget.onPickPaymentDate,
-
+            negotiable: widget.paymentDateNegotiable,
+            onPickDate: widget.onPickPaymentDate,
+            onNegotiableChanged: widget.onPaymentDateNegotiableChanged,
           )
 
         else
@@ -337,22 +429,7 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
         const SizedBox(height: 16),
 
-        const FieldLabel('내용 추가'),
-
-        TextField(
-
-          controller: widget.summaryController,
-
-          minLines: 3,
-
-          maxLines: 5,
-
-          decoration: _inputDecoration('우대 사항, 복리후생 등'),
-
-        ),
-
-        const SizedBox(height: 16),
-
+        if (widget.showExposureSection) ...[
         const FieldLabel('공고 노출 범위'),
 
         Padding(
@@ -361,7 +438,7 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
           child: Text(
 
-            '적용 플랜: ${PushPlanEnforcement.planLimitSummary()}',
+            PushPlanEnforcement.planLimitSummary(),
 
             style: TextStyle(
 
@@ -377,29 +454,6 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
         ),
 
-        Padding(
-
-          padding: const EdgeInsets.only(bottom: 8),
-
-          child: Text(
-
-            '공고 등록 완전 무료(사업자번호당 동시 활성 최대 10개) · 근무지 1km 무료 푸시 일 1회 · '
-            '추가 모집지역은 지역 푸시권 ${PushPlanEnforcement.extraPushPriceKrw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}원/회',
-
-            style: TextStyle(
-
-              fontSize: 11,
-
-              height: 1.35,
-
-              color: AppColors.primary.withValues(alpha: 0.85),
-
-            ),
-
-          ),
-
-        ),
-
         _PushNotificationField(
 
           settings: widget.notificationSettings,
@@ -407,6 +461,7 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
           onTap: widget.onConfigurePushNotification,
 
         ),
+        ],
 
         if (widget.beforeSubmit != null) ...[
 
@@ -416,11 +471,24 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
         ],
 
+        const SizedBox(height: 16),
+
+        const FieldLabel('업무 카테고리'),
+
+        WorkCategoryPickerField(
+          selectedId: widget.workCategoryId,
+          onChanged: widget.onWorkCategoryChanged,
+          title: widget.titleController.text,
+          jobDescription: widget.jobDescriptionController.text,
+        ),
+
         const SizedBox(height: 28),
 
         FilledButton(
 
-          onPressed: widget.submitting ? null : widget.onSubmit,
+          onPressed: (widget.submitting || _dailyFieldsBlocked)
+              ? null
+              : widget.onSubmit,
 
           style: FilledButton.styleFrom(
 
@@ -465,6 +533,28 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
                 ),
 
         ),
+
+          ],
+        )),
+
+        if (widget.afterSubmit != null) ...[
+
+          const SizedBox(height: 16),
+
+          const Text(
+            '유료 서비스 (선택)',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          widget.afterSubmit!,
+
+        ],
 
       ],
 
@@ -640,6 +730,456 @@ class _WorkplaceField extends StatelessWidget {
 
 
 
+class _PremiumWageMapHint extends StatelessWidget {
+  const _PremiumWageMapHint({
+    required this.salaryPayType,
+  });
+
+  final SalaryPayType salaryPayType;
+
+  @override
+  Widget build(BuildContext context) {
+    if (salaryPayType != SalaryPayType.hourly &&
+        salaryPayType != SalaryPayType.daily) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.place_outlined,
+            size: 14,
+            color: Color(0xFF29B6F6),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              LaborConstants.premiumWageMapHint,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyPaymentDatesField extends StatelessWidget {
+  const _DailyPaymentDatesField({
+    required this.workScheduleRaw,
+    required this.negotiable,
+    required this.onNegotiableChanged,
+  });
+
+  final String workScheduleRaw;
+  final bool negotiable;
+  final ValueChanged<bool> onNegotiableChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final paymentDates =
+        DailyWorkerPolicy.paymentDatesFromWorkSchedule(workScheduleRaw);
+    final chips =
+        paymentDates.map(WorkSchedulePreviewFormatter.formatChipDate).toList();
+    final hasDates = chips.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: hasDates || negotiable
+                    ? AppColors.primary.withValues(alpha: 0.4)
+                    : AppColors.searchBarBorder,
+              ),
+            ),
+            child: negotiable
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.event_available_outlined,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            '급여지급일',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () => onNegotiableChanged(false),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.primaryLight.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: const Text(
+                            '협의',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : hasDates
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.event_available_outlined,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            '급여지급일 ${chips.length}일',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          for (final chip in chips) _DateChip(label: chip),
+                          OutlinedButton(
+                            onPressed: () => onNegotiableChanged(true),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              side: BorderSide(
+                                color: AppColors.searchBarBorder,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              '협의',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Icon(
+                        Icons.event_available_outlined,
+                        color: AppColors.textSecondary.withValues(alpha: 0.8),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '근무일 선택 후 자동 설정',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color:
+                                AppColors.textSecondary.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6, left: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                DailyWorkerPolicy.paymentAutoSetupLine1,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.35,
+                  color: AppColors.textSecondary.withValues(alpha: 0.9),
+                ),
+              ),
+              Text(
+                DailyWorkerPolicy.paymentAutoSetupLine2,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.35,
+                  color: AppColors.textSecondary.withValues(alpha: 0.9),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CalendarPaymentDateField extends StatelessWidget {
+  const _CalendarPaymentDateField({
+    required this.paymentDate,
+    required this.negotiable,
+    required this.onPickDate,
+    required this.onNegotiableChanged,
+  });
+
+  final DateTime? paymentDate;
+  final bool negotiable;
+  final VoidCallback onPickDate;
+  final ValueChanged<bool> onNegotiableChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final dateLabel = paymentDate == null
+        ? null
+        : WorkSchedulePreviewFormatter.formatChipDate(paymentDate!);
+    final hasDate = dateLabel != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: hasDate || negotiable
+                    ? AppColors.primary.withValues(alpha: 0.4)
+                    : AppColors.searchBarBorder,
+              ),
+            ),
+            child: negotiable
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_month_outlined,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            '급여지급일',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () => onNegotiableChanged(false),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.primaryLight.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: const Text(
+                            '협의',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : hasDate
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_month_outlined,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                '급여지급일',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              InkWell(
+                                onTap: onPickDate,
+                                borderRadius: BorderRadius.circular(8),
+                                child: _DateChip(label: dateLabel),
+                              ),
+                              OutlinedButton(
+                                onPressed: () => onNegotiableChanged(true),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                  side: BorderSide(
+                                    color: AppColors.searchBarBorder,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Text(
+                                  '협의',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      )
+                    : InkWell(
+                        onTap: onPickDate,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_month_outlined,
+                              color: AppColors.textSecondary
+                                  .withValues(alpha: 0.8),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '급여 지급일 선택',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: AppColors.textSecondary
+                                      .withValues(alpha: 0.9),
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6, left: 2),
+          child: Text(
+            '달력에서 급여 지급일을 선택하거나 협의로 표시할 수 있습니다.',
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              color: AppColors.textSecondary.withValues(alpha: 0.9),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DateChip extends StatelessWidget {
+  const _DateChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+}
+
 class _PaymentDateField extends StatelessWidget {
 
   const _PaymentDateField({
@@ -647,6 +1187,10 @@ class _PaymentDateField extends StatelessWidget {
     required this.paymentDate,
 
     required this.onTap,
+
+    this.readOnly = false,
+
+    this.helperText,
 
   });
 
@@ -656,6 +1200,10 @@ class _PaymentDateField extends StatelessWidget {
 
   final VoidCallback onTap;
 
+  final bool readOnly;
+
+  final String? helperText;
+
 
 
   @override
@@ -663,107 +1211,79 @@ class _PaymentDateField extends StatelessWidget {
   Widget build(BuildContext context) {
 
     final label = paymentDate == null
-
-        ? '급여 지급일 선택'
-
+        ? (readOnly ? '근무일 선택 후 자동 설정' : '급여 지급일 선택')
         : '${paymentDate!.year}년 ${paymentDate!.month}월 ${paymentDate!.day}일';
 
-
-
-    return Material(
-
+    final field = Material(
       color: AppColors.surface,
-
       borderRadius: BorderRadius.circular(14),
-
       child: InkWell(
-
-        onTap: onTap,
-
+        onTap: readOnly ? null : onTap,
         borderRadius: BorderRadius.circular(14),
-
         child: Ink(
-
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-
           decoration: BoxDecoration(
-
             borderRadius: BorderRadius.circular(14),
-
             border: Border.all(
-
               color: paymentDate != null
-
                   ? AppColors.primary.withValues(alpha: 0.4)
-
                   : AppColors.searchBarBorder,
-
             ),
-
           ),
-
           child: Row(
-
             children: [
-
               Icon(
-
-                Icons.calendar_month_outlined,
-
+                readOnly ? Icons.event_available_outlined : Icons.calendar_month_outlined,
                 color: paymentDate != null
-
                     ? AppColors.primary
-
                     : AppColors.textSecondary.withValues(alpha: 0.8),
-
               ),
-
               const SizedBox(width: 10),
-
               Expanded(
-
                 child: Text(
-
                   label,
-
                   style: TextStyle(
-
                     fontSize: 15,
-
                     fontWeight: paymentDate != null
-
                         ? FontWeight.w600
-
                         : FontWeight.w400,
-
                     color: paymentDate != null
-
                         ? AppColors.textPrimary
-
                         : AppColors.textSecondary.withValues(alpha: 0.9),
-
                   ),
-
                 ),
-
               ),
-
-              const Icon(Icons.chevron_right_rounded,
-
-                  color: AppColors.textSecondary),
-
+              if (!readOnly)
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary,
+                ),
             ],
-
           ),
-
         ),
-
       ),
-
     );
 
-  }
+    if (helperText == null || helperText!.isEmpty) return field;
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        field,
+        Padding(
+          padding: const EdgeInsets.only(top: 6, left: 2),
+          child: Text(
+            helperText!,
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              color: AppColors.textSecondary.withValues(alpha: 0.9),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 
@@ -992,28 +1512,6 @@ class _MonthlyPaymentDayField extends StatelessWidget {
 
                   ),
 
-                  Padding(
-
-                    padding: const EdgeInsets.only(top: 8),
-
-                    child: Text(
-
-                      '월마다 일수가 다른 달은 가장 가까운 날에 지급됩니다.',
-
-                      style: TextStyle(
-
-                        fontSize: 11,
-
-                        height: 1.35,
-
-                        color: AppColors.textSecondary.withValues(alpha: 0.9),
-
-                      ),
-
-                    ),
-
-                  ),
-
                   const SizedBox(height: 20),
 
                   FilledButton(
@@ -1190,7 +1688,9 @@ class _PushNotificationField extends StatelessWidget {
 
     return Material(
 
-      color: AppColors.surface,
+      color: configured
+          ? AppColors.surface
+          : CorporateServiceActionStyle.setupBackground,
 
       borderRadius: BorderRadius.circular(14),
 
@@ -1204,20 +1704,8 @@ class _PushNotificationField extends StatelessWidget {
 
           padding: const EdgeInsets.all(14),
 
-          decoration: BoxDecoration(
-
-            borderRadius: BorderRadius.circular(14),
-
-            border: Border.all(
-
-              color: configured
-
-                  ? AppColors.primary.withValues(alpha: 0.4)
-
-                  : AppColors.searchBarBorder,
-
-            ),
-
+          decoration: CorporateServiceActionStyle.setupCardDecoration(
+            configured: configured,
           ),
 
           child: Row(
@@ -1232,7 +1720,7 @@ class _PushNotificationField extends StatelessWidget {
 
                     ? AppColors.primary
 
-                    : AppColors.textSecondary.withValues(alpha: 0.8),
+                    : CorporateServiceActionStyle.setupForeground,
 
               ),
 
@@ -1252,7 +1740,7 @@ class _PushNotificationField extends StatelessWidget {
 
                           ? settings!.summaryLabel
 
-                          : '공고 노출 범위 설정하기',
+                          : '일자리 알림핀 설정하기',
 
                       style: TextStyle(
 
@@ -1276,9 +1764,9 @@ class _PushNotificationField extends StatelessWidget {
 
                       configured
 
-                          ? '탭하여 노출 범위 수정 · 모집지역 추가 시 지역 푸시권 1회/곳'
+                          ? '탭하여 일자리 알림핀 수정'
 
-                          : '근무지 1km 무료 푸시 일 1회 · 추가 지역은 지역 푸시권',
+                          : '근무지는 무료 · 추가 알림핀은 선택 시 설정',
 
                       style: TextStyle(
 

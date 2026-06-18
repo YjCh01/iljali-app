@@ -1,17 +1,37 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/compliance/data/compliance_repository.dart';
 import 'package:map/core/compliance/presentation/partnership_upsell_dialog.dart';
 import 'package:map/core/compliance/services/abuse_detection_service.dart';
 import 'package:map/core/compliance/services/contact_entitlement_service.dart';
+import 'package:map/core/dev/dev_chat_test_support.dart';
+import 'package:map/core/hiring/application_chat_message.dart';
+import 'package:map/core/hiring/application_chat_message_repository.dart';
+import 'package:map/core/hiring/chat_message_kind.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/core/session/member_type.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/features/chat/domain/services/chat_access_policy.dart';
+import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
+import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
+import 'package:map/features/corporate/presentation/pages/corporate_applicant_resume_page.dart';
+import 'package:map/features/corporate/presentation/widgets/chat/chat_reply_macro_picker_sheet.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_job_post_preview_sheet.dart';
 import 'package:map/features/corporate/presentation/widgets/register_permanent_hire_sheet.dart';
+import 'package:map/features/job_seeker/domain/utils/job_map_pin_factory.dart';
+import 'package:map/features/job_seeker/presentation/widgets/job_post_detail_sheet.dart';
+import 'package:map/features/hiring/presentation/widgets/chat/chat_attachment_picker_sheet.dart';
+import 'package:map/features/hiring/presentation/widgets/chat/chat_message_bubble.dart';
 import 'package:map/features/hiring/presentation/widgets/commission_payment_dialog.dart';
+import 'package:map/features/job_seeker/data/repositories/seeker_document_repository.dart';
 
 /// 지원자 ↔ 기업 채팅 (연락 제한·필터 적용)
 class ApplicationChatPage extends StatefulWidget {
@@ -27,10 +47,18 @@ class ApplicationChatPage extends StatefulWidget {
 }
 
 class _ApplicationChatPageState extends State<ApplicationChatPage> {
+  static const _postsSource = CorporateJobPostLocalDataSourceImpl();
+
   HiringApplication? _application;
-  final _messages = <_ChatMessage>[];
+  CorporateJobPost? _jobPost;
+  final _getPosts = const GetCorporateJobPostsUseCase(_postsSource);
+  final _messages = <ApplicationChatMessage>[];
   final _controller = TextEditingController();
+  final _inputFocus = FocusNode();
   bool _accessDenied = false;
+
+  bool get _isEmployer =>
+      AuthSession.instance.currentUser?.memberType == MemberType.corporate;
 
   @override
   void initState() {
@@ -41,77 +69,419 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
   @override
   void dispose() {
     _controller.dispose();
+    _inputFocus.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-    if (profile == null) return;
+    final user = AuthSession.instance.currentUser;
+    if (user == null) return;
 
-    final entitlement = ContactEntitlementService();
-    final access = await entitlement.recordContactAttempt(
-      profile,
-      applicationId: widget.applicationId,
-      action: 'open_chat_page',
+    final requester =
+        _isEmployer ? MemberType.corporate : MemberType.individual;
+    final peer = _isEmployer ? MemberType.individual : MemberType.corporate;
+    final policy = ChatAccessPolicy.evaluatePair(
+      requester: requester,
+      peer: peer,
     );
-    if (!mounted) return;
-    if (!access.allowed) {
-      setState(() => _accessDenied = true);
-      await ensureContactAccess(context, access);
-      if (mounted) Navigator.of(context).pop();
+    if (!policy.allowed) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(policy.message ?? '채팅 접근이 제한되었습니다.')),
+      );
+      Navigator.of(context).pop();
       return;
+    }
+
+    if (_isEmployer) {
+      final profile = user.corporateProfile;
+      if (profile == null) return;
+      final devReady = kDebugMode &&
+          await DevChatTestSupport.ensureCorporateChatReady();
+      if (!devReady) {
+        final entitlement = ContactEntitlementService();
+        final access = await entitlement.recordContactAttempt(
+          profile,
+          applicationId: widget.applicationId,
+          action: 'open_chat_page',
+        );
+        if (!mounted) return;
+        if (!access.allowed) {
+          setState(() => _accessDenied = true);
+          await ensureContactAccess(context, access);
+          if (mounted) Navigator.of(context).pop();
+          return;
+        }
+      }
     }
 
     final repo = await LocalHiringRepository.create();
     final app = await repo.findById(widget.applicationId);
     if (!mounted || app == null) return;
+
+    if (!_isEmployer && app.seekerEmail != user.email) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('본인 지원 건만 채팅할 수 있습니다.')),
+      );
+      Navigator.of(context).pop();
+      return;
+    }
+
     await repo.startChat(widget.applicationId);
+
+    CorporateJobPost? jobPost;
+    if (_isEmployer) {
+      final companyKey = user.corporateProfile?.companyKey;
+      if (companyKey != null) {
+        final posts = await _getPosts();
+        for (final post in posts) {
+          if (post.id == app.postId) {
+            jobPost = post;
+            break;
+          }
+        }
+      }
+    }
+
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    final stored = await chatRepo.ensureWelcomeMessages(
+      applicationId: widget.applicationId,
+      companyName: app.companyName,
+      postTitle: app.postTitle,
+      seekerName: app.seekerName,
+    );
+
     setState(() {
       _application = app;
-      _messages.addAll([
-        _ChatMessage(
-          fromCorporate: true,
-          text:
-              '안녕하세요, ${app.companyName} 채용 담당입니다.\n「${app.postTitle}」 지원 감사합니다.',
-        ),
-        _ChatMessage(
-          fromCorporate: false,
-          text: '안녕하세요, ${app.seekerName}입니다. 출근 일정 문의드립니다.',
-        ),
-      ]);
+      _jobPost = jobPost;
+      _messages
+        ..clear()
+        ..addAll(stored);
     });
 
-    if (app.status == HiringApplicationStatus.checkedIn &&
+    if (_isEmployer &&
+        app.status == HiringApplicationStatus.checkedIn &&
         app.needsCommissionPayment &&
         mounted) {
       await showCommissionPaymentDialog(context, app);
     }
   }
 
-  void _send() {
+  void _insertMacro(String text) {
+    _controller.text = text;
+    _controller.selection = TextSelection.fromPosition(
+      TextPosition(offset: text.length),
+    );
+  }
+
+  Future<void> _openMacroPicker() async {
+    final app = _application;
+    if (app == null) return;
+    FocusScope.of(context).unfocus();
+    final result = await showChatReplyMacroPickerSheet(
+      context,
+      application: app,
+      jobPost: _jobPost,
+    );
+    if (!mounted) return;
+    if (result == null) return;
+    if (result.sendImmediately) {
+      _sendMacro(result.text);
+    } else {
+      _insertMacro(result.text);
+      _inputFocus.requestFocus();
+    }
+  }
+
+  void _sendMacro(String text) {
+    _controller.text = text;
+    _send();
+  }
+
+  Future<void> _confirmWorkSchedule() async {
+    final repo = await LocalHiringRepository.create();
+    try {
+      final updated = await repo.confirmWorkScheduleAgreement(
+        applicationId: widget.applicationId,
+        asEmployer: _isEmployer,
+      );
+      if (!mounted) return;
+      setState(() => _application = updated);
+      final done = updated.isWorkAgreementComplete;
+      final waitingPeer = _isEmployer
+          ? updated.seekerWorkAgreedAt == null
+          : updated.employerWorkAgreedAt == null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            done
+                ? '근무예정 합의가 완료되었습니다. 근태 탭에서 확인하세요.'
+                : waitingPeer
+                    ? '확인했습니다. 상대방 확인을 기다리는 중입니다.'
+                    : '근무예정 합의를 처리했습니다.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on StateError catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('근무예정 합의를 처리할 수 없습니다.')),
+      );
+    }
+  }
+
+  Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    await _sendMessage(
+      ApplicationChatMessage(
+        fromEmployer: _isEmployer,
+        text: text,
+        sentAt: DateTime.now(),
+      ),
+    );
+    if (!mounted) return;
+    _controller.clear();
+  }
 
-    final violation = ChatContactFilter.validateOutbound(text);
-    if (violation != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(violation), behavior: SnackBarBehavior.floating),
-      );
+  Future<void> _sendMessage(ApplicationChatMessage message) async {
+    if (message.kind == ChatMessageKind.text) {
+      final violation = ChatContactFilter.validateOutbound(message.text);
+      if (violation != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(violation),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        ComplianceRepository.create().then((repo) {
+          repo.addAbuseFlag({
+            'type': 'off_platform_contact',
+            'message': violation,
+            'applicationId': widget.applicationId,
+            'snippet': message.text.length > 20
+                ? message.text.substring(0, 20)
+                : message.text,
+          });
+        });
+        return;
+      }
+    }
+
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    await chatRepo.append(widget.applicationId, message);
+    if (!mounted) return;
+    setState(() => _messages.add(message));
+
+    if (message.kind == ChatMessageKind.text &&
+        ChatContactFilter.containsPhoneNumber(message.text)) {
+      final profile = AuthSession.instance.currentUser?.corporateProfile;
       ComplianceRepository.create().then((repo) {
-        repo.addAbuseFlag({
-          'type': 'off_platform_contact',
-          'message': violation,
+        repo.logContactEvent({
+          'type': 'phone_shared_in_chat',
           'applicationId': widget.applicationId,
-          'snippet': text.length > 20 ? text.substring(0, 20) : text,
+          'fromEmployer': message.fromEmployer,
+          if (profile != null) 'companyKey': profile.companyKey,
         });
       });
+    }
+  }
+
+  Future<ImageSource?> _pickImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('카메라로 촬영'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('앨범에서 선택'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendPhoto() async {
+    final source = await _pickImageSource();
+    if (source == null || !mounted) return;
+
+    final file = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1600,
+    );
+    if (file == null || !mounted) return;
+
+    await _sendMessage(
+      ApplicationChatMessage(
+        fromEmployer: _isEmployer,
+        text: '사진을 보냈습니다.',
+        sentAt: DateTime.now(),
+        kind: ChatMessageKind.photo,
+        attachmentPath: file.path,
+      ),
+    );
+  }
+
+  Future<void> _sendResume() async {
+    final app = _application;
+    if (app == null) return;
+
+    if (_isEmployer) {
+      await openCorporateApplicantResume(
+        context,
+        applicationId: widget.applicationId,
+      );
       return;
     }
 
-    setState(() {
-      _messages.add(_ChatMessage(fromCorporate: true, text: text));
-      _controller.clear();
-    });
+    await _sendMessage(
+      ApplicationChatMessage(
+        fromEmployer: false,
+        text: '${app.seekerName}님의 이력서입니다. 탭하여 확인하세요.',
+        sentAt: DateTime.now(),
+        kind: ChatMessageKind.resume,
+      ),
+    );
+  }
+
+  Future<void> _sendRegisteredDocument({
+    required bool isIdCard,
+  }) async {
+    final email = AuthSession.instance.currentUser?.email;
+    if (email == null) return;
+
+    final repo = await SeekerDocumentRepository.create();
+    final docs = await repo.load(email);
+    final path = isIdCard ? docs.idCardImagePath : docs.bankAccountImagePath;
+    final label = isIdCard ? '신분증' : '통장사본';
+
+    if (path == null || path.trim().isEmpty) {
+      if (!mounted) return;
+      final goRegister = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('$label 등록 필요'),
+          content: Text(
+            '내정보에서 $label을 먼저 등록해야 채팅으로 보낼 수 있습니다.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('닫기'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('등록하러 가기'),
+            ),
+          ],
+        ),
+      );
+      if (goRegister == true && mounted) {
+        await Navigator.of(context).pushNamed(AppRoutes.seekerMyDocuments);
+      }
+      return;
+    }
+
+    await _sendMessage(
+      ApplicationChatMessage(
+        fromEmployer: false,
+        text: '$label을 보냈습니다.',
+        sentAt: DateTime.now(),
+        kind: isIdCard ? ChatMessageKind.idCard : ChatMessageKind.bankAccount,
+        attachmentPath: path,
+      ),
+    );
+  }
+
+  Future<void> _openAttachmentPicker() async {
+    FocusScope.of(context).unfocus();
+
+    SeekerDocuments? docs;
+    if (!_isEmployer) {
+      final email = AuthSession.instance.currentUser?.email;
+      if (email != null) {
+        final repo = await SeekerDocumentRepository.create();
+        docs = await repo.load(email);
+      }
+    }
+
+    final options = _isEmployer
+        ? [
+            const ChatAttachmentOption(
+              id: 'photo',
+              icon: Icons.photo_outlined,
+              label: '사진보내기',
+              subtitle: '현장 사진·안내 이미지 전송',
+            ),
+            const ChatAttachmentOption(
+              id: 'resume',
+              icon: Icons.description_outlined,
+              label: '이력서 보기',
+              subtitle: '지원자 탭과 동일한 이력서 화면',
+            ),
+          ]
+        : [
+            const ChatAttachmentOption(
+              id: 'photo',
+              icon: Icons.photo_outlined,
+              label: '사진보내기',
+              subtitle: '현장 사진·서류 촬영본 전송',
+            ),
+            const ChatAttachmentOption(
+              id: 'resume',
+              icon: Icons.description_outlined,
+              label: '이력서보내기',
+              subtitle: '구인자가 탭하면 이력서를 볼 수 있습니다',
+            ),
+            ChatAttachmentOption(
+              id: 'bank',
+              icon: Icons.account_balance_outlined,
+              label: '통장사본 전송하기',
+              subtitle: docs?.hasBankAccount == true
+                  ? '등록된 통장사본 보내기'
+                  : '내정보에서 먼저 등록 필요',
+              enabled: true,
+            ),
+            ChatAttachmentOption(
+              id: 'id',
+              icon: Icons.badge_outlined,
+              label: '신분증 전송하기',
+              subtitle: docs?.hasIdCard == true
+                  ? '등록된 신분증 보내기'
+                  : '내정보에서 먼저 등록 필요',
+              enabled: true,
+            ),
+          ];
+
+    if (!mounted) return;
+    final picked = await showChatAttachmentPickerSheet(
+      context,
+      options: options,
+    );
+    if (!mounted || picked == null) return;
+
+    switch (picked) {
+      case 'photo':
+        await _sendPhoto();
+      case 'resume':
+        await _sendResume();
+      case 'bank':
+        await _sendRegisteredDocument(isIdCard: false);
+      case 'id':
+        await _sendRegisteredDocument(isIdCard: true);
+    }
   }
 
   Future<void> _instantAccept() async {
@@ -131,6 +501,46 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     Navigator.of(context).pop(true);
   }
 
+  Future<void> _openJobPost() async {
+    final app = _application;
+    if (app == null) return;
+
+    var post = _jobPost ?? await _postsSource.findById(app.postId);
+    if (!mounted) return;
+    if (post == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('공고를 찾을 수 없습니다.')),
+      );
+      return;
+    }
+
+    if (_isEmployer && _jobPost == null) {
+      setState(() => _jobPost = post);
+    }
+
+    if (_isEmployer) {
+      await showCorporateJobPostPreviewSheet(context, post);
+      return;
+    }
+
+    final pin = jobMapPinFromPost(post);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => JobPostDetailSheet(
+        pin: pin,
+        onClose: () => Navigator.of(sheetContext).pop(),
+        onApply: () async {
+          final applied = await showJobApplyDialog(sheetContext, pin);
+          if (applied && sheetContext.mounted) {
+            Navigator.of(sheetContext).pop();
+          }
+        },
+      ),
+    );
+  }
+
   Future<void> _registerPermanentHire() async {
     final app = _application;
     if (app == null) return;
@@ -148,6 +558,24 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     );
   }
 
+  bool get _canConfirmAgreement {
+    final app = _application;
+    if (app == null || app.isWorkAgreementComplete) return false;
+    if (_isEmployer) return app.employerWorkAgreedAt == null;
+    return app.seekerWorkAgreedAt == null;
+  }
+
+  bool get _awaitingPeerAgreement {
+    final app = _application;
+    if (app == null || app.isWorkAgreementComplete) return false;
+    if (_isEmployer) {
+      return app.employerWorkAgreedAt != null &&
+          app.seekerWorkAgreedAt == null;
+    }
+    return app.seekerWorkAgreedAt != null &&
+        app.employerWorkAgreedAt == null;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_accessDenied) {
@@ -161,12 +589,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
       );
     }
 
-    final scheduled = app.status == HiringApplicationStatus.scheduled ||
-        app.status == HiringApplicationStatus.checkedIn ||
-        app.status == HiringApplicationStatus.commissionPaid;
-
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-    final showContactNotice = profile != null && profile.hasActivePaidSubscription;
+    final showContactNotice = _isEmployer;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -176,14 +599,21 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
         elevation: 0,
         leading: const AppBackButton(),
         automaticallyImplyLeading: false,
-        title: Text(app.seekerName),
+        title: Text(_isEmployer ? app.seekerName : app.companyName),
         actions: [
-          if (!scheduled && !app.isPermanentEmployment)
+          if (_canConfirmAgreement && !app.isPermanentEmployment)
             TextButton(
-              onPressed: _instantAccept,
-              child: const Text('즉시 확정'),
+              onPressed: _confirmWorkSchedule,
+              child: const Text('근무예정 합의'),
             ),
-          if (app.isPermanentEmployment && ProductFeatureFlags.isPermanentHireEnabled)
+          if (_awaitingPeerAgreement)
+            TextButton(
+              onPressed: null,
+              child: const Text('합의 대기'),
+            ),
+          if (_isEmployer &&
+              app.isPermanentEmployment &&
+              ProductFeatureFlags.isPermanentHireEnabled)
             TextButton(
               onPressed: _registerPermanentHire,
               child: const Text('상시직 합격'),
@@ -192,54 +622,124 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
+          Material(
             color: AppColors.primary.withValues(alpha: 0.08),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '「${app.postTitle}」 · ${app.workSchedule}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-                if (showContactNotice)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      '연락처: ${app.seekerPhoneMasked} · 플랫폼 내 채팅 (오프플랫폼 유도 차단)',
+            child: InkWell(
+              onTap: _openJobPost,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '「${app.postTitle}」 · ${app.workSchedule}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
+                          color: AppColors.textSecondary.withValues(alpha: 0.85),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '공고 보기',
                       style: TextStyle(
                         fontSize: 11,
-                        color: AppColors.textSecondary.withValues(alpha: 0.95),
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary.withValues(alpha: 0.9),
                       ),
                     ),
-                  ),
-              ],
+                    if (showContactNotice)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '연락처: ${app.seekerPhoneMasked} · 채팅·위치·사용 로그로 어뷰징 감시',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color:
+                                AppColors.textSecondary.withValues(alpha: 0.95),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
+          if (!app.isWorkAgreementComplete)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              color: AppColors.primaryLight.withValues(alpha: 0.18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '근무예정 합의',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '구직자·구인자 모두 확인하면 근태 탭에 등록됩니다.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary.withValues(alpha: 0.95),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: _canConfirmAgreement ? _confirmWorkSchedule : null,
+                    child: Text(
+                      _canConfirmAgreement
+                          ? (_isEmployer
+                              ? '기업 — 근무예정 합의하기'
+                              : '구직자 — 근무예정 합의하기')
+                          : _awaitingPeerAgreement
+                              ? '상대방 합의 대기 중'
+                              : '합의 완료 처리 중',
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: const Color(0xFFE8F5E9),
+              child: const Text(
+                '근무예정 합의 완료 · 근태 탭에서 출근을 확인하세요',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2E7D32),
+                ),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final msg = _messages[index];
-                return Align(
-                  alignment: msg.fromCorporate
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    constraints: const BoxConstraints(maxWidth: 280),
-                    decoration: BoxDecoration(
-                      color: msg.fromCorporate
-                          ? AppColors.primaryLight.withValues(alpha: 0.35)
-                          : AppColors.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.searchBarBorder),
-                    ),
-                    child: Text(msg.text),
-                  ),
+                final fromSelf = (_isEmployer && msg.fromEmployer) ||
+                    (!_isEmployer && !msg.fromEmployer);
+                return ChatMessageBubble(
+                  message: msg,
+                  fromSelf: fromSelf,
+                  applicationId: widget.applicationId,
                 );
               },
             ),
@@ -249,12 +749,34 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  IconButton(
+                    tooltip: '첨부',
+                    onPressed: _openAttachmentPicker,
+                    icon: const Icon(Icons.add_circle_outline),
+                    color: AppColors.primary,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  if (_isEmployer) ...[
+                    IconButton(
+                      tooltip: '자주 쓰는 답변',
+                      onPressed: _openMacroPicker,
+                      icon: const ChatReplyMacroIcon(size: 26),
+                      color: AppColors.primary,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
                   Expanded(
                     child: TextField(
                       controller: _controller,
+                      focusNode: _inputFocus,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.newline,
+                      keyboardType: TextInputType.multiline,
                       decoration: InputDecoration(
-                        hintText: '메시지 입력 (연락처·외부링크 금지)',
+                        hintText: '메시지 입력 (카카오·외부링크 유도 금지)',
                         filled: true,
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
@@ -279,10 +801,4 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
       ),
     );
   }
-}
-
-class _ChatMessage {
-  const _ChatMessage({required this.fromCorporate, required this.text});
-  final bool fromCorporate;
-  final String text;
 }

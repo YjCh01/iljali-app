@@ -1,10 +1,15 @@
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.job_sync_models import PaymentOrderRow
+from app.services.payment_service import (
+    confirm_toss_payment,
+    get_or_create_order,
+    toss_checkout_url,
+)
 
 router = APIRouter(prefix="/v1/payments", tags=["payments"])
 
@@ -36,19 +41,25 @@ class ConfirmRequest(BaseModel):
 
 @router.post("/charge", response_model=ChargeResponse)
 async def charge_payment(body: ChargeRequest, db: Session = Depends(get_db)):
-    del db  # reserved for payment ledger
+    row = get_or_create_order(db, body)
+    db.commit()
+
     if not settings.toss_secret_key:
+        row.status = "confirmed"
+        row.transaction_id = f"MOCK-{body.order_id}"
+        row.mock = True
+        db.commit()
         return ChargeResponse(
             success=True,
-            transaction_id=f"MOCK-{body.order_id}",
+            transaction_id=row.transaction_id,
             mock=True,
+            message="TOSS_SECRET_KEY 미설정 — mock 결제",
         )
 
-    checkout_url = (
-        f"https://pay.toss.im/web/payment?orderId={body.order_id}"
-        f"&amount={body.amount_krw}&orderName={body.order_name}"
-        f"&successUrl=iljari://payment/success"
-        f"&failUrl=iljari://payment/fail"
+    checkout_url = toss_checkout_url(
+        order_id=body.order_id,
+        order_name=body.order_name,
+        amount_krw=body.amount_krw,
     )
     return ChargeResponse(
         success=True,
@@ -59,34 +70,33 @@ async def charge_payment(body: ChargeRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/confirm", response_model=ChargeResponse)
-async def confirm_payment(body: ConfirmRequest):
-    if not settings.toss_secret_key:
-        return ChargeResponse(
-            success=True,
-            transaction_id=f"MOCK-CONFIRM-{body.order_id}",
-            mock=True,
+async def confirm_payment(body: ConfirmRequest, db: Session = Depends(get_db)):
+    try:
+        row = await confirm_toss_payment(
+            db,
+            payment_key=body.payment_key,
+            order_id=body.order_id,
+            amount_krw=body.amount_krw,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.post(
-            "https://api.tosspayments.com/v1/payments/confirm",
-            headers={
-                "Authorization": f"Basic {settings.toss_secret_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "paymentKey": body.payment_key,
-                "orderId": body.order_id,
-                "amount": body.amount_krw,
-            },
-        )
-
-    if response.status_code >= 400:
-        raise HTTPException(status_code=402, detail="토스 결제 승인 실패")
-
-    payload = response.json()
     return ChargeResponse(
         success=True,
-        transaction_id=payload.get("paymentKey") or payload.get("transactionKey"),
-        mock=False,
+        transaction_id=row.transaction_id,
+        mock=row.mock,
     )
+
+
+@router.get("/orders/{order_id}")
+def get_payment_order(order_id: str, db: Session = Depends(get_db)):
+    row = db.get(PaymentOrderRow, order_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="주문을 찾을 수 없습니다.")
+    return {
+        "order_id": row.order_id,
+        "status": row.status,
+        "amount_krw": row.amount_krw,
+        "transaction_id": row.transaction_id,
+        "mock": row.mock,
+    }

@@ -1,12 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
-import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/job_seeker/data/repositories/seeker_push_inbox_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_push_notification.dart';
 import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 
-/// 공고 등록 완료 후 푸시 알림 전송 진행·완료 화면
+/// 공고 등록 완료 후 PUSH 알림 전송 진행·완료 화면
 class CorporateJobPostPushDispatchPage extends StatefulWidget {
   const CorporateJobPostPushDispatchPage({
     super.key,
@@ -79,7 +78,7 @@ class _CorporateJobPostPushDispatchPageState
         id: id,
         title: title,
         body:
-            '${widget.args.companyName ?? '채용 공고'} · ${PushPackageCatalog.pushRadiusLabel} 반경 모집 알림',
+            '${widget.args.companyName ?? '채용 공고'} · ${widget.args.targetLabel ?? PushPackageCatalog.pushRadiusLabel + ' 반경 모집 알림'}',
         companyName: widget.args.companyName ?? '채용 기업',
         jobPostId: widget.args.jobPostId,
         receivedAt: DateTime.now(),
@@ -110,7 +109,7 @@ class _CorporateJobPostPushDispatchPageState
                 Text(
                   _completed
                       ? '$_targetReach명에게 실시간 공고 알람이\n전송되었습니다'
-                      : '푸시 알림을 보내는 중입니다',
+                      : 'PUSH 알림을 보내는 중입니다',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 20,
@@ -122,19 +121,11 @@ class _CorporateJobPostPushDispatchPageState
                 const SizedBox(height: 12),
                 if (!_completed)
                   Text(
-                    '$_displayReach명에게 푸시알림 도달 중...',
+                    '$_displayReach명에게 PUSH알림 도달 중...',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textSecondary.withValues(alpha: 0.95),
-                    ),
-                  ),
-                if (!_completed)
-                  Text(
-                    '전송 중에는 잠시 기다려 주세요.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary.withValues(alpha: 0.8),
                     ),
                   ),
                 if (!_completed) ...[
@@ -147,18 +138,6 @@ class _CorporateJobPostPushDispatchPageState
                       backgroundColor:
                           AppColors.primaryLight.withValues(alpha: 0.25),
                       color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '모집지역 ${widget.args.recruitmentSlotCount}곳 · '
-                    '모집권당 ${PushReachEstimator.minReachPerSlot}~'
-                    '${PushReachEstimator.maxReachPerSlot}명 · '
-                    '${ExposurePointLabels.radiusUi(widget.args.radiusTier)} · '
-                    '구직자 매칭 중',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary.withValues(alpha: 0.85),
                     ),
                   ),
                 ],

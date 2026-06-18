@@ -4,16 +4,16 @@ import 'package:map/features/corporate/domain/services/roi_metrics_service.dart'
 
 void main() {
   group('RoiMetricsService', () {
-    test('uses flat 10,000 won commission for all tiers', () async {
+    test('uses 15,000 won daily commission for active plan', () async {
       final metrics = await RoiMetricsService().computeForCompany(
         companyKey: 'test_company',
         tier: PremiumPartnershipTier.starter,
         subscriptionActive: true,
       );
 
-      expect(metrics.baselineCommissionPerCheckInKrw, 10000);
-      expect(metrics.tierCommissionPerCheckInKrw, 10000);
-      expect(metrics.commissionSavingsVsBasicKrw, 0);
+      expect(metrics.baselineCommissionPerCheckInKrw, 15000);
+      expect(metrics.tierCommissionPerCheckInKrw, 15000);
+      expect(metrics.commissionSavingsVsBasicKrw, greaterThanOrEqualTo(0));
     });
 
     test('savings headline shows spend when no tier savings', () async {

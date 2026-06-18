@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 
-/// 구직자 하단 6탭 — 기업회원 탭과 1:1 대응
+/// 구직자 하단 6탭 — 지도 · 보관함 · 지원 · 근무 · 채팅 · 더보기
 class IndividualBottomNav extends StatelessWidget {
   const IndividualBottomNav({
     super.key,
@@ -14,7 +14,7 @@ class IndividualBottomNav extends StatelessWidget {
 
   static const _items = [
     _NavItem(icon: Icons.map_outlined, label: '지도'),
-    _NavItem(icon: Icons.work_outline_rounded, label: '공고'),
+    _NavItem(icon: Icons.bookmark_outline_rounded, label: '보관함'),
     _NavItem(icon: Icons.description_outlined, label: '내 지원'),
     _NavItem(icon: Icons.event_available_outlined, label: '근무'),
     _NavItem(icon: Icons.chat_bubble_outline_rounded, label: '채팅'),

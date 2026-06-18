@@ -23,11 +23,11 @@ void main() {
       expect(clamped.radiusKm, lessThanOrEqualTo(1));
     });
 
-    test('planLimitSummary mentions free plan and package', () {
+    test('planLimitSummary mentions free workplace exposure', () {
       final summary = PushPlanEnforcement.planLimitSummary();
-      expect(summary, contains('1km'));
-      expect(summary, contains('일 1회'));
-      expect(summary, contains('지역 푸시권'));
+      expect(summary, contains('근무지'));
+      expect(summary, contains('무료'));
+      expect(summary, contains('일자리 알림핀'));
     });
   });
 

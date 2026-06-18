@@ -40,6 +40,10 @@ class JobPostWriteDraft {
 
     this.notificationSettings,
 
+    this.importSourceLabel,
+
+    this.workCategoryId,
+
   });
 
 
@@ -67,6 +71,11 @@ class JobPostWriteDraft {
   final int? paymentDayOfMonth;
 
   final JobPostNotificationSettings? notificationSettings;
+
+  /// 외부 플랫폼 가져오기 출처 (예: 알바몬에서 가져옴)
+  final String? importSourceLabel;
+
+  final String? workCategoryId;
 
 
 
@@ -96,6 +105,10 @@ class JobPostWriteDraft {
 
     WorkerCategory? workerCategory,
 
+    String? importSourceLabel,
+
+    String? workCategoryId,
+
   }) {
 
     return JobPostWriteDraft(
@@ -123,6 +136,10 @@ class JobPostWriteDraft {
       paymentDayOfMonth: paymentDayOfMonth ?? this.paymentDayOfMonth,
 
       notificationSettings: notificationSettings ?? this.notificationSettings,
+
+      importSourceLabel: importSourceLabel ?? this.importSourceLabel,
+
+      workCategoryId: workCategoryId ?? this.workCategoryId,
 
     );
 

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:map/core/constants/app_routes.dart';
 
@@ -6,8 +6,6 @@ import 'package:map/features/corporate/domain/entities/corporate_member_profile.
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
 
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
-
-import 'package:map/features/corporate/domain/services/push_dispatch_service.dart';
 
 
 
@@ -40,17 +38,13 @@ class PushJobPostPaymentResult {
 
 
 
-/// 공고 등록 무료 · 모집하기 시 지역 푸시권/일일 무료 소진
+/// 거점·핀 설정(활성화)과 PUSH 발송(모집하기)은 별도 플로우.
+///
+/// 공고 등록·거점 설정은 무료/크레딧 활성화만 처리하며, PUSH는
+/// [PushDispatchService.prepareQuickRecruitPush] — 공고 탭 「모집하기」에서만 실행.
 
 class PushJobPostPaymentFlow {
-  PushJobPostPaymentFlow({PushDispatchService? dispatchService})
-      : _dispatchService = dispatchService ?? PushDispatchService();
-
-
-
-  final PushDispatchService _dispatchService;
-
-
+  const PushJobPostPaymentFlow();
 
   Future<PushJobPostPaymentResult?> collect({
 
@@ -68,35 +62,7 @@ class PushJobPostPaymentFlow {
 
     JobPostPaymentRecord? paymentRecord;
 
-    var extraPushFeeKrw = 0;
-
-    PushRadiusTier? dispatchRadiusTier;
-    var recruitmentPushCount = 0;
-
-
-
-    final activeProfile = profile;
-
-    if (settings?.hasConfiguredBase == true && activeProfile != null) {
-
-      final prepared = await _dispatchService.prepareRegistrationPush(
-        context: context,
-        profile: activeProfile,
-        settings: settings!,
-      );
-
-      if (!context.mounted) return null;
-
-      if (prepared == null) return null;
-
-      dispatchRadiusTier = prepared.radiusTier;
-      extraPushFeeKrw = prepared.paymentKrw;
-      paymentRecord = prepared.paymentRecord;
-      recruitmentPushCount = prepared.recruitmentPushCount;
-
-    }
-
-
+    const extraPushFeeKrw = 0;
 
     if (settings?.requiresPayment == true) {
 
@@ -145,9 +111,6 @@ class PushJobPostPaymentFlow {
       paymentRecord: paymentRecord,
 
       extraPushFeeKrw: extraPushFeeKrw,
-
-      dispatchRadiusTier: dispatchRadiusTier,
-      recruitmentPushCount: recruitmentPushCount,
 
     );
 

@@ -12,6 +12,8 @@ class PaymentRequest {
     this.buyerEmail,
     this.buyerName,
     this.companyKey,
+    this.savedPaymentMethodId,
+    this.billingKey,
   });
 
   final String orderId;
@@ -22,6 +24,11 @@ class PaymentRequest {
   final String? buyerEmail;
   final String? buyerName;
   final String? companyKey;
+  final String? savedPaymentMethodId;
+  final String? billingKey;
+
+  bool get usesSavedCard =>
+      billingKey != null && billingKey!.trim().isNotEmpty;
 }
 
 class PaymentResult {

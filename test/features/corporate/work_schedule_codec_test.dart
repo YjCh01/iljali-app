@@ -69,6 +69,38 @@ void main() {
       expect(parsed.slotOn(DateTime(2026, 5, 8)), ShiftSlotKind.off);
     });
 
+    test('round-trips daily pick with per-day hours', () {
+      final spec = WorkScheduleSpec(
+        mode: WorkScheduleMode.dailyPick,
+        selectedWorkDates: {
+          DateTime(2026, 6, 14),
+          DateTime(2026, 6, 15),
+        },
+        dailyHoursByDate: {
+          WorkScheduleSpec.dateKey(DateTime(2026, 6, 14)): const DailyDayHours(
+            start: TimeOfDay(hour: 9, minute: 0),
+            end: TimeOfDay(hour: 18, minute: 0),
+          ),
+          WorkScheduleSpec.dateKey(DateTime(2026, 6, 15)): const DailyDayHours(
+            start: TimeOfDay(hour: 9, minute: 0),
+            end: TimeOfDay(hour: 17, minute: 0),
+          ),
+        },
+      ).withDerivedDailyBounds();
+
+      final encoded = WorkScheduleCodec.encode(spec);
+      expect(encoded, contains('2026-06-14@09:00~18:00'));
+      expect(encoded, contains('2026-06-15@09:00~17:00'));
+      expect(encoded, isNot(contains(' · 09:00~')));
+
+      final parsed = WorkScheduleCodec.tryParse(encoded)!;
+      expect(parsed.hoursForDate(DateTime(2026, 6, 14)).end,
+          const TimeOfDay(hour: 18, minute: 0));
+      expect(parsed.hoursForDate(DateTime(2026, 6, 15)).end,
+          const TimeOfDay(hour: 17, minute: 0));
+      expect(parsed.hasVariedDailyHours, isTrue);
+    });
+
     test('parses legacy date range', () {
       final parsed =
           WorkScheduleCodec.tryParse('2026-05-01 ~ 2026-05-10 · 10:00~19:00');

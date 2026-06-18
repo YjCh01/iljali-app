@@ -1,9 +1,12 @@
-import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+﻿import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/entities/push_ticket_catalog.dart';
 
-/// 기업별 푸시·거점 크레딧 지갑
+/// 기업별 PUSH·거점 크레딧 지갑
 class EmployerPushWallet {
   const EmployerPushWallet({
     this.packageCredits = 0,
+    this.exposurePushBundleCredits = 0,
+    this.pushTicketCredits = 0,
     this.signupBonusRemaining = 0,
     this.locationSlotsFromPackages = 0,
     this.lastFreePushDayKey,
@@ -13,8 +16,16 @@ class EmployerPushWallet {
   });
 
   final int packageCredits;
+
+  /// 노출+PUSH 번들 — 알림핀/정류장 노출과 해당 위치 1km PUSH 1회
+  final int exposurePushBundleCredits;
+
+  /// PUSH 알림권 — 알림핀·정류장 1곳 선택 · PUSH만 (19,900원/회)
+  final int pushTicketCredits;
   final int signupBonusRemaining;
   final int locationSlotsFromPackages;
+
+  /// @deprecated Legacy daily-free tracking — no longer used for dispatch.
   final String? lastFreePushDayKey;
   final DateTime? signupBonusExpiresAt;
 
@@ -31,53 +42,51 @@ class EmployerPushWallet {
   int get totalLocationSlots =>
       PushPackageCatalog.baseLocationSlots + locationSlotsFromPackages;
 
-  /// 지원자 모집하기(푸시) — 당일 무료 + 패키지 발송권 (보너스는 등록권으로 사용 안 함)
-  int get availablePushCredits {
-    return packageCredits + _dailyFreeRemaining;
-  }
+  /// 지원자 모집하기(PUSH) — 일자리 알림핀만
+  int get availablePushCredits => packageCredits;
 
   /// UI용 — 패키지 크레딧만 (유료 구매분)
   int get packageRecruitCredits => packageCredits;
 
   String get recruitCreditsDetailLabel {
     if (!hasUsablePush) {
-      return '오늘 무료·지역 푸시권 모두 소진 · 지역 푸시권 구매 시 즉시 충전';
+      return '일자리 알림핀 0회 · 일자리 알림핀 구매 시 즉시 충전';
     }
-    final parts = <String>[];
-    if (_dailyFreeRemaining > 0) {
-      parts.add('근무지 무료 푸시 1회/일(1km)');
-    }
-    if (packageCredits > 0) parts.add('지역 푸시권 $packageCredits');
-    return parts.join(' · ');
-  }
-
-  int get _dailyFreeRemaining {
-    if (lastFreePushDayKey == _todayKey()) return 0;
-    return PushPackageCatalog.dailyFreePush;
-  }
-
-  int get _effectiveSignupBonus {
-    if (signupBonusRemaining <= 0) return 0;
-    final expires = signupBonusExpiresAt;
-    if (expires != null && DateTime.now().isAfter(expires)) return 0;
-    return signupBonusRemaining;
+    return '일자리 알림핀 $packageCredits';
   }
 
   bool get hasUsablePush => availablePushCredits > 0;
 
-  /// 모집지역·유료 근무지 푸시 — 패키지 발송권만 (일일 무료 제외)
+  bool get hasPushTickets => pushTicketCredits > 0;
+
+  bool get hasExposurePushBundles => exposurePushBundleCredits > 0;
+
+  String get pushTicketDetailLabel {
+    if (pushTicketCredits <= 0) {
+      return 'PUSH 알림권 0회 · 발송 시 ${PushTicketCatalog.unitPriceLabel}';
+    }
+    return 'PUSH 알림권 $pushTicketCredits회';
+  }
+
+  String get exposurePushBundleDetailLabel {
+    if (exposurePushBundleCredits <= 0) {
+      return '노출+PUSH 0회 · ${PushPackageCatalog.krwSuffix(PushPackageCatalog.exposureWithPushUnitPriceKrw)}';
+    }
+    return '노출+PUSH $exposurePushBundleCredits회';
+  }
+
+  /// 모집지역·근무지 PUSH — 일자리 알림핀만
   int get paidRecruitCreditsAvailable => packageCredits;
 
-  /// 공고 등록 표시용 — 당일 무료 1 + 패키지 발송권
-  int get jobPostRegistrationQuotaMax =>
-      packageCredits + PushPackageCatalog.dailyFreePush;
+  /// 공고 등록 표시용 — 일자리 알림핀 잔여
+  int get jobPostRegistrationQuotaMax => packageCredits;
 
   int get jobPostRegistrationQuotaRemaining => availablePushCredits;
 
-  bool get dailyFreePostingAvailable => _dailyFreeRemaining > 0;
-
   EmployerPushWallet copyWith({
     int? packageCredits,
+    int? exposurePushBundleCredits,
+    int? pushTicketCredits,
     int? signupBonusRemaining,
     int? locationSlotsFromPackages,
     String? lastFreePushDayKey,
@@ -88,6 +97,9 @@ class EmployerPushWallet {
   }) {
     return EmployerPushWallet(
       packageCredits: packageCredits ?? this.packageCredits,
+      exposurePushBundleCredits:
+          exposurePushBundleCredits ?? this.exposurePushBundleCredits,
+      pushTicketCredits: pushTicketCredits ?? this.pushTicketCredits,
       signupBonusRemaining: signupBonusRemaining ?? this.signupBonusRemaining,
       locationSlotsFromPackages:
           locationSlotsFromPackages ?? this.locationSlotsFromPackages,
@@ -104,6 +116,8 @@ class EmployerPushWallet {
 
   Map<String, dynamic> toJson() => {
         'packageCredits': packageCredits,
+        'exposurePushBundleCredits': exposurePushBundleCredits,
+        'pushTicketCredits': pushTicketCredits,
         'signupBonusRemaining': signupBonusRemaining,
         'locationSlotsFromPackages': locationSlotsFromPackages,
         'lastFreePushDayKey': lastFreePushDayKey,
@@ -118,6 +132,9 @@ class EmployerPushWallet {
     }
     return EmployerPushWallet(
       packageCredits: map['packageCredits'] as int? ?? 0,
+      exposurePushBundleCredits:
+          map['exposurePushBundleCredits'] as int? ?? 0,
+      pushTicketCredits: map['pushTicketCredits'] as int? ?? 0,
       signupBonusRemaining: map['signupBonusRemaining'] as int? ?? 0,
       locationSlotsFromPackages:
           map['locationSlotsFromPackages'] as int? ?? 0,
@@ -138,15 +155,9 @@ class EmployerPushWallet {
         ),
         signupBonusRemaining: 0,
       );
-
-  static String _todayKey([DateTime? date]) {
-    final d = date ?? DateTime.now();
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  }
 }
 
 enum PushConsumeSource {
-  dailyFree,
   signupBonus,
   packageCredit,
 }

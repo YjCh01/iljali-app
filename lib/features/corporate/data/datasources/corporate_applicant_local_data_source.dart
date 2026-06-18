@@ -3,6 +3,7 @@ import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/features/corporate/domain/entities/corporate_applicant.dart';
+import 'package:map/features/corporate/domain/utils/corporate_applicant_history.dart';
 
 abstract class CorporateApplicantLocalDataSource {
   Future<List<CorporateApplicant>> fetchApplicants();
@@ -19,10 +20,21 @@ class CorporateApplicantLocalDataSourceImpl
         AuthSession.instance.currentUser?.corporateProfile?.companyKey;
     final applications =
         await repo.fetchApplicantsForCorporate(companyKey: companyKey);
-    return applications.map(_mapApplication).toList();
+    final allCompanyApps = companyKey == null || companyKey.isEmpty
+        ? applications
+        : (await repo.fetchAll())
+            .where((item) => item.companyKey == companyKey)
+            .toList();
+    return applications
+        .map((app) => _mapApplication(app, allCompanyApps))
+        .toList();
   }
 
-  CorporateApplicant _mapApplication(HiringApplication app) {
+  CorporateApplicant _mapApplication(
+    HiringApplication app,
+    List<HiringApplication> allCompanyApps,
+  ) {
+    final seekerEmail = app.seekerEmail;
     return CorporateApplicant(
       id: app.id,
       applicationId: app.id,
@@ -34,8 +46,17 @@ class CorporateApplicantLocalDataSourceImpl
       workDateLabel: app.workDate != null
           ? LocalHiringRepository.formatWorkDateFull(app.workDate!)
           : null,
-      seekerEmail: app.seekerEmail,
+      seekerEmail: seekerEmail,
       jobPostId: app.postId,
+      companyCheckInCount: CorporateApplicantHistory.companyCheckInCount(
+        companyApplications: allCompanyApps,
+        seekerEmail: seekerEmail,
+      ),
+      applicationAttempt: CorporateApplicantHistory.applicationAttempt(
+        companyApplications: allCompanyApps,
+        seekerEmail: seekerEmail,
+        applicationId: app.id,
+      ),
     );
   }
 
@@ -51,5 +72,6 @@ class CorporateApplicantLocalDataSourceImpl
         HiringApplicationStatus.commissionPaid =>
           CorporateApplicantStatus.commissionPaid,
         HiringApplicationStatus.rejected => CorporateApplicantStatus.rejected,
+        HiringApplicationStatus.noShow => CorporateApplicantStatus.rejected,
       };
 }

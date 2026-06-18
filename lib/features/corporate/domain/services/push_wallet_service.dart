@@ -1,12 +1,16 @@
-import 'package:map/core/session/auth_session.dart';
+﻿import 'package:map/core/session/auth_session.dart';
+import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/features/corporate/data/repositories/company_bonus_ledger_repository.dart';
 import 'package:map/features/corporate/data/repositories/push_wallet_repository.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/entities/push_ticket_catalog.dart';
+import 'package:map/features/corporate/domain/entities/push_wallet_load_outcome.dart';
+import 'package:map/features/corporate/domain/entities/recruitment_product_kind.dart';
 
-/// 푸시·거점 지갑 — 로드·구매·소진
+/// PUSH·거점 지갑 — 로드·구매·소진
 class PushWalletService {
   PushWalletService({
     PushWalletRepository? repository,
@@ -22,10 +26,18 @@ class PushWalletService {
   final Future<CompanyBonusLedgerRepository> _bonusLedgerFuture;
 
   Future<EmployerPushWallet> loadWallet(CorporateMemberProfile profile) async {
+    return (await loadWalletDetailed(profile)).wallet;
+  }
+
+  Future<PushWalletLoadOutcome> loadWalletDetailed(
+    CorporateMemberProfile profile,
+  ) async {
     final repo = await _repositoryFuture;
     final ledger = await _bonusLedgerFuture;
     var wallet = profile.pushWallet ?? await repo.load(profile.companyKey);
     wallet = _sanitizeUnpurchasedCredits(profile, wallet);
+    var grantedSignupBonus = false;
+    var grantedVerificationBonus = false;
 
     final bonusAlreadyClaimed =
         await ledger.isSignupBonusClaimed(profile.companyKey);
@@ -37,18 +49,38 @@ class PushWalletService {
     if (needsSignupBonus) {
       final granted = await ledger.tryClaimSignupBonus(profile.companyKey);
       if (granted) {
+        grantedSignupBonus = true;
         wallet = wallet.copyWith(
-          signupBonusRemaining: PushPackageCatalog.signupBonusPushes,
-          signupBonusExpiresAt: DateTime.now().add(
-            const Duration(days: PushPackageCatalog.signupBonusValidDays),
-          ),
+          packageCredits:
+              wallet.packageCredits + PushPackageCatalog.signupBonusPushes,
+          locationSlotsFromPackages: wallet.locationSlotsFromPackages +
+              PushPackageCatalog.signupBonusPushes,
+          lifetimePackagesPurchased: wallet.lifetimePackagesPurchased +
+              PushPackageCatalog.signupBonusPushes,
         );
       }
-    } else if (wallet.signupBonusRemaining ==
-            PushPackageCatalog.signupBonusPushes &&
-        wallet.locationSlotsFromPackages == 0 &&
+    } else if (wallet.locationSlotsFromPackages == 0 &&
         wallet.packageCredits == 0) {
       wallet = _migrateLegacySubscription(profile, wallet);
+    }
+
+    final canGrantVerificationBonus =
+        profile.verificationStatus == BusinessVerificationStatus.verified &&
+            !await ledger.isVerificationBonusClaimed(profile.companyKey);
+    if (canGrantVerificationBonus) {
+      final granted =
+          await ledger.tryClaimVerificationBonus(profile.companyKey);
+      if (granted) {
+        grantedVerificationBonus = true;
+        wallet = wallet.copyWith(
+          packageCredits: wallet.packageCredits +
+              PushPackageCatalog.verificationBonusPushes,
+          locationSlotsFromPackages: wallet.locationSlotsFromPackages +
+              PushPackageCatalog.verificationBonusPushes,
+          lifetimePackagesPurchased: wallet.lifetimePackagesPurchased +
+              PushPackageCatalog.verificationBonusPushes,
+        );
+      }
     }
 
     if (wallet.locationSlotsFromPackages != wallet.packageCredits) {
@@ -58,13 +90,18 @@ class PushWalletService {
     }
 
     if (profile.pushWallet == null ||
-        profile.pushWallet!.signupBonusRemaining != wallet.signupBonusRemaining ||
+        profile.pushWallet!.signupBonusRemaining !=
+            wallet.signupBonusRemaining ||
         profile.pushWallet!.packageCredits != wallet.packageCredits ||
         profile.pushWallet!.locationSlotsFromPackages !=
             wallet.locationSlotsFromPackages) {
       await _persist(profile, wallet);
     }
-    return wallet;
+    return PushWalletLoadOutcome(
+      wallet: wallet,
+      grantedSignupBonus: grantedSignupBonus,
+      grantedVerificationBonus: grantedVerificationBonus,
+    );
   }
 
   EmployerPushWallet _migrateLegacySubscription(
@@ -109,18 +146,26 @@ class PushWalletService {
     int quantity = 1,
   }) async {
     final wallet = await loadWallet(profile);
-    final qty = offer.id == PushPackageCatalog.singlePackageId
-        ? quantity.clamp(1, 99)
-        : 1;
+    final qty = offer.supportsQuantitySelector ? quantity.clamp(1, 99) : 1;
     final credits = offer.packageCount * qty;
-    final updated = wallet.copyWith(
-      packageCredits: wallet.packageCredits + credits,
-      locationSlotsFromPackages: wallet.packageCredits + credits,
-      lifetimePackagesPurchased:
-          wallet.lifetimePackagesPurchased + credits,
-      purchased100PackBundle:
-          wallet.purchased100PackBundle || offer.id == 'pack_100',
-    );
+
+    final updated = switch (offer.kind) {
+      RecruitmentProductKind.exposureOnly => wallet.copyWith(
+          packageCredits: wallet.packageCredits + credits,
+          locationSlotsFromPackages:
+              wallet.locationSlotsFromPackages + credits,
+          lifetimePackagesPurchased: wallet.lifetimePackagesPurchased + credits,
+        ),
+      RecruitmentProductKind.exposureWithPush => wallet.copyWith(
+          exposurePushBundleCredits:
+              wallet.exposurePushBundleCredits + credits,
+          lifetimePackagesPurchased: wallet.lifetimePackagesPurchased + credits,
+        ),
+      RecruitmentProductKind.pushOnly => wallet.copyWith(
+          pushTicketCredits: wallet.pushTicketCredits + credits,
+          lifetimePackagesPurchased: wallet.lifetimePackagesPurchased + credits,
+        ),
+    };
     await _persist(profile, updated);
     return updated;
   }
@@ -128,70 +173,10 @@ class PushWalletService {
   Future<PushConsumeResult> tryConsumePush(
     CorporateMemberProfile profile,
   ) async {
-    final wallet = await loadWallet(profile);
-    final today = _dayKey();
-
-    if (wallet.lastFreePushDayKey != today) {
-      final updated = wallet.copyWith(lastFreePushDayKey: today);
-      await _persist(profile, updated);
-      return PushConsumeResult(
-        success: true,
-        source: PushConsumeSource.dailyFree,
-        radiusMeters: PushPackageCatalog.freePushRadiusM,
-      );
-    }
-
-    final bonus = _effectiveBonus(wallet);
-    if (bonus > 0) {
-      final updated = wallet.copyWith(
-        signupBonusRemaining: wallet.signupBonusRemaining - 1,
-      );
-      await _persist(profile, updated);
-      return PushConsumeResult(
-        success: true,
-        source: PushConsumeSource.signupBonus,
-        radiusMeters: PushPackageCatalog.freePushRadiusM,
-      );
-    }
-
-    if (wallet.packageCredits > 0) {
-      final updated = wallet.copyWith(
-        packageCredits: wallet.packageCredits - 1,
-      );
-      await _persist(profile, updated);
-      return PushConsumeResult(
-        success: true,
-        source: PushConsumeSource.packageCredit,
-        radiusMeters: PushPackageCatalog.packagePushRadiusM,
-      );
-    }
-
-    return const PushConsumeResult.fail(
-      '지역 푸시권이 없습니다. 지역 푸시권을 구매해 주세요.',
-    );
+    return tryConsumeRecruitmentCredit(profile);
   }
 
-  /// 근무지 푸시 — 당일 무료 1회만
-  Future<PushConsumeResult> tryConsumeDailyFreeWorkplacePush(
-    CorporateMemberProfile profile,
-  ) async {
-    final wallet = await loadWallet(profile);
-    final today = _dayKey();
-    if (wallet.lastFreePushDayKey == today) {
-      return const PushConsumeResult.fail(
-        '오늘 무료 근무지 푸시를 이미 사용했습니다.',
-      );
-    }
-    final updated = wallet.copyWith(lastFreePushDayKey: today);
-    await _persist(profile, updated);
-    return PushConsumeResult(
-      success: true,
-      source: PushConsumeSource.dailyFree,
-      radiusMeters: PushPackageCatalog.freePushRadiusM,
-    );
-  }
-
-  /// 모집지역 푸시 — 패키지 발송권만 (일일 무료·보너스 사용 안 함)
+  /// 근무지·모집지역 PUSH — 일자리 알림핀 1회
   Future<PushConsumeResult> tryConsumeRecruitmentCredit(
     CorporateMemberProfile profile,
   ) async {
@@ -210,7 +195,7 @@ class PushWalletService {
       );
     }
     return const PushConsumeResult.fail(
-      '지역 푸시권이 부족합니다. 구매하면 즉시 충전됩니다.',
+      '일자리 알림핀이 부족합니다. 구매하면 즉시 충전됩니다.',
     );
   }
 
@@ -228,7 +213,7 @@ class PushWalletService {
       if (!result.success) {
         return PushMultiConsumeResult.fail(
           result.message ??
-              '모집지역 푸시 이용권이 부족합니다. (필요 ${count}회 · 사용 ${consumed}회)',
+              '일자리 알림핀이 부족합니다. (필요 ${count}회 · 사용 ${consumed}회)',
         );
       }
       consumed++;
@@ -237,7 +222,77 @@ class PushWalletService {
     return PushMultiConsumeResult.success(consumed: consumed);
   }
 
-  /// 모집지역 삭제 시 — 사용하지 않은 지역 푸시권 1회 복원
+  /// 노출+PUSH 번들 1회 — 알림핀/정류장 활성화와 해당 위치 PUSH 1회
+  Future<PushConsumeResult> tryConsumeExposurePushBundle(
+    CorporateMemberProfile profile,
+  ) async {
+    final wallet = await loadWallet(profile);
+    if (wallet.exposurePushBundleCredits > 0) {
+      final updated = wallet.copyWith(
+        exposurePushBundleCredits: wallet.exposurePushBundleCredits - 1,
+      );
+      await _persist(profile, updated);
+      return const PushConsumeResult(
+        success: true,
+        source: PushConsumeSource.packageCredit,
+        radiusMeters: PushPackageCatalog.packagePushRadiusM,
+      );
+    }
+    return PushConsumeResult.fail(
+      '노출+PUSH 이용권이 없습니다. '
+      '${PushPackageCatalog.krwSuffix(PushPackageCatalog.exposureWithPushUnitPriceKrw)} 상품을 구매해 주세요.',
+    );
+  }
+
+  /// PUSH 알림권 1회 소진 — 알림핀·정류장 1곳 · 1회 발송
+  Future<PushConsumeResult> tryConsumePushTicket(
+    CorporateMemberProfile profile,
+  ) async {
+    final wallet = await loadWallet(profile);
+    if (wallet.pushTicketCredits > 0) {
+      final updated = wallet.copyWith(
+        pushTicketCredits: wallet.pushTicketCredits - 1,
+      );
+      await _persist(profile, updated);
+      return const PushConsumeResult(
+        success: true,
+        source: PushConsumeSource.packageCredit,
+        radiusMeters: PushPackageCatalog.packagePushRadiusM,
+      );
+    }
+    return PushConsumeResult.fail(
+      'PUSH 알림권이 없습니다. ${PushTicketCatalog.unitPriceLabel} 결제 후 발송할 수 있습니다.',
+    );
+  }
+
+  Future<void> addPushTicketPurchase(
+    CorporateMemberProfile profile, {
+    int count = 1,
+  }) async {
+    if (count <= 0) return;
+    final wallet = await loadWallet(profile);
+    final updated = wallet.copyWith(
+      pushTicketCredits: wallet.pushTicketCredits + count,
+    );
+    await _persist(profile, updated);
+  }
+
+  /// 노출 이용권 충전 — 결제 권한자 결제 완료 후 채용 담당자가 활성화에 사용
+  Future<void> addExposureCredits(
+    CorporateMemberProfile profile, {
+    required int count,
+  }) async {
+    if (count <= 0) return;
+    final wallet = await loadWallet(profile);
+    final updated = wallet.copyWith(
+      packageCredits: wallet.packageCredits + count,
+      locationSlotsFromPackages: wallet.locationSlotsFromPackages + count,
+      lifetimePackagesPurchased: wallet.lifetimePackagesPurchased + count,
+    );
+    await _persist(profile, updated);
+  }
+
+  /// 모집지역 삭제 시 — 사용하지 않은 일자리 알림핀 1회 복원
   Future<void> refundRecruitmentCredit(
     CorporateMemberProfile profile, {
     int count = 1,
@@ -266,33 +321,19 @@ class PushWalletService {
     await AuthSession.instance.updateCorporateProfile(updatedProfile);
   }
 
-  int _effectiveBonus(EmployerPushWallet wallet) {
-    if (wallet.signupBonusRemaining <= 0) return 0;
-    final expires = wallet.signupBonusExpiresAt;
-    if (expires != null && DateTime.now().isAfter(expires)) return 0;
-    return wallet.signupBonusRemaining;
-  }
-
   static String _dayKey([DateTime? date]) {
     final d = date ?? DateTime.now();
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
   static String walletSummary(EmployerPushWallet wallet) {
-    final freeToday = wallet.dailyFreePostingAvailable ? 1 : 0;
-    return '지역 푸시권 ${wallet.packageCredits}회 · '
-        '노출 범위 ${wallet.totalLocationSlots}곳 · '
-        '오늘 무료 $freeToday/${PushPackageCatalog.dailyFreePush}';
+    return '노출 ${wallet.packageCredits}회 · '
+        '노출+PUSH ${wallet.exposurePushBundleCredits}회 · '
+        'PUSH ${wallet.pushTicketCredits}회 · '
+        '노출 범위 ${wallet.totalLocationSlots}곳';
   }
 
-  /// 추가푸시 버튼 — 사용 가능 횟수 (무료·보너스·패키지 합산)
+  /// 추가PUSH 버튼 — 사용 가능 일자리 알림핀
   static String availablePushCreditsLabel(EmployerPushWallet wallet) =>
       '보유 ${wallet.availablePushCredits}회';
-
-  static int _effectiveBonusStatic(EmployerPushWallet wallet) {
-    if (wallet.signupBonusRemaining <= 0) return 0;
-    final expires = wallet.signupBonusExpiresAt;
-    if (expires != null && DateTime.now().isAfter(expires)) return 0;
-    return wallet.signupBonusRemaining;
-  }
 }

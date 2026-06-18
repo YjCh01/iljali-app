@@ -1,4 +1,13 @@
-import 'package:map/features/corporate/data/repositories/partnership_notice_repository.dart';
+﻿import 'package:flutter/foundation.dart';
+import 'package:map/core/dev/dev_chat_test_support.dart';
+import 'package:map/core/dev/dev_test_accounts.dart';
+import 'package:map/core/hiring/application_chat_message_repository.dart';
+import 'package:map/core/config/product_feature_flags.dart';
+import 'package:map/core/hiring/commission_calculator.dart';
+import 'package:map/core/hiring/hiring_application.dart';
+import 'package:map/core/hiring/hiring_application_status.dart';
+import 'package:map/core/hiring/local_hiring_repository.dart';
+import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
 
 abstract class CorporateChatLocalDataSource {
@@ -9,15 +18,7 @@ abstract class CorporateChatLocalDataSource {
 class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
   const CorporateChatLocalDataSourceImpl();
 
-  static const List<CorporateChatRoom> _applicantRooms = [];
-
   static const _moreItems = [
-    CorporateMoreMenuItem(
-      id: 'more_stats',
-      title: '채용 통계',
-      description: '공고·지원·합격률 리포트',
-      iconName: 'insights',
-    ),
     CorporateMoreMenuItem(
       id: 'more_notice',
       title: '알림 설정',
@@ -34,36 +35,75 @@ class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
 
   @override
   Future<List<CorporateChatRoom>> fetchChatRooms() async {
-    final rooms = List<CorporateChatRoom>.from(_applicantRooms);
-    final noticeRepo = await PartnershipNoticeRepository.create();
-    if (await noticeRepo.isSent) {
-      final body = await noticeRepo.body ?? '';
-      final sentAt = await noticeRepo.sentAt;
-      final label = _formatSentLabel(sentAt);
-      rooms.insert(
-        0,
-        CorporateChatRoom(
-          id: 'chat_official_partnership',
-          applicantName: '일자리 운영팀',
-          jobTitle: '푸시 정책 안내',
-          lastMessage: '공고 등록 무료 · 근무지 1km 무료 푸시 · 지역 푸시권 안내',
-          updatedAtLabel: label,
-          unreadCount: 1,
-          kind: CorporateChatRoomKind.officialNotice,
-          fullMessageBody: body,
-        ),
-      );
+    if (kDebugMode) {
+      await DevChatTestSupport.ensureCorporateChatReady();
     }
-    return List.unmodifiable(rooms);
+
+    var companyKey =
+        AuthSession.instance.currentUser?.corporateProfile?.companyKey;
+    if (kDebugMode) {
+      final email = AuthSession.instance.currentUser?.email;
+      final devCorp =
+          email != null ? DevTestAccounts.corporateByEmail(email) : null;
+      if (devCorp != null) {
+        companyKey = devCorp.verifiedCorporateProfile!.companyKey;
+      }
+    }
+    if (companyKey == null || companyKey.isEmpty) return [];
+
+    final repo = await LocalHiringRepository.create();
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    final applications =
+        await repo.fetchApplicantsForCorporate(companyKey: companyKey);
+    final rooms = <CorporateChatRoom>[];
+    for (final app in applications) {
+      if (app.status == HiringApplicationStatus.rejected ||
+          app.status == HiringApplicationStatus.noShow ||
+          app.status == HiringApplicationStatus.commissionPaid) {
+        continue;
+      }
+      rooms.add(await _mapApplication(app, chatRepo));
+    }
+    return rooms;
   }
 
-  String _formatSentLabel(DateTime? sentAt) {
-    if (sentAt == null) return '방금';
-    final diff = DateTime.now().difference(sentAt);
-    if (diff.inMinutes < 1) return '방금';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
-    if (diff.inHours < 24) return '${diff.inHours}시간 전';
-    return '오늘';
+  Future<CorporateChatRoom> _mapApplication(
+    HiringApplication app,
+    ApplicationChatMessageRepository chatRepo,
+  ) async {
+    final messages = await chatRepo.load(app.id);
+    final lastChat = messages.isNotEmpty ? messages.last : null;
+
+    final lastMessage = lastChat != null
+        ? _previewLine(lastChat.text)
+        : ProductFeatureFlags.isHiringCommissionEnabled &&
+                app.needsCommissionPayment
+            ? '출근 확인 완료 · 수수료 ${CommissionCalculator.formatKrw(CommissionCalculator.forApplication(app))} 결제 필요'
+            : app.isWorkAgreementComplete
+                ? '근무 일정 합의 완료 · ${app.status.label}'
+                : '채팅 진행 중 · ${app.status.label}';
+
+    return CorporateChatRoom(
+      id: app.id,
+      applicantName: app.seekerName,
+      jobTitle: app.postTitle,
+      lastMessage: lastMessage,
+      updatedAtLabel: LocalHiringRepository.formatRelativeTime(
+        lastChat?.sentAt ?? app.appliedAt,
+      ),
+      unreadCount: ProductFeatureFlags.isHiringCommissionEnabled &&
+              app.needsCommissionPayment
+          ? 1
+          : app.status == HiringApplicationStatus.chatting
+              ? 1
+              : 0,
+    );
+  }
+
+  String _previewLine(String text) {
+    final line = text.replaceAll('\n', ' ').trim();
+    if (line.length <= 64) return line;
+    return '${line.substring(0, 64)}…';
   }
 
   @override
