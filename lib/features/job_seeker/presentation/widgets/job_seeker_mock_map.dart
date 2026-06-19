@@ -9,6 +9,8 @@ import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier
 import 'package:map/core/geo/map_viewport_bounds.dart';
 import 'package:map/features/job_seeker/domain/utils/job_map_cluster_engine.dart';
 import 'package:map/features/job_seeker/domain/utils/mock_map_viewport.dart';
+import 'package:map/core/geo/device_location_service.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_current_location_button.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_search_area_button.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_zoom_control_bar.dart';
 
@@ -62,6 +64,19 @@ class JobSeekerMockMapState extends State<JobSeekerMockMap> {
 
   void _setZoom(double value) {
     setState(() => _zoom = value.clamp(_minZoom, _maxZoom));
+  }
+
+  Future<bool> _focusMockOnUserLocation() async {
+    final position = await DeviceLocationService.getCurrentPosition();
+    if (position == null) return false;
+    setState(() {
+      _panOffset = MockMapViewport.panOffsetToCenterOn(
+        target: position,
+        zoom: _zoom,
+      );
+    });
+    _notifyViewportChanged();
+    return true;
   }
 
   @override
@@ -182,6 +197,10 @@ class JobSeekerMockMapState extends State<JobSeekerMockMap> {
                   ),
                 ],
               ),
+            ),
+            MapCurrentLocationButton(
+              onMockLocate: _focusMockOnUserLocation,
+              bottom: 130,
             ),
           ],
         );

@@ -4,11 +4,18 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/geo/map_user_location_service.dart';
+import 'package:map/core/config/env_config.dart';
+import 'package:map/core/map/web/naver_map_web_layer.dart';
+import 'package:map/core/map/web/push_radius_web_overlay_builder.dart';
 import 'package:map/core/utils/naver_map_platform.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
+import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_current_location_button.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_unavailable_placeholder.dart';
 
 /// 지도에 표시할 비활성(기존) 거점
@@ -36,10 +43,12 @@ class PushRadiusMapPolyline {
   const PushRadiusMapPolyline({
     required this.points,
     required this.color,
+    this.dashed = false,
   });
 
   final List<GeoCoordinate> points;
   final Color color;
+  final bool dashed;
 }
 
 /// PUSH·셔틀 거점/정류장 지도 — Naver Map(모바일) + MVP 그리드(Windows/Web)
@@ -60,6 +69,10 @@ class PushRadiusMapPicker extends StatefulWidget {
     this.polylinePoints = const [],
     this.polylineColor,
     this.polylines = const [],
+    this.maxZoom = 18.0,
+    this.enableMyLocation = true,
+    this.myLocationButtonBottom = 16,
+    this.viewportSessionKey,
   });
 
   final GeoCoordinate center;
@@ -79,14 +92,20 @@ class PushRadiusMapPicker extends StatefulWidget {
   final Color? polylineColor;
   /// 복수 노선 경로 (지정 시 [polylinePoints]보다 우선)
   final List<PushRadiusMapPolyline> polylines;
+  final double maxZoom;
+  final bool enableMyLocation;
+  final double myLocationButtonBottom;
+  /// When set, pan/zoom is restored after navigation for this map context.
+  final String? viewportSessionKey;
   @override
   State<PushRadiusMapPicker> createState() => _PushRadiusMapPickerState();
 }
 
 class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
   static const _minZoom = 10.0;
-  static const _maxZoom = 18.0;
   static const _zoomStep = 0.8;
+
+  double get _maxZoom => widget.maxZoom;
 
   late GeoCoordinate _center;
   late GeoCoordinate _viewCenter;
@@ -101,9 +120,29 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
   @override
   void initState() {
     super.initState();
+    final saved = _peekSavedViewport();
     _center = widget.center;
-    _viewCenter = widget.center;
-    _mapZoom = widget.mapZoom;
+    _viewCenter = saved?.center ?? widget.center;
+    _mapZoom = saved?.zoom ?? widget.mapZoom;
+    if (widget.enableMyLocation) {
+      MapUserLocationService.prepareForMap();
+    }
+  }
+
+  MapViewportSnapshot? _peekSavedViewport() {
+    final key = widget.viewportSessionKey;
+    if (key == null) return null;
+    return MapViewportSessionStore.instance.peek(key);
+  }
+
+  void _persistViewport() {
+    final key = widget.viewportSessionKey;
+    if (key == null) return;
+    MapViewportSessionStore.instance.rememberCoordinate(
+      key,
+      center: _renderCenter,
+      zoom: _mapZoom,
+    );
   }
 
   @override
@@ -126,6 +165,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
 
   void _onScaleEnd(ScaleEndDetails details) {
     _isDragging = false;
+    _persistViewport();
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
@@ -161,6 +201,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
     setState(() {
       _mapZoom = (_mapZoom + delta).clamp(_minZoom, _maxZoom);
     });
+    _persistViewport();
   }
 
   void _onPointerScroll(PointerScrollEvent event) {
@@ -204,6 +245,21 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
       widget.radiusMeters > 0 ||
       (widget.existingPoints.isEmpty && widget.polylines.isEmpty);
 
+  Future<bool> _focusMockOnUserLocation() async {
+    final position = await DeviceLocationService.getCurrentPosition();
+    if (position == null) return false;
+    setState(() {
+      _center = position;
+      _viewCenter = position;
+      _dragOffset = Offset.zero;
+    });
+    if (widget.centerEditable) {
+      widget.onCenterChanged(position);
+    }
+    _persistViewport();
+    return true;
+  }
+
   List<PushRadiusMapPolyline> get _effectivePolylines {
     if (widget.polylines.isNotEmpty) return widget.polylines;
     if (widget.polylinePoints.length >= 2) {
@@ -219,7 +275,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
 
   @override
   Widget build(BuildContext context) {
-    if (NaverMapPlatform.shouldShowMap) {
+    if (NaverMapPlatform.shouldUseNativeMap) {
       return _PushRadiusNaverMapPicker(
         center: widget.center,
         radiusMeters: widget.radiusMeters,
@@ -236,6 +292,30 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
         polylines: _effectivePolylines,
         showsCenterPin: _showsCenterPin,
         radiusLabelFor: _radiusLabelFor,
+        maxZoom: widget.maxZoom,
+        enableMyLocation: widget.enableMyLocation,
+        myLocationButtonBottom: widget.myLocationButtonBottom,
+        viewportSessionKey: widget.viewportSessionKey,
+      );
+    }
+
+    if (NaverMapPlatform.shouldUseWebMap) {
+      return _PushRadiusWebMapPicker(
+        center: widget.center,
+        radiusMeters: widget.radiusMeters,
+        onCenterChanged: widget.onCenterChanged,
+        existingPoints: widget.existingPoints,
+        activePointLabel: widget.activePointLabel,
+        mapZoom: widget.mapZoom,
+        centerEditable: widget.centerEditable,
+        onExistingPointTap: widget.onExistingPointTap,
+        visualTheme: widget.visualTheme,
+        polylines: _effectivePolylines,
+        showsCenterPin: _showsCenterPin,
+        maxZoom: widget.maxZoom,
+        enableMyLocation: widget.enableMyLocation,
+        myLocationButtonBottom: widget.myLocationButtonBottom,
+        viewportSessionKey: widget.viewportSessionKey,
       );
     }
 
@@ -344,6 +424,10 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
                     onZoomOut: () => _nudgeZoom(-_zoomStep),
                     accent: chromeTheme.accent,
                   ),
+                ),
+                MapCurrentLocationButton(
+                  onMockLocate: _focusMockOnUserLocation,
+                  bottom: widget.myLocationButtonBottom,
                 ),
               ],
             ),
@@ -712,6 +796,12 @@ class _MapGridPainter extends CustomPainter {
         path.lineTo(point.dx, point.dy);
       }
     }
+
+    if (line.dashed) {
+      _drawDashedPath(canvas, path, line.color);
+      return;
+    }
+
     canvas.drawPath(
       path,
       Paint()
@@ -728,6 +818,30 @@ class _MapGridPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round,
     );
+  }
+
+  void _drawDashedPath(Canvas canvas, Path path, Color color) {
+    for (final metric in path.computeMetrics()) {
+      const dash = 10.0;
+      const gap = 7.0;
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + dash;
+        final extract = metric.extractPath(
+          distance,
+          next.clamp(0, metric.length),
+        );
+        canvas.drawPath(
+          extract,
+          Paint()
+            ..color = color
+            ..strokeWidth = 3.5
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round,
+        );
+        distance = next + gap;
+      }
+    }
   }
 
   @override
@@ -812,6 +926,10 @@ class _PushRadiusNaverMapPicker extends StatefulWidget {
     required this.polylines,
     required this.showsCenterPin,
     required this.radiusLabelFor,
+    required this.maxZoom,
+    required this.enableMyLocation,
+    required this.myLocationButtonBottom,
+    required this.viewportSessionKey,
   });
 
   final GeoCoordinate center;
@@ -829,6 +947,10 @@ class _PushRadiusNaverMapPicker extends StatefulWidget {
   final List<PushRadiusMapPolyline> polylines;
   final bool showsCenterPin;
   final String? Function(int radiusMeters) radiusLabelFor;
+  final double maxZoom;
+  final bool enableMyLocation;
+  final double myLocationButtonBottom;
+  final String? viewportSessionKey;
 
   @override
   State<_PushRadiusNaverMapPicker> createState() =>
@@ -837,8 +959,9 @@ class _PushRadiusNaverMapPicker extends StatefulWidget {
 
 class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
   static const _minZoom = 10.0;
-  static const _maxZoom = 18.0;
   static const _zoomStep = 0.8;
+
+  double get _maxZoom => widget.maxZoom;
 
   NaverMapController? _controller;
   GeoCoordinate? _lastReportedCenter;
@@ -871,20 +994,47 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
     if (centerChanged && widget.centerEditable) {
       _moveCameraTo(widget.center, animate: false);
       _lastReportedCenter = widget.center;
-    } else if (centerChanged && !widget.centerEditable) {
-      _moveCameraTo(widget.center, animate: true);
     }
+  }
+
+  MapViewportSnapshot? _peekSavedViewport() {
+    final key = widget.viewportSessionKey;
+    if (key == null) return null;
+    return MapViewportSessionStore.instance.peek(key);
+  }
+
+  Future<void> _persistViewportFromCamera() async {
+    final key = widget.viewportSessionKey;
+    final controller = _controller;
+    if (key == null || controller == null) return;
+    final camera = await controller.getCameraPosition();
+    MapViewportSessionStore.instance.remember(
+      key,
+      MapViewportSnapshot(
+        latitude: camera.target.latitude,
+        longitude: camera.target.longitude,
+        zoom: camera.zoom,
+      ),
+    );
+  }
+
+  Future<void> _restoreSavedViewportIfAny() async {
+    final saved = _peekSavedViewport();
+    if (saved == null) return;
+    await _moveCameraTo(saved.center, zoom: saved.zoom, animate: false);
+    _lastReportedCenter = saved.center;
   }
 
   Future<void> _moveCameraTo(
     GeoCoordinate coordinate, {
+    double? zoom,
     required bool animate,
   }) async {
     final controller = _controller;
     if (controller == null) return;
     final update = NCameraUpdate.withParams(
       target: NLatLng(coordinate.latitude, coordinate.longitude),
-      zoom: widget.mapZoom,
+      zoom: zoom ?? widget.mapZoom,
     );
     if (!animate) {
       update.setAnimation(animation: NCameraAnimation.none);
@@ -895,13 +1045,16 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
   Future<void> _handleMapReady(NaverMapController controller) async {
     _controller = controller;
     _lastReportedCenter = widget.center;
+    if (widget.enableMyLocation) {
+      await MapUserLocationService.prepareForMap();
+    }
+    await _restoreSavedViewportIfAny();
     await _syncOverlays();
     if (!mounted) return;
     setState(() => _mapReady = true);
   }
 
   Future<void> _handleCameraIdle() async {
-    if (!widget.centerEditable) return;
     final controller = _controller;
     if (controller == null) return;
 
@@ -910,6 +1063,9 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
       latitude: camera.target.latitude,
       longitude: camera.target.longitude,
     );
+    await _persistViewportFromCamera();
+
+    if (!widget.centerEditable) return;
     if (_lastReportedCenter != null &&
         _sameCoordinate(_lastReportedCenter!, next)) {
       return;
@@ -936,6 +1092,7 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
       duration: const Duration(milliseconds: 200),
     );
     await controller.updateCamera(update);
+    await _persistViewportFromCamera();
   }
 
   Future<void> _syncOverlays() async {
@@ -1050,13 +1207,16 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
 
   @override
   Widget build(BuildContext context) {
-    if (!NaverMapPlatform.shouldShowMap) {
+    if (!NaverMapPlatform.shouldUseNativeMap) {
       return const MapUnavailablePlaceholder();
     }
 
     final safeAreaPadding = MediaQuery.paddingOf(context);
     final chromeTheme = _chromeTheme;
     final activeTheme = _activeTheme;
+    final saved = _peekSavedViewport();
+    final initialCenter = saved?.center ?? widget.center;
+    final initialZoom = saved?.zoom ?? widget.mapZoom;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -1068,8 +1228,8 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
             options: NaverMapViewOptions(
               contentPadding: safeAreaPadding,
               initialCameraPosition: NCameraPosition(
-                target: NLatLng(widget.center.latitude, widget.center.longitude),
-                zoom: widget.mapZoom,
+                target: NLatLng(initialCenter.latitude, initialCenter.longitude),
+                zoom: initialZoom,
               ),
               minZoom: _minZoom,
               maxZoom: _maxZoom,
@@ -1102,6 +1262,181 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
               accent: chromeTheme.accent,
             ),
           ),
+          MapCurrentLocationButton(
+            controller: _controller,
+            bottom: widget.myLocationButtonBottom,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// NAVER Maps JS — PUSH·셔틀 거점/정류장 지도 (Web)
+class _PushRadiusWebMapPicker extends StatefulWidget {
+  const _PushRadiusWebMapPicker({
+    required this.center,
+    required this.radiusMeters,
+    required this.onCenterChanged,
+    required this.existingPoints,
+    required this.activePointLabel,
+    required this.mapZoom,
+    required this.centerEditable,
+    required this.onExistingPointTap,
+    required this.visualTheme,
+    required this.polylines,
+    required this.showsCenterPin,
+    required this.maxZoom,
+    required this.enableMyLocation,
+    required this.myLocationButtonBottom,
+    required this.viewportSessionKey,
+  });
+
+  final GeoCoordinate center;
+  final int radiusMeters;
+  final ValueChanged<GeoCoordinate> onCenterChanged;
+  final List<PushRadiusMapOverlayPoint> existingPoints;
+  final String? activePointLabel;
+  final double mapZoom;
+  final bool centerEditable;
+  final ValueChanged<int>? onExistingPointTap;
+  final PushCreditVisualTheme? visualTheme;
+  final List<PushRadiusMapPolyline> polylines;
+  final bool showsCenterPin;
+  final double maxZoom;
+  final bool enableMyLocation;
+  final double myLocationButtonBottom;
+  final String? viewportSessionKey;
+
+  @override
+  State<_PushRadiusWebMapPicker> createState() => _PushRadiusWebMapPickerState();
+}
+
+class _PushRadiusWebMapPickerState extends State<_PushRadiusWebMapPicker> {
+  static const _minZoom = 10.0;
+  static const _zoomStep = 0.8;
+
+  NaverMapWebController? _controller;
+  bool _mapReady = false;
+
+  PushCreditVisualTheme get _activeTheme =>
+      widget.visualTheme ?? PushCreditVisualTheme.basic;
+
+  PushCreditVisualTheme get _chromeTheme => widget.existingPoints.isNotEmpty
+      ? PushCreditVisualTheme.package
+      : _activeTheme;
+
+  MapViewportSnapshot? _peekSavedViewport() {
+    final key = widget.viewportSessionKey;
+    if (key == null) return null;
+    return MapViewportSessionStore.instance.peek(key);
+  }
+
+  Future<void> _persistViewport() async {
+    final key = widget.viewportSessionKey;
+    final controller = _controller;
+    if (key == null || controller == null || !controller.isReady) return;
+    final camera = await controller.getCameraPosition();
+    MapViewportSessionStore.instance.remember(
+      key,
+      MapViewportSnapshot(
+        latitude: camera.latitude,
+        longitude: camera.longitude,
+        zoom: camera.zoom,
+      ),
+    );
+  }
+
+  Future<void> _nudgeZoom(double delta) async {
+    final controller = _controller;
+    if (controller == null || !controller.isReady) return;
+    final camera = await controller.getCameraPosition();
+    final nextZoom = (camera.zoom + delta).clamp(_minZoom, widget.maxZoom);
+    await controller.moveCamera(
+      latitude: camera.latitude,
+      longitude: camera.longitude,
+      zoom: nextZoom,
+    );
+    await _persistViewport();
+  }
+
+  void _handleWebMapReady(NaverMapWebController controller) {
+    _controller = controller;
+    if (mounted) setState(() => _mapReady = true);
+  }
+
+  void _handleCenterChanged(double lat, double lng) {
+    if (!widget.centerEditable) return;
+    widget.onCenterChanged(GeoCoordinate(latitude: lat, longitude: lng));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final saved = _peekSavedViewport();
+    final initialLat = saved?.latitude ?? widget.center.latitude;
+    final initialLng = saved?.longitude ?? widget.center.longitude;
+    final initialZoom = saved?.zoom ?? widget.mapZoom;
+    final activeTheme = _activeTheme;
+    final chromeTheme = _chromeTheme;
+
+    final overlays = PushRadiusWebOverlayBuilder.build(
+      center: widget.center,
+      radiusMeters: widget.radiusMeters,
+      existingPoints: widget.existingPoints,
+      activeTheme: activeTheme,
+      routePolylines: widget.polylines,
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          NaverMapWebWidget(
+            clientId: EnvConfig.naverMapClientId,
+            initialLatitude: initialLat,
+            initialLongitude: initialLng,
+            initialZoom: initialZoom,
+            markers: overlays.markers,
+            circles: overlays.circles,
+            polylines: overlays.polylines,
+            centerEditable: widget.centerEditable,
+            trackCenterLatitude: widget.center.latitude,
+            trackCenterLongitude: widget.center.longitude,
+            onMapReady: _handleWebMapReady,
+            onCameraIdle: _persistViewport,
+            onCenterChanged: _handleCenterChanged,
+            onMarkerTap: (id) {
+              if (!id.startsWith('push_existing_marker_')) return;
+              final indexStr = id.replaceFirst('push_existing_marker_', '');
+              final index = int.tryParse(indexStr);
+              if (index != null) widget.onExistingPointTap?.call(index);
+            },
+          ),
+          if (widget.showsCenterPin)
+            Center(
+              child: IgnorePointer(
+                child: _CenterPinBadge(
+                  accent: activeTheme.accent,
+                  pointLabel: widget.activePointLabel,
+                ),
+              ),
+            ),
+          Positioned(
+            right: 12,
+            top: 12,
+            child: _MapZoomButtons(
+              canZoomIn: _mapReady,
+              canZoomOut: _mapReady,
+              onZoomIn: () => _nudgeZoom(_zoomStep),
+              onZoomOut: () => _nudgeZoom(-_zoomStep),
+              accent: chromeTheme.accent,
+            ),
+          ),
+          if (widget.enableMyLocation)
+            MapCurrentLocationButton(
+              bottom: widget.myLocationButtonBottom,
+            ),
         ],
       ),
     );

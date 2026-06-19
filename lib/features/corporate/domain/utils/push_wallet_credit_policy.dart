@@ -4,7 +4,7 @@ import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 
-/// 일자리 알림핀 — 1회 = 근무지·모집지역 PUSH 1곳 (공고 등록 무료 · 황금핀은 100회 팩)
+/// 일자리 알림핀 — 1회 = 근무지·모집지역 PUSH 1곳 (공고 등록 무료)
 abstract final class PushWalletCreditPolicy {
   static bool isRecruitmentZoneIndex(int index) => index > 0;
 
@@ -61,13 +61,28 @@ abstract final class PushWalletCreditPolicy {
   }) =>
       availableCredits;
 
-  /// 추가 가능 모집지역 — 노출 슬롯·일자리 알림핀 모두 필요
+  /// 추가 가능 모집지역 — 노출 슬롯·일자리 알림핀 모두 필요 (즉시 발송·결제 연동)
   static int configureRemainingAddSlots({
     required int slotRemaining,
     required int availableCredits,
     required int recruitZoneCount,
   }) =>
       math.min(slotRemaining, availableCredits);
+
+  /// 설정 화면 — 크레딧 없이 미리 배치 (노출·결제는 유료 서비스에서 별도)
+  static int configurePreviewRemainingAddSlots({
+    required int pointsLength,
+    required int previewRecruitmentPinCap,
+  }) {
+    final recruitCount = pointsLength > 1 ? pointsLength - 1 : 0;
+    final previewRemaining = previewRecruitmentPinCap - recruitCount;
+    if (previewRemaining <= 0) return 0;
+    final hardCap =
+        previewRecruitmentPinCap + PushPackageCatalog.baseLocationSlots;
+    final lengthRemaining = hardCap - pointsLength;
+    if (lengthRemaining <= 0) return 0;
+    return math.min(previewRemaining, lengthRemaining);
+  }
 
   /// 공고 카드 형광 배지 — 일자리 알림핀만
   static int jobPostCardDisplayCredits({

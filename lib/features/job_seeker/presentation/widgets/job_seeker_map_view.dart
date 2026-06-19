@@ -7,11 +7,18 @@ import 'package:map/core/geo/geo_coordinate.dart';
 
 import 'package:map/core/geo/map_viewport_bounds.dart';
 
+import 'package:map/core/geo/map_user_location_service.dart';
+import 'package:map/core/config/env_config.dart';
+import 'package:map/core/map/web/job_map_web_marker_factory.dart';
+import 'package:map/core/map/web/naver_map_web_layer.dart';
 import 'package:map/core/utils/naver_map_platform.dart';
+import 'package:map/core/map/web/shuttle_map_web_overlay_builder.dart';
+import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
+import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
 
-import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
+
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
-
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 
 import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase.dart';
@@ -24,12 +31,14 @@ import 'package:map/features/job_seeker/presentation/map/job_map_marker_factory.
 
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/presentation/map/shuttle_route_overlay_factory.dart';
+import 'package:map/features/job_seeker/presentation/map/job_recruitment_map_pin.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_seeker_mock_map.dart';
 
 import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
 
 import 'package:map/features/map_dashboard/presentation/map/warehouse_cluster_options_factory.dart';
 
+import 'package:map/features/map_dashboard/presentation/widgets/map_current_location_button.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_search_area_button.dart';
 
 
@@ -54,6 +63,10 @@ class JobSeekerMapView extends StatefulWidget {
     this.overlay,
     this.shuttleRoute,
     this.shuttleWorkplace,
+    this.recruitmentPins = const [],
+    this.selectedRecruitmentPin,
+    this.onRecruitmentPinTap,
+    this.recruitmentLinkPolylines = const [],
 
     GetJobMapPinsUseCase? getPins,
 
@@ -77,6 +90,14 @@ class JobSeekerMapView extends StatefulWidget {
   final CommuteRoute? shuttleRoute;
 
   final GeoCoordinate? shuttleWorkplace;
+
+  final List<JobRecruitmentMapPin> recruitmentPins;
+
+  final JobRecruitmentMapPin? selectedRecruitmentPin;
+
+  final ValueChanged<JobRecruitmentMapPin>? onRecruitmentPinTap;
+
+  final List<PushRadiusMapPolyline> recruitmentLinkPolylines;
 
   final GetJobMapPinsUseCase? _getPins;
 
@@ -169,6 +190,12 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
     }
 
+    if (oldWidget.recruitmentPins != widget.recruitmentPins ||
+        oldWidget.selectedRecruitmentPin != widget.selectedRecruitmentPin ||
+        oldWidget.recruitmentLinkPolylines != widget.recruitmentLinkPolylines) {
+      _syncMapOverlays();
+    }
+
   }
 
 
@@ -259,7 +286,13 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
   Future<MapViewportBounds> _resolveViewport() async {
 
-    if (!NaverMapPlatform.shouldShowMap) {
+    if (!NaverMapPlatform.shouldUseNativeMap) {
+
+      if (NaverMapPlatform.shouldUseWebMap) {
+
+        return MapCameraHolder.instance.getViewportBounds();
+
+      }
 
       final mockState = _mockMapKey.currentState;
 
@@ -350,6 +383,47 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
     }
 
+    for (final pin in widget.recruitmentPins) {
+      final tint = pin.point.resolvedPinColor;
+      overlays.add(
+        NMarker(
+          id: 'recruitment_pin_${pin.post.id}_${pin.index}',
+          position: NLatLng(
+            pin.coordinate.latitude,
+            pin.coordinate.longitude,
+          ),
+          iconTintColor: tint,
+          size: const Size(30, 30),
+          caption: NOverlayCaption(
+            text: ExposurePointLabels.title(pin.index),
+            color: Colors.white,
+            haloColor: tint.withValues(alpha: 0.85),
+            textSize: 11,
+          ),
+        )..setOnTapListener((_) {
+            widget.onRecruitmentPinTap?.call(pin);
+          }),
+      );
+    }
+
+    for (var i = 0; i < widget.recruitmentLinkPolylines.length; i++) {
+      final line = widget.recruitmentLinkPolylines[i];
+      if (line.points.length < 2) continue;
+      overlays.add(
+        NPathOverlay(
+          id: 'recruitment_link_$i',
+          coords: [
+            for (final p in line.points)
+              NLatLng(p.latitude, p.longitude),
+          ],
+          width: 4,
+          color: line.color,
+          outlineColor: Colors.white,
+          outlineWidth: 1,
+        ),
+      );
+    }
+
     if (overlays.isNotEmpty) {
 
       controller.addOverlayAll(overlays);
@@ -406,7 +480,7 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
 
 
-    if (!NaverMapPlatform.shouldShowMap) {
+    if (NaverMapPlatform.shouldUseMockMap) {
 
       return JobSeekerMockMap(
 
@@ -435,6 +509,14 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
 
 
+    if (NaverMapPlatform.shouldUseWebMap) {
+
+      return _buildWebMap(context);
+
+    }
+
+
+
     final safeAreaPadding = MediaQuery.paddingOf(context);
 
 
@@ -458,6 +540,8 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
               zoom: MapConstants.warehouseAreaZoom,
 
             ),
+
+            locationButtonEnable: false,
 
           ),
 
@@ -499,6 +583,8 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
           ),
 
+        const MapCurrentLocationButton(),
+
       ],
 
     );
@@ -513,7 +599,143 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
     MapCameraHolder.instance.bind(controller);
 
+    await MapUserLocationService.prepareForMap();
 
+    final viewport = await MapCameraHolder.instance.getViewportBounds();
+
+    if (!mounted) return;
+
+    setState(() {
+
+      _activeViewport = viewport;
+
+      _cameraPromptReady = true;
+
+    });
+
+    _applyFilters(viewport);
+
+  }
+
+
+
+  Widget _buildWebMap(BuildContext context) {
+    final jobMarkers = JobMapWebMarkerFactory.fromPins(_visiblePins);
+    final shuttle = _effectiveShuttleRoute;
+    final shuttleOverlays = shuttle == null
+        ? (
+            markers: <NaverMapWebMarkerSpec>[],
+            polylines: <NaverMapWebPolylineSpec>[],
+          )
+        : ShuttleMapWebOverlayBuilder.fromRoute(
+            shuttle,
+            workplace: widget.shuttleWorkplace,
+          );
+
+    final recruitmentMarkers = <NaverMapWebMarkerSpec>[
+      for (final pin in widget.recruitmentPins)
+        NaverMapWebMarkerSpec(
+          id: 'recruitment_pin_${pin.post.id}_${pin.index}',
+          latitude: pin.coordinate.latitude,
+          longitude: pin.coordinate.longitude,
+          colorHex: NaverMapWebColors.hex(pin.point.resolvedPinColor),
+          label: ExposurePointLabels.title(pin.index).substring(0, 1),
+          size: 30,
+        ),
+    ];
+
+    final linkPolylines = <NaverMapWebPolylineSpec>[
+      for (var i = 0; i < widget.recruitmentLinkPolylines.length; i++)
+        if (widget.recruitmentLinkPolylines[i].points.length >= 2)
+          NaverMapWebPolylineSpec(
+            id: 'recruitment_link_$i',
+            points: [
+              for (final p in widget.recruitmentLinkPolylines[i].points)
+                (latitude: p.latitude, longitude: p.longitude),
+            ],
+            colorHex: NaverMapWebColors.hex(
+              widget.recruitmentLinkPolylines[i].color,
+            ),
+            strokeWeight: 4,
+          ),
+    ];
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        NaverMapWebWidget(
+          clientId: EnvConfig.naverMapClientId,
+          initialLatitude: MapConstants.warehouseAreaCenter.latitude,
+          initialLongitude: MapConstants.warehouseAreaCenter.longitude,
+          initialZoom: MapConstants.warehouseAreaZoom,
+          markers: [
+            ...jobMarkers,
+            ...shuttleOverlays.markers,
+            ...recruitmentMarkers,
+          ],
+          polylines: [
+            ...shuttleOverlays.polylines,
+            ...linkPolylines,
+          ],
+          onMapReady: _handleWebMapReady,
+          onCameraIdle: _cameraPromptReady ? _markAreaSearchPending : null,
+          onMapTap: widget.onMapBackgroundTap == null
+              ? null
+              : (_, __) => widget.onMapBackgroundTap!(),
+          onMarkerTap: (id) {
+            for (final pin in _visiblePins) {
+              if (pin.post.id == id) {
+                widget.onPinTap(pin);
+                return;
+              }
+            }
+            for (final pin in widget.recruitmentPins) {
+              final rid = 'recruitment_pin_${pin.post.id}_${pin.index}';
+              if (rid == id) {
+                widget.onRecruitmentPinTap?.call(pin);
+                return;
+              }
+            }
+          },
+        ),
+
+        if (_areaSearchPending)
+
+          Positioned(
+
+            left: 16,
+
+            right: 16,
+
+            bottom: 16,
+
+            child: Center(
+
+              child: MapSearchAreaButton(
+
+                loading: _areaSearchLoading,
+
+                onPressed: _searchThisArea,
+
+              ),
+
+            ),
+
+          ),
+
+        const MapCurrentLocationButton(),
+
+      ],
+
+    );
+
+  }
+
+
+
+  Future<void> _handleWebMapReady(NaverMapWebController controller) async {
+
+    MapCameraHolder.instance.bindWeb(controller);
 
     final viewport = await MapCameraHolder.instance.getViewportBounds();
 

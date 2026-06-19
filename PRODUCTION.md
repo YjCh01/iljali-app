@@ -79,9 +79,15 @@ API: `POST /v1/insurance-auth/sessions` → WebView 간편인증 → `GET /v1/in
 
 ## 근무지 주소 검색 (Daum Postcode + Kakao 좌표)
 
-**근무지 검색** 화면은 [Daum 우편번호 서비스](https://postcode.map.daum.net/) WebView(`daum_postcode_search` + `webview_flutter`)를 사용합니다. **Android/iOS에서만** WebView가 동작합니다.
+**근무지 검색** 화면은 [Daum 우편번호 서비스](https://postcode.map.daum.net/)를 사용합니다.
 
-**Windows·macOS·Linux** 등 데스크톱에서는 `webview_flutter` 플랫폼 구현이 없어 Daum 팝업을 띄울 수 없습니다 (네이버 지도와 동일). 이 경우 **QC용 직접 입력**으로 샘플 좌표(강남)와 함께 근무지를 저장해 공고 등록·이후 플로우 테스트를 이어갈 수 있습니다.
+| 플랫폼 | 방식 |
+|--------|------|
+| **Android/iOS** | `daum_postcode_search` + `webview_flutter` WebView |
+| **Chrome 웹** | Kakao Postcode JS (`kakao.Postcode`) DOM embed |
+| **Windows·macOS·Linux 데스크톱 앱** | WebView 미지원 → **QC용 직접 입력** (샘플 강남 좌표) |
+
+데스크톱 네이티브 앱에서는 Daum 팝업을 띄울 수 없습니다 (네이버 지도와 동일). **Chrome 웹**에서는 실제 주소 검색이 동작하므로 PC 공고 등록은 웹을 권장합니다.
 
 선택한 도로명 주소의 **위·경도**는 Kakao Local REST API로 보완합니다.
 

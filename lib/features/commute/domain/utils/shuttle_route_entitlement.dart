@@ -7,8 +7,7 @@ import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier
 /// 정류장·노선이 표시됩니다. 노선만 연결된 상태에서는 근무지 핀만 보입니다.
 abstract final class ShuttleRouteEntitlement {
   static bool tierAllowsOverlay(JobMapPinDisplayTier tier) =>
-      tier == JobMapPinDisplayTier.packageActive ||
-      tier == JobMapPinDisplayTier.premiumPartner;
+      tier == JobMapPinDisplayTier.packageActive;
 
   static bool postEligible(CorporateJobPost post) {
     if (post.effectiveLinkedCommuteRouteIds.isEmpty) return false;

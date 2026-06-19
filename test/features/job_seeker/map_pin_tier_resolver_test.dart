@@ -7,7 +7,7 @@ import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier
 
 void main() {
   group('MapPinTierResolver', () {
-    test('100-pack buyer gets premium pin', () {
+    test('100-pack buyer gets standard pin without active credits', () {
       const profile = CorporateMemberProfile(
         companyName: 'A',
         businessRegistrationNumber: '123',
@@ -19,7 +19,7 @@ void main() {
       final tier = MapPinTierResolver.resolveForNewPost(
         registeredBy: profile,
       );
-      expect(tier, JobMapPinDisplayTier.premiumPartner);
+      expect(tier, JobMapPinDisplayTier.standard);
     });
 
     test('default profile gets grey standard pin', () {
@@ -47,11 +47,11 @@ void main() {
         status: CorporateJobPostStatus.recruiting,
         applicantCount: 0,
         postedAt: DateTime(2026, 5, 1),
-        mapPinDisplayTier: JobMapPinDisplayTier.premiumPartner,
+        mapPinDisplayTier: JobMapPinDisplayTier.packageActive,
       );
       expect(
         MapPinTierResolver.resolve(post: post),
-        JobMapPinDisplayTier.premiumPartner,
+        JobMapPinDisplayTier.packageActive,
       );
     });
 

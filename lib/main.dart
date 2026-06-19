@@ -11,7 +11,7 @@ import 'package:map/core/compliance/services/subscription_renewal_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (NaverMapPlatform.isSupported && EnvConfig.isNaverMapConfigured) {
+  if (NaverMapPlatform.shouldUseNativeMap) {
     await FlutterNaverMap().init(
       clientId: EnvConfig.naverMapClientId,
       onAuthFailed: (ex) {

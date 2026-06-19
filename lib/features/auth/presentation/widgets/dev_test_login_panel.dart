@@ -24,6 +24,16 @@ class _DevTestLoginPanelState extends State<DevTestLoginPanel> {
       await DevAuthService.signIn(account);
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
+    } catch (e, stack) {
+      debugPrint('Dev test login failed: $e\n$stack');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('테스트 로그인 실패: $e'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _signingIn = false);
     }

@@ -2,14 +2,13 @@
 
 ## Current Task
 
-- **셔틀 노선 근무지 고정 UX** — done
+- **웹 주소 검색 Phase 3** — Daum Postcode 웹 embed + Kakao geocode (done)
 
 ## Backlog (priority order)
 
-1. [x] **실 PG + 서버 영속화** — Toss 서버 경유·DB·스크래핑 (2026-06-12)
-2. [ ] **급여지급일 서버/API** — monthly rule 필드 영속화
-3. [ ] **카카오 알림톡 실연동** — notifications stub → Bizmessage
-4. [ ] **근태 달력 — table_calendar / 백그라운드 geofence** — MVP 이후
+1. [ ] **급여지급일 서버/API** — monthly rule 필드 영속화
+4. [ ] **카카오 알림톡 실연동** — notifications stub → Bizmessage
+5. [ ] **근태 달력 — table_calendar / 백그라운드 geofence** — MVP 이후
 
 ## Definition of Done
 
@@ -19,6 +18,18 @@
 - `workflow_state.md` updated
 
 ## Progress
+
+- [x] **웹 주소 검색 Phase 3** — `DaumPostcodeWebEmbed` (Kakao Postcode JS), `WorkplaceAddressPlatform.isPostcodeSupported`, 근무지 검색 웹 Daum 플로우, web build + 7 tests pass
+
+- [x] **웹 NAVER Phase 2** — 원(반경)·폴리라인·PushRadiusWebMapPicker·셔틀 오버레이, web build + 3 tests pass
+
+- [x] **웹 NAVER 실지도 Phase 1** — `NaverMapWebWidget` JS v3, 구직자·기업 홈, web build pass
+
+- [x] **Cursor Agents iljali-app 대화 재연결** — 125 chats retagged to D:\1jari; chat-archive index exported
+
+- [x] **일자리 알림핀 색상 피커 통일** — `ShuttleRouteColorPicker` 재사용, 6색 스와치 제거, shuttle color utils test pass
+
+- [x] **황금핀 제거 + 무료 기업 지도 열람** — premiumPartner 삭제, CorporateMapContentAccessPolicy, paywall, 25 tests pass
 
 - [x] **셔틀 노선 근무지 고정 UX** — split/merge stops, pinned workplace row, edit page refactor, tests 18 pass
 
@@ -66,6 +77,14 @@
 
 ## Completed (recent)
 
+- 2026-06-19 — **웹 주소 검색 Phase 3** — DaumPostcodeWebEmbed, Chrome 근무지 Daum 플로우, Kakao geocode, web build + 7 tests pass
+
+- 2026-06-18 — **Cursor Agents iljali-app 대화 재연결** — 125 chats retagged; `.cursor/chat-archive/` index
+
+- 2026-06-18 — **일자리 알림핀 색상 피커 통일** — ShuttleRouteColorPicker 재사용, 6색 스와치 제거, shuttle color utils test pass
+
+- 2026-06-18 — **황금핀 제거 + 무료 기업 지도 열람** — 3-tier pins, map intel gating, PUSH_PACKAGE_PRICING updated, 25 tests pass
+
 - 2026-06-18 — **셔틀 노선 근무지 고정 UX** — pinned 근무지 row, split/merge policy, edit page refactor, 18 commute tests pass
 
 - 2026-06-18 — **정류장 표시핀 노출 잠금** — paid map reconcile, delta-only payment, 11 unit tests pass
@@ -106,5 +125,5 @@
 
 ## Verification
 
-- Tests: `commute_route_test` 18 pass; `commute_route_polyline_test` 2 pass
-- Lint: `flutter analyze` on changed commute files — 0 errors
+- Tests: address QC + map — 7 pass; web build pass
+- Lint: analyze on changed address files — 0 errors (info only)

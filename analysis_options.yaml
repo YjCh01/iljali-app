@@ -3,6 +3,8 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - iljali-app/**
+    - lib/core/map/web/naver_map_web_layer_web.dart
+    - lib/core/address/web/daum_postcode_web_layer_web.dart
 
 linter:
   rules:

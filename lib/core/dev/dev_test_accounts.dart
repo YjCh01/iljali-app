@@ -2,7 +2,6 @@ import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
-import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.dart';
 
 /// 로컬 MVP 개발·QA용 고정 테스트 계정.
@@ -160,11 +159,6 @@ final class DevTestAccount {
       adminReviewApproved: false,
       policyAcceptedAt: DateTime(2026, 1, 1),
       businessHeadOfficeAddress: '경기도 화성시 동탄대로 123',
-      pushWallet: const EmployerPushWallet(
-        packageCredits: 10,
-        locationSlotsFromPackages: 10,
-        lifetimePackagesPurchased: 10,
-      ),
     );
   }
 

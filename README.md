@@ -7,9 +7,9 @@
 ```powershell
 cd d:\1jari
 flutter pub get
-flutter run -d chrome          # 웹 (mock 지도)
-flutter run -d windows         # PC
-.\scripts\dev-run.ps1          # Chrome + 공통 플래그
+flutter run -d chrome          # 웹 — NAVER_MAP_CLIENT_ID 있으면 실지도, 없으면 mock
+flutter run -d windows         # PC (mock 지도)
+$env:NAVER_MAP_CLIENT_ID='YOUR_WEB_CLIENT_ID'; .\scripts\dev-run.ps1
 ```
 
 서버 (선택):

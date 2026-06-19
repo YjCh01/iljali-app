@@ -12,7 +12,17 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 
 import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
 
-import 'package:map/features/corporate/presentation/widgets/corporate_exposure_mini_map.dart';
+import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
+
+import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_overlay.dart';
+
+import 'package:map/features/corporate/domain/services/corporate_shuttle_density_loader.dart';
+
+import 'package:map/features/corporate/domain/utils/corporate_map_content_access_policy.dart';
+
+import 'package:map/features/corporate/presentation/widgets/corporate_home_naver_map.dart';
+
+import 'package:map/features/corporate/presentation/widgets/corporate_map_intel_paywall.dart';
 
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
 
@@ -34,7 +44,7 @@ class CorporateHomeMapBackground extends StatefulWidget {
 
     this.selectedPostId,
 
-    this.onSelectedPostChanged,
+    this.onSelectedPinChanged,
 
     this.onFocusConsumed,
 
@@ -46,7 +56,7 @@ class CorporateHomeMapBackground extends StatefulWidget {
 
   final String? selectedPostId;
 
-  final ValueChanged<CorporateJobPost?>? onSelectedPostChanged;
+  final ValueChanged<JobMapPin?>? onSelectedPinChanged;
 
   final VoidCallback? onFocusConsumed;
 
@@ -75,6 +85,8 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
 
   List<JobMapPin> _allPins = [];
+
+  List<CorporateShuttleMapOverlay> _shuttleOverlays = [];
 
   Set<String> _ownPostIds = {};
 
@@ -178,7 +190,7 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
     });
 
-    widget.onSelectedPostChanged?.call(pin.post);
+    widget.onSelectedPinChanged?.call(pin);
 
     widget.onFocusConsumed?.call();
 
@@ -193,6 +205,18 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
     final pins = await _getPins();
 
     final posts = await _getPosts();
+
+    final routeRepo = await CommuteRouteRepository.create();
+
+    final shuttleOverlays = await CorporateShuttleDensityLoader.load(
+
+      routeRepo: routeRepo,
+
+      posts: posts,
+
+      pins: pins,
+
+    );
 
     final companyKey =
 
@@ -221,6 +245,8 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
     setState(() {
 
       _allPins = pins;
+
+      _shuttleOverlays = shuttleOverlays;
 
       _ownPostIds = ownIds;
 
@@ -252,25 +278,69 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
       setState(() => _centerOnPin = pin);
 
-      widget.onSelectedPostChanged?.call(pin.post);
+      widget.onSelectedPinChanged?.call(pin);
 
       return;
 
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
 
-      const SnackBar(
+    if (CorporateMapContentAccessPolicy.canViewPostContent(
 
-        content: Text('다른 기업의 채용 공고는 열람할 수 없습니다.'),
+      viewerProfile: profile,
 
-        behavior: SnackBarBehavior.floating,
+      ownPostIds: _ownPostIds,
 
-        duration: Duration(seconds: 2),
+      post: pin.post,
 
-      ),
+    )) {
 
-    );
+      setState(() => _centerOnPin = pin);
+
+      widget.onSelectedPinChanged?.call(pin);
+
+      return;
+
+    }
+
+    showCorporateMapIntelPaywall(context);
+
+  }
+
+
+
+  void _onShuttleStopTap(CorporateShuttleMapOverlay overlay) {
+
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+
+    if (CorporateMapContentAccessPolicy.canViewShuttleContent(
+
+      viewerProfile: profile,
+
+      routeCompanyKey: overlay.companyKey,
+
+    )) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+
+        SnackBar(
+
+          content: Text('셔틀 노선 · ${overlay.route.routeName}'),
+
+          behavior: SnackBarBehavior.floating,
+
+          duration: const Duration(seconds: 2),
+
+        ),
+
+      );
+
+      return;
+
+    }
+
+    showCorporateMapIntelPaywall(context);
 
   }
 
@@ -298,22 +368,15 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
         else
 
-          CorporateExposureMiniMap(
-
+          CorporateHomeNaverMap(
             pins: _visiblePins,
-
             ownPostIds: _ownPostIds,
-
-            interactive: true,
-
+            shuttleOverlays: _shuttleOverlays,
             onPinTap: _onPinTap,
-
-            initialZoom: 12.5,
-
+            onShuttleStopTap: _onShuttleStopTap,
             selectedPostId: widget.selectedPostId,
-
             centerOnPin: _centerOnPin,
-
+            onMapBackgroundTap: () => widget.onSelectedPinChanged?.call(null),
           ),
 
         Positioned(

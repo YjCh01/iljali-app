@@ -19,7 +19,29 @@ void main() {
   });
 
   test(
-    'WorkplaceAddressPlatform postcode support matches mobile only',
+    'WorkplaceAddressPlatform postcode support includes web and mobile',
+    () {
+      final supported = WorkplaceAddressPlatform.isPostcodeSupported;
+      if (kIsWeb) {
+        expect(supported, isTrue);
+        expect(WorkplaceAddressPlatform.isQcManualPrimaryMode, isFalse);
+      } else {
+        expect(
+          supported,
+          defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS,
+        );
+        expect(
+          WorkplaceAddressPlatform.isQcManualPrimaryMode,
+          defaultTargetPlatform != TargetPlatform.android &&
+              defaultTargetPlatform != TargetPlatform.iOS,
+        );
+      }
+    },
+  );
+
+  test(
+    'WorkplaceAddressPlatform native WebView excludes web',
     () {
       final supported = WorkplaceAddressPlatform.isPostcodeWebViewSupported;
       if (kIsWeb) {

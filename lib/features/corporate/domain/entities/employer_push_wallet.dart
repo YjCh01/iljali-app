@@ -29,15 +29,11 @@ class EmployerPushWallet {
   final String? lastFreePushDayKey;
   final DateTime? signupBonusExpiresAt;
 
-  /// 누적 패키지 구매 수 (100회 팩 프리미엄 핀 판정용)
+  /// 누적 패키지 구매 수 (할인·지도 열람 권한 등)
   final int lifetimePackagesPurchased;
 
-  /// 100회 팩 번들 구매 이력
+  /// 100회 팩 번들 구매 이력 (할인·크레딧만, 핀 색상 혜택 없음)
   final bool purchased100PackBundle;
-
-  /// 100회 팩 구매자 → 모든 공고 노란 프리미엄 핀
-  bool get qualifiesForPremiumMapPin =>
-      purchased100PackBundle || lifetimePackagesPurchased >= 100;
 
   int get totalLocationSlots =>
       PushPackageCatalog.baseLocationSlots + locationSlotsFromPackages;

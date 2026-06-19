@@ -32,6 +32,20 @@ class JobMapPinsLocalDataSource implements JobMapPinsDataSource {
 
     var fallbackIndex = 0;
     return activePosts.map((post) {
+      final settingsCoord =
+          post.notificationSettings?.basePoints.isNotEmpty == true
+              ? post.notificationSettings!.basePoints.first.coordinate
+              : null;
+      if (settingsCoord != null) {
+        return JobMapPin(
+          post: post,
+          latitude: settingsCoord.latitude,
+          longitude: settingsCoord.longitude,
+          companyName: post.registeredBy?.companyName ?? post.warehouseName,
+          displayTier: post.effectiveMapPinTier,
+        );
+      }
+
       final warehouse = _matchWarehouse(post, warehouseList);
       if (warehouse != null) {
         return JobMapPin(

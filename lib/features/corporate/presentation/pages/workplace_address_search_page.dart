@@ -18,7 +18,7 @@ import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 
 
 
-/// 근무지 — Daum 우편번호(모바일) · QC 직접 입력(Windows 등 WebView 미지원)
+/// 근무지 — Daum 우편번호(모바일·웹) · QC 직접 입력(Windows 등 데스크톱)
 
 class WorkplaceAddressSearchPage extends StatefulWidget {
 
@@ -66,7 +66,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
 
 
 
-  bool get _qcPrimaryMode => !WorkplaceAddressPlatform.isPostcodeWebViewSupported;
+  bool get _qcPrimaryMode => WorkplaceAddressPlatform.isQcManualPrimaryMode;
 
 
 
@@ -608,9 +608,9 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
 
             child: Text(
 
-              'Windows 등에서는 Daum 주소 WebView를 사용할 수 없습니다. '
+              'Windows 등 데스크톱 앱에서는 Daum 주소 검색을 사용할 수 없습니다. '
 
-              '네이버 지도와 같이 QC용 직접 입력으로 공고 등록을 이어갈 수 있습니다.',
+              'Chrome 웹 또는 모바일 앱에서 주소 검색을 이용하거나, QC용 직접 입력으로 공고 등록을 이어갈 수 있습니다.',
 
               style: TextStyle(
 

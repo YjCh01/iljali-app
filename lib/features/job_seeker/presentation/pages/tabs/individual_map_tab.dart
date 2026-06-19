@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/hiring/seeker_no_show_blacklist_service.dart';
@@ -6,14 +7,22 @@ import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/job_seeker/data/repositories/job_bookmark_vault_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_ranking_context.dart';
+import 'package:map/features/job_seeker/presentation/pages/job_post_detail_page.dart';
+import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_callout_card.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_map_cluster_list_sheet.dart';
-import 'package:map/features/job_seeker/presentation/widgets/job_post_detail_sheet.dart';
 import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart';
+import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
+import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase.dart';
+import 'package:map/features/job_seeker/presentation/widgets/job_map_hot_jobs_panel.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_seeker_map_view.dart';
+import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
 import 'package:map/features/map_dashboard/domain/entities/warehouse.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_search_bar.dart';
+import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
+import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
+import 'package:map/features/job_seeker/presentation/map/job_recruitment_map_pin.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_transport_widgets.dart';
 
 /// 구직자 1번 탭 — 지도 + 공고 클러스터
@@ -33,8 +42,14 @@ class IndividualMapTab extends StatefulWidget {
   State<IndividualMapTab> createState() => _IndividualMapTabState();
 }
 
+enum _MapScreenMode { map, hot }
+
 class _IndividualMapTabState extends State<IndividualMapTab> {
-  JobMapPin? _selectedPin;
+  _MapScreenMode _screenMode = _MapScreenMode.map;
+  List<JobMapPin> _allPins = [];
+  final _getPins = GetJobMapPinsUseCase(const JobMapPinsLocalDataSource());
+  JobMapPin? _calloutPin;
+  JobRecruitmentMapPin? _selectedRecruitmentPin;
   List<JobMapPin>? _clusterPins;
   CommuteRoute? _activeShuttleRoute;
   GeoCoordinate? _activeShuttleWorkplace;
@@ -50,6 +65,13 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   void initState() {
     super.initState();
     _initVault();
+    _loadPins();
+  }
+
+  Future<void> _loadPins() async {
+    final pins = await _getPins();
+    if (!mounted) return;
+    setState(() => _allPins = pins);
   }
 
   Future<void> _initVault() async {
@@ -64,11 +86,13 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.reloadToken != widget.reloadToken) {
       setState(() {
-        _selectedPin = null;
+        _calloutPin = null;
+        _selectedRecruitmentPin = null;
         _clusterPins = null;
         _activeShuttleRoute = null;
         _activeShuttleWorkplace = null;
       });
+      _loadPins();
     }
   }
 
@@ -113,18 +137,40 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
     if (!mounted) return;
     setState(() {
       _clusterPins = null;
-      _selectedPin = pin;
+      _calloutPin = pin;
+      _selectedRecruitmentPin = null;
       _activeShuttleRoute = shuttleRoute;
       _activeShuttleWorkplace = GeoCoordinate(
         latitude: pin.latitude,
         longitude: pin.longitude,
       );
     });
+    await MapCameraHolder.instance.focusPin(
+      latitude: pin.latitude,
+      longitude: pin.longitude,
+    );
+  }
+
+  void _openDetail(JobMapPin pin) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => JobPostDetailPage(
+          pin: pin,
+          vaultRepo: _vaultRepo,
+          shuttleRoute: _activeShuttleRoute,
+          onApplied: widget.onApplied,
+          onShowRouteOnMap: () {
+            if (_activeShuttleRoute != null) return;
+            _selectPin(pin);
+          },
+        ),
+      ),
+    );
   }
 
   void _openCluster(JobMapCluster cluster) {
     setState(() {
-      _selectedPin = null;
+      _calloutPin = null;
       _clusterPins = cluster.rankedPins(context: _rankingContext);
     });
   }
@@ -137,8 +183,9 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
 
   void _closeSheet() {
     setState(() {
-      _selectedPin = null;
+      _calloutPin = null;
       _clusterPins = null;
+      _selectedRecruitmentPin = null;
       _activeShuttleRoute = null;
       _activeShuttleWorkplace = null;
     });
@@ -151,7 +198,7 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
     if (!mounted || warehouse is! Warehouse) return;
     setState(() {
       _searchFilter = warehouse.name;
-      _selectedPin = null;
+      _calloutPin = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -165,29 +212,56 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
     );
   }
 
-  Future<void> _apply() async {
-    if (mounted) _closeSheet();
+  void _openHotPinOnMap(JobMapPin pin) {
+    setState(() => _screenMode = _MapScreenMode.map);
+    _selectPin(pin);
   }
 
   @override
   Widget build(BuildContext context) {
-    final selected = _selectedPin;
+    final callout = _calloutPin;
     final clusterPins = _clusterPins;
     final showCluster = clusterPins != null && clusterPins.length > 1;
-    final showSheet = selected != null;
-    final showOverlay = showCluster || showSheet;
+    final showCallout = callout != null;
+    final showOverlay = showCluster || showCallout;
     final shuttleActive = _activeShuttleRoute != null;
+    final showMap = _screenMode == _MapScreenMode.map;
+    final recruitmentPins = JobRecruitmentMapPinFactory.fromPosts(
+      _allPins.map((pin) => pin.post),
+    );
+    final recruitmentLinks = _selectedRecruitmentPin == null
+        ? const <PushRadiusMapPolyline>[]
+        : RecruitmentPinLinkFactory.seekerSolidLink(
+            workplace: _selectedRecruitmentPin!.workplace,
+            alertPin: _selectedRecruitmentPin!.coordinate,
+            color: _selectedRecruitmentPin!.point.resolvedPinColor,
+          );
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        Positioned.fill(
-          child: JobSeekerMapView(
+        if (showMap)
+          Positioned.fill(
+            child: JobSeekerMapView(
             key: ValueKey(widget.reloadToken),
             searchFilter: _searchFilter,
             shuttleOnlyFilter: _shuttleOnlyFilter,
             shuttleRoute: _activeShuttleRoute,
             shuttleWorkplace: _activeShuttleWorkplace,
+            recruitmentPins: recruitmentPins,
+            selectedRecruitmentPin: _selectedRecruitmentPin,
+            recruitmentLinkPolylines: recruitmentLinks,
+            onRecruitmentPinTap: (pin) async {
+              setState(() {
+                _selectedRecruitmentPin = pin;
+                _calloutPin = null;
+                _clusterPins = null;
+              });
+              await MapCameraHolder.instance.focusPin(
+                latitude: pin.coordinate.latitude,
+                longitude: pin.coordinate.longitude,
+              );
+            },
             overlay: shuttleActive
                 ? Align(
                     alignment: Alignment.topRight,
@@ -232,9 +306,21 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
                 : null,
             onPinTap: _selectPin,
             onClusterTap: _openCluster,
-            onMapBackgroundTap: showOverlay ? _closeSheet : null,
+            onMapBackgroundTap: (showOverlay || _selectedRecruitmentPin != null)
+                ? _closeSheet
+                : null,
           ),
-        ),
+        )
+        else
+          Positioned.fill(
+            child: ColoredBox(
+              color: AppColors.background,
+              child: JobMapHotJobsPanel(
+                pins: _allPins,
+                onBannerTap: _openHotPinOnMap,
+              ),
+            ),
+          ),
         Positioned(
           left: 0,
           right: 0,
@@ -243,10 +329,35 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.only(right: 56),
-                child: MapSearchBar(onTap: _openSearch),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: SegmentedButton<_MapScreenMode>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _MapScreenMode.map,
+                      label: Text('지도'),
+                      icon: Icon(Icons.map_outlined, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: _MapScreenMode.hot,
+                      label: Text('인기'),
+                      icon: Icon(Icons.local_fire_department_outlined, size: 18),
+                    ),
+                  ],
+                  selected: {_screenMode},
+                  onSelectionChanged: (value) {
+                    setState(() {
+                      _screenMode = value.first;
+                      if (_screenMode == _MapScreenMode.hot) _closeSheet();
+                    });
+                  },
+                ),
               ),
-              if (!showOverlay)
+              if (showMap)
+                Padding(
+                  padding: const EdgeInsets.only(right: 56),
+                  child: MapSearchBar(onTap: _openSearch),
+                ),
+              if (showMap && !showOverlay)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                   child: Row(
@@ -272,7 +383,7 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
             ],
           ),
         ),
-        if (showOverlay)
+        if (showMap && showOverlay)
           Positioned.fill(
             child: GestureDetector(
               onTap: _closeSheet,
@@ -294,22 +405,16 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
                 ignoring: !showOverlay,
                 child: showCluster
                     ? JobMapClusterListSheet(
-                        pins: clusterPins!,
+                        pins: clusterPins,
                         onClose: _closeCluster,
                         onPinSelected: _selectPinFromCluster,
                       )
-                    : selected == null
+                    : callout == null
                         ? const SizedBox.shrink()
-                        : JobPostDetailSheet(
-                            pin: selected,
-                            shuttleRoute: _activeShuttleRoute,
-                            vaultRepo: _vaultRepo,
+                        : JobMapPinCalloutCard(
+                            pin: callout,
                             onClose: _closeSheet,
-                            onApply: _apply,
-                            onShowRouteOnMap: () {
-                              if (_activeShuttleRoute != null) return;
-                              _selectPin(selected);
-                            },
+                            onViewDetail: () => _openDetail(callout),
                           ),
               ),
             ),

@@ -34,7 +34,12 @@ class PushWalletService {
   ) async {
     final repo = await _repositoryFuture;
     final ledger = await _bonusLedgerFuture;
-    var wallet = profile.pushWallet ?? await repo.load(profile.companyKey);
+    var wallet = await repo.load(profile.companyKey);
+    if (wallet == EmployerPushWallet.initial() &&
+        profile.pushWallet != null &&
+        profile.pushWallet != EmployerPushWallet.initial()) {
+      wallet = profile.pushWallet!;
+    }
     wallet = _sanitizeUnpurchasedCredits(profile, wallet);
     var grantedSignupBonus = false;
     var grantedVerificationBonus = false;

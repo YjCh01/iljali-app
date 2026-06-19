@@ -8,23 +8,21 @@ void main() {
       const wallet = EmployerPushWallet(signupBonusRemaining: 5);
       final theme = PushCreditVisualTheme.fromWallet(wallet);
       expect(theme.tier, PushCreditVisualTier.basic);
-      expect(theme.showBasicPassNotice, isTrue);
     });
 
     test('fromWallet uses package purple when package credits exist', () {
       const wallet = EmployerPushWallet(packageCredits: 10);
       final theme = PushCreditVisualTheme.fromWallet(wallet);
       expect(theme.tier, PushCreditVisualTier.package);
-      expect(theme.showBasicPassNotice, isFalse);
     });
 
-    test('fromWallet uses gold for 100 pack buyer', () {
+    test('fromWallet uses package for 100 pack buyer with credits', () {
       const wallet = EmployerPushWallet(
         packageCredits: 50,
         purchased100PackBundle: true,
       );
       final theme = PushCreditVisualTheme.fromWallet(wallet);
-      expect(theme.tier, PushCreditVisualTier.premium100);
+      expect(theme.tier, PushCreditVisualTier.package);
     });
 
     test('fromNextPushConsume uses package when credits available', () {

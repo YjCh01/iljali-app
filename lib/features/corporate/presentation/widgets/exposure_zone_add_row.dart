@@ -19,21 +19,17 @@ class ExposureZoneAddRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canAdd = remainingCredits > 0 && onTap != null;
-    final exhausted = remainingCredits <= 0;
     final label = ExposurePointLabels.addZoneButtonLabel(remainingCredits);
     final rowRadius = BorderRadius.vertical(
       bottom: Radius.circular(listRadius),
     );
 
     return Material(
-      color: exhausted
-          ? AppColors.background
-          : AppColors.primaryLight.withValues(alpha: 0.1),
+      color: AppColors.primaryLight.withValues(alpha: 0.1),
       borderRadius: rowRadius,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: canAdd ? onTap : null,
+        onTap: onTap,
         borderRadius: rowRadius,
         child: SizedBox(
           height: rowHeight,
@@ -43,19 +39,15 @@ class ExposureZoneAddRow extends StatelessWidget {
               Icon(
                 Icons.add_rounded,
                 size: 20,
-                color: exhausted
-                    ? AppColors.textSecondary.withValues(alpha: 0.55)
-                    : AppColors.primary.withValues(alpha: 0.95),
+                color: AppColors.primary.withValues(alpha: 0.95),
               ),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: exhausted ? 13 : 12,
+                  fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: exhausted
-                      ? AppColors.textSecondary.withValues(alpha: 0.65)
-                      : AppColors.primary.withValues(alpha: 0.95),
+                  color: AppColors.primary.withValues(alpha: 0.95),
                 ),
               ),
             ],

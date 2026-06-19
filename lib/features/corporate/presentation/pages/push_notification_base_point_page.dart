@@ -21,6 +21,9 @@ import 'package:map/features/corporate/presentation/widgets/exposure_zone_add_ro
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_service_action_style.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
+import 'package:map/features/commute/presentation/widgets/shuttle_route_color_picker.dart';
+import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
+import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
 
 /// PUSH 알림 거점 설정 — 반경(플랜별 거리) + 지정 포인트
 class PushNotificationBasePointPage extends StatefulWidget {
@@ -72,9 +75,10 @@ class _PushNotificationBasePointPageState
       _center = active.coordinate;
       _addressLabel = active.addressLabel;
       _radiusTier = active.radiusTier;
-    } else if (widget.workplaceHint?.coordinate != null) {
-      _center = widget.workplaceHint!.coordinate!;
-      _addressLabel = widget.workplaceHint!.roadAddress;
+    } else if (widget.workplaceHint != null) {
+      final hint = widget.workplaceHint!;
+      _center = hint.coordinate ?? defaultPushMapCenter();
+      _addressLabel = hint.roadAddress;
       _radiusTier = PushRadiusTier.standardFree1km;
       _pointTier = DesignatedPointTier.onePoint;
       _points = [
@@ -214,11 +218,10 @@ class _PushNotificationBasePointPageState
   }
 
   int get _remainingAddSlots {
-    final recruitCount = PushWalletCreditPolicy.recruitmentZoneCountFromPoints(
-      _points,
+    return PushWalletCreditPolicy.configurePreviewRemainingAddSlots(
+      pointsLength: _points.length,
+      previewRecruitmentPinCap: _previewRecruitmentPinCap,
     );
-    return (_previewRecruitmentPinCap - recruitCount)
-        .clamp(0, _previewRecruitmentPinCap);
   }
 
   /// 근무지(0번)는 고정 — 노출 중 알림핀은 위치 수정 불가
@@ -323,9 +326,9 @@ class _PushNotificationBasePointPageState
 
   void _addPoint() {
     if (_remainingAddSlots <= 0) {
-      _showPlanUpsell(
+      unawaited(_showPlanUpsell(
         '일자리 알림핀은 최대 $_previewRecruitmentPinCap개까지 미리 배치할 수 있습니다.',
-      );
+      ));
       return;
     }
     _syncActivePointToList();
@@ -459,6 +462,10 @@ class _PushNotificationBasePointPageState
                         _syncActivePointToList();
                       });
                     },
+                    maxZoom: 21,
+                    viewportSessionKey: MapViewportSessionKeys.pushBasePoint(
+                      _points[_activePointIndex].id,
+                    ),
                   ),
                 ],
               ),
@@ -536,6 +543,39 @@ class _PushNotificationBasePointPageState
                     ),
                   ] else if (_activePointIndex > 0) ...[
                     const SizedBox(height: 6),
+                    const Text(
+                      '알림핀 색상',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ShuttleRouteColorPicker(
+                      colorHex: (_points[_activePointIndex].pinColorHex ??
+                              '#9B86F0')
+                          .toUpperCase(),
+                      onChanged: (hex) {
+                        setState(() {
+                          _points = [
+                            for (var i = 0; i < _points.length; i++)
+                              if (i == _activePointIndex)
+                                _points[i].copyWith(pinColorHex: hex)
+                              else
+                                _points[i],
+                          ];
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '근무지와 점선으로 연결됩니다 · 1개부터 표시',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary.withValues(alpha: 0.85),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     PushRadiusKmSlider(
                       selectedKm: _radiusTier.radiusKm,
                       allowedKmSteps: PushPlanEnforcement.allowedSliderKmSteps,
@@ -650,7 +690,9 @@ class _PushNotificationBasePointPageState
             radiusMeters: _points[i].radiusTier.radiusMeters,
             label: _pointTabLabel(i),
             pointIndex: i,
-            visualTheme: PushCreditVisualTheme.forRecruitPoint(i),
+            visualTheme: i == 0
+                ? PushCreditVisualTheme.forRecruitPoint(i)
+                : PushCreditVisualTheme.withAccent(_points[i].resolvedPinColor),
           ),
     ];
   }
@@ -714,7 +756,6 @@ class _ExposureZoneRowListState extends State<_ExposureZoneRowList> {
 
   @override
   Widget build(BuildContext context) {
-    final canAdd = widget.remainingAddSlots > 0;
     final scrollHeight = (widget.points.length.clamp(1, _ExposureZoneRowList.maxVisibleRows) *
             _ExposureZoneRowList.rowHeight)
         .toDouble();
@@ -782,7 +823,7 @@ class _ExposureZoneRowListState extends State<_ExposureZoneRowList> {
                   remainingCredits: widget.remainingAddSlots,
                   rowHeight: _ExposureZoneRowList.rowHeight,
                   listRadius: _ExposureZoneRowList.listRadius,
-                  onTap: canAdd ? widget.onAdd : null,
+                  onTap: widget.onAdd,
                 ),
             ],
           ),
@@ -937,4 +978,3 @@ class _ExposureZoneRow extends StatelessWidget {
     );
   }
 }
-

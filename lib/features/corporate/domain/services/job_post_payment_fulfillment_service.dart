@@ -31,7 +31,7 @@ class JobPostPaymentFulfillmentService {
           profile,
           count: request.bundle.spotCount,
         );
-        return '노출 이용권 ${request.bundle.spotCount}회가 충전되었습니다. '
+        return '일자리 알림핀 ${request.bundle.spotCount}회가 충전되었습니다. '
             '채용 담당자가 노출을 활성화할 수 있습니다.';
     }
   }

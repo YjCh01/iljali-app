@@ -339,13 +339,9 @@ class HiringApplication {
       seekerPhoneMasked: json['seekerPhoneMasked'] as String? ?? '',
       appliedAt: DateTime.tryParse(json['appliedAt'] as String? ?? '') ??
           DateTime.now(),
-      status: HiringApplicationStatus.values.byName(
-        json['status'] as String? ?? HiringApplicationStatus.applied.name,
-      ),
+      status: _parseStatus(json['status'] as String?),
       workSchedule: json['workSchedule'] as String? ?? '',
-      employmentType: JobEmploymentType.values.byName(
-        json['employmentType'] as String? ?? JobEmploymentType.daily.name,
-      ),
+      employmentType: _parseEmploymentType(json['employmentType'] as String?),
       workDate: DateTime.tryParse(json['workDate'] as String? ?? ''),
       companyKey: json['companyKey'] as String?,
       recruiterEmail: json['recruiterEmail'] as String?,
@@ -397,5 +393,23 @@ class HiringApplication {
       employerGeofenceDistanceM:
           (json['employerGeofenceDistanceM'] as num?)?.toDouble(),
     );
+  }
+
+  static HiringApplicationStatus _parseStatus(String? raw) {
+    if (raw == null || raw.isEmpty) return HiringApplicationStatus.applied;
+    try {
+      return HiringApplicationStatus.values.byName(raw);
+    } on ArgumentError {
+      return HiringApplicationStatus.applied;
+    }
+  }
+
+  static JobEmploymentType _parseEmploymentType(String? raw) {
+    if (raw == null || raw.isEmpty) return JobEmploymentType.daily;
+    try {
+      return JobEmploymentType.values.byName(raw);
+    } on ArgumentError {
+      return JobEmploymentType.daily;
+    }
   }
 }

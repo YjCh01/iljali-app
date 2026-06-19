@@ -57,7 +57,7 @@ void main() {
       [
         _pin(
           id: 'paid-old',
-          tier: JobMapPinDisplayTier.premiumPartner,
+          tier: JobMapPinDisplayTier.packageActive,
           applicants: 0,
           postedAt: now.subtract(const Duration(days: 5)),
         ),

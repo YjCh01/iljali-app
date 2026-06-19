@@ -15,7 +15,7 @@ import 'package:map/features/job_seeker/domain/entities/job_map_pin_ranking_cont
 /// |------|--------|------|
 /// | 성과 | 35% | 지원·관심(프록시: applicantCount) |
 /// | 신선도 | 20% | 최근 12~48시간 등록 우대 |
-/// | 알림핀 부스트 | 15% | 황금핀 > 보라 > 일반 (과도한 상위 고정 방지) |
+/// | 알림핀 부스트 | 15% | 보라 > 고시급 > 일반 (과도한 상위 고정 방지) |
 /// | 품질·신뢰 | 15% | 사업자 검증·공고 정보 완성도 |
 /// | 맞춤 | 10% | 구직자 위치와의 거리 |
 /// | 만료 임박 | 5% | 곧 마감 공고 소폭 가중 |
@@ -81,8 +81,7 @@ abstract final class JobMapPinRankingService {
   /// 알림핀 등급 — 유료 부스트는 제한적(15%)
   static double _sponsoredScore(JobMapPin pin) {
     return switch (pin.displayTier) {
-      JobMapPinDisplayTier.premiumPartner => 1.0,
-      JobMapPinDisplayTier.packageActive => 0.65,
+      JobMapPinDisplayTier.packageActive => 1.0,
       JobMapPinDisplayTier.premiumWage => 0.45,
       JobMapPinDisplayTier.standard => 0.25,
     };

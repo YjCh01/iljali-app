@@ -38,6 +38,9 @@
         <meta-data
             android:name="com.naver.maps.map.CLIENT_ID"
             android:value="${NAVER_MAP_CLIENT_ID}"/>
+        <meta-data
+            android:name="com.naver.maps.map.NCP_KEY_ID"
+            android:value="${NAVER_MAP_CLIENT_ID}"/>
     </application>
     <queries>
         <intent>
