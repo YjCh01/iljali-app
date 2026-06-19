@@ -1,0 +1,185 @@
+[
+  {
+    "type": "head",
+    "composerId": "ba351e43-e44b-4221-a8f1-7ec22087ed1b",
+    "name": "Flutter app project structure and UI design",
+    "lastUpdatedAt": 1781793644372,
+    "conversationCheckpointLastUpdatedAt": 1781794016054,
+    "createdAt": 1779775979530,
+    "unifiedMode": "agent",
+    "forceMode": "edit",
+    "hasUnreadMessages": false,
+    "contextUsagePercent": 16.7055,
+    "totalLinesAdded": 2895,
+    "totalLinesRemoved": 486,
+    "filesChangedCount": 32,
+    "subtitle": "Edited push_wallet_credit_policy_test.dart, push_notification_base_point_page.dart, push_wallet_credit_policy.dart, shuttle_route_edit_page.dart",
+    "hasBlockingPendingActions": false,
+    "hasPendingPlan": false,
+    "isArchived": false,
+    "isDraft": false,
+    "isWorktree": false,
+    "worktreeStartedReadOnly": false,
+    "isSpec": false,
+    "isProject": false,
+    "glassMetaParentAgent": false,
+    "isBestOfNSubcomposer": false,
+    "numSubComposers": 0,
+    "referencedPlans": [],
+    "trackedGitRepos": [
+      {
+        "repoPath": "d:\\1jari",
+        "branches": [
+          {
+            "branchName": "main",
+            "lastInteractionAt": 1781793959074
+          },
+          {
+            "branchName": "master",
+            "lastInteractionAt": 1779955178248
+          }
+        ]
+      }
+    ],
+    "workspaceIdentifier": {
+      "id": "cc095c556477ec81d2f10f0fc17d9fa4",
+      "uri": {
+        "$mid": 1,
+        "fsPath": "d:\\1jari",
+        "_sep": 1,
+        "external": "file:///d%3A/1jari",
+        "path": "/D:/1jari",
+        "scheme": "file"
+      }
+    },
+    "agentLocation": {
+      "type": "local",
+      "environment": {
+        "id": "cc095c556477ec81d2f10f0fc17d9fa4",
+        "uri": {
+          "$mid": 1,
+          "fsPath": "d:\\1jari",
+          "_sep": 1,
+          "external": "file:///d%3A/1jari",
+          "path": "/D:/1jari",
+          "scheme": "file"
+        }
+      },
+      "status": "active"
+    },
+    "agentLocationHistory": [
+      {
+        "id": "17fc0d0e-6771-4042-a52c-cccdb08f5a84",
+        "timestamp": 1779775979509,
+        "destination": {
+          "type": "local"
+        },
+        "location": {
+          "type": "local",
+          "environment": {
+            "id": "cc095c556477ec81d2f10f0fc17d9fa4",
+            "uri": {
+              "$mid": 1,
+              "fsPath": "d:\\1jari",
+              "_sep": 1,
+              "external": "file:///d%3A/1jari",
+              "path": "/D:/1jari",
+              "scheme": "file"
+            }
+          },
+          "status": "active"
+        },
+        "reason": "created"
+      }
+    ]
+  },
+  {
+    "type": "head",
+    "composerId": "423bac07-a63a-4f7a-a0fc-864c55a39533",
+    "name": "작업 내용 분실",
+    "lastUpdatedAt": 1781846933104,
+    "conversationCheckpointLastUpdatedAt": 1781796491151,
+    "createdAt": 1781794335396,
+    "unifiedMode": "agent",
+    "forceMode": "edit",
+    "hasUnreadMessages": false,
+    "contextUsagePercent": 86.0445,
+    "totalLinesAdded": 896,
+    "totalLinesRemoved": 1,
+    "filesChangedCount": 17,
+    "subtitle": "Edited recover-all.mjs, RECOVER-CURSOR-CHATS.bat, check-missing-headers.mjs, diagnose-glass.mjs",
+    "hasBlockingPendingActions": false,
+    "hasPendingPlan": false,
+    "isArchived": true,
+    "isDraft": false,
+    "isWorktree": false,
+    "worktreeStartedReadOnly": false,
+    "isSpec": false,
+    "isProject": false,
+    "isBestOfNSubcomposer": false,
+    "numSubComposers": 0,
+    "referencedPlans": [],
+    "trackedGitRepos": [
+      {
+        "repoPath": "d:\\1jari",
+        "branches": [
+          {
+            "branchName": "main",
+            "lastInteractionAt": 1781796491026
+          }
+        ]
+      }
+    ],
+    "workspaceIdentifier": {
+      "id": "cc095c556477ec81d2f10f0fc17d9fa4",
+      "uri": {
+        "$mid": 1,
+        "fsPath": "d:\\1jari",
+        "_sep": 1,
+        "external": "file:///d%3A/1jari",
+        "path": "/D:/1jari",
+        "scheme": "file"
+      }
+    },
+    "agentLocation": {
+      "type": "local",
+      "environment": {
+        "id": "cc095c556477ec81d2f10f0fc17d9fa4",
+        "uri": {
+          "$mid": 1,
+          "fsPath": "d:\\1jari",
+          "_sep": 1,
+          "external": "file:///d%3A/1jari",
+          "path": "/D:/1jari",
+          "scheme": "file"
+        }
+      },
+      "status": "active"
+    },
+    "agentLocationHistory": [
+      {
+        "id": "5fbd364f-a1f1-4019-8ab8-8224001e1aeb",
+        "timestamp": 1781794335381,
+        "destination": {
+          "type": "local"
+        },
+        "location": {
+          "type": "local",
+          "environment": {
+            "id": "cc095c556477ec81d2f10f0fc17d9fa4",
+            "uri": {
+              "$mid": 1,
+              "fsPath": "d:\\1jari",
+              "_sep": 1,
+              "external": "file:///d%3A/1jari",
+              "path": "/D:/1jari",
+              "scheme": "file"
+            }
+          },
+          "status": "active"
+        },
+        "reason": "created"
+      }
+    ]
+  }
+]

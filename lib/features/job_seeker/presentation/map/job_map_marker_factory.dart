@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
@@ -8,9 +9,13 @@ abstract final class JobMapMarkerFactory {
   static NClusterableMarker create(
     JobMapPin pin, {
     void Function(JobMapPin pin)? onTap,
+    bool isOwn = false,
+    bool isSelected = false,
   }) {
     final tier = pin.displayTier;
-    final size = tier.markerSize;
+    var size = tier.markerSize;
+    if (isSelected) size *= 1.18;
+    else if (isOwn) size *= 1.06;
 
     final marker = NClusterableMarker(
       id: pin.post.id,
@@ -18,8 +23,14 @@ abstract final class JobMapMarkerFactory {
       tags: {
         'type': 'job_post',
         'pin_tier': tier.name,
+        if (isOwn) 'own': '1',
+        if (isSelected) 'selected': '1',
       },
-      iconTintColor: tier.pinColor,
+      iconTintColor: isSelected
+          ? const Color(0xFFFF6F00)
+          : isOwn
+              ? AppColors.primary
+              : tier.pinColor,
       size: Size(size, size),
       caption: NOverlayCaption(
         text: tier == JobMapPinDisplayTier.standard
@@ -27,7 +38,7 @@ abstract final class JobMapMarkerFactory {
             : tier.shapeGlyph,
         color: Colors.white,
         haloColor: Colors.transparent,
-        textSize: tier == JobMapPinDisplayTier.premiumPartner ? 16 : 14,
+        textSize: 14,
       ),
       isHideCollidedCaptions: true,
     );
@@ -42,7 +53,18 @@ abstract final class JobMapMarkerFactory {
   static Set<NClusterableMarker> createAll(
     List<JobMapPin> pins, {
     void Function(JobMapPin pin)? onTap,
+    Set<String>? ownPostIds,
+    String? selectedPostId,
   }) {
-    return pins.map((pin) => create(pin, onTap: onTap)).toSet();
+    return pins
+        .map(
+          (pin) => create(
+            pin,
+            onTap: onTap,
+            isOwn: ownPostIds?.contains(pin.post.id) ?? false,
+            isSelected: selectedPostId == pin.post.id,
+          ),
+        )
+        .toSet();
   }
 }

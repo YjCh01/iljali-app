@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -12,6 +13,13 @@ if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 val naverMapClientId = localProperties.getProperty("naver.map.client.id") ?: ""
+
+if (naverMapClientId.isNotEmpty()) {
+    val dartDefine = Base64.getEncoder().encodeToString(
+        "NAVER_MAP_CLIENT_ID=$naverMapClientId".toByteArray(Charsets.UTF_8),
+    )
+    extra["dart-defines"] = dartDefine
+}
 
 android {
     namespace = "com.example.map"

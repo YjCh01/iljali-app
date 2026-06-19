@@ -8,8 +8,11 @@ import 'package:map/features/job_seeker/data/repositories/job_application_reposi
 import 'package:map/features/job_seeker/domain/entities/job_application.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/data/repositories/corporate_account_registry.dart';
-import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
+import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/data/repositories/company_bonus_ledger_repository.dart';
+import 'package:map/features/corporate/data/repositories/push_wallet_repository.dart';
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
 import 'package:map/features/commute/data/repositories/shuttle_booking_repository.dart';
@@ -38,6 +41,7 @@ abstract final class DevTestDataSeeder {
 
   static Future<void> ensureSeeded() async {
     await _ensureCorporateRegistry();
+    await _ensureDevPushWallets();
     await _ensureSeedJobPosts();
     await _ensureShuttleDemo();
     final repo = await LocalHiringRepository.create();
@@ -359,6 +363,40 @@ abstract final class DevTestDataSeeder {
     final existing = await chatRepo.load(applicationId);
     if (existing.isNotEmpty) return;
     await chatRepo.saveAll(applicationId, messages);
+  }
+
+  static Future<void> _ensureDevPushWallets() async {
+    const alphaWallet = EmployerPushWallet(
+      packageCredits: 10,
+      locationSlotsFromPackages: 10,
+      lifetimePackagesPurchased: 10,
+    );
+    const betaWallet = EmployerPushWallet(
+      packageCredits: 5,
+      locationSlotsFromPackages: 5,
+      lifetimePackagesPurchased: 5,
+    );
+
+    final walletRepo = await PushWalletRepository.create();
+    final ledger = await CompanyBonusLedgerRepository.create();
+    final alphaKey =
+        DevTestAccounts.corpAlpha.verifiedCorporateProfile!.companyKey;
+    final betaKey =
+        DevTestAccounts.corpBeta.verifiedCorporateProfile!.companyKey;
+
+    final alphaExisting = await walletRepo.load(alphaKey);
+    if (alphaExisting.lifetimePackagesPurchased == 0) {
+      await walletRepo.save(alphaKey, alphaWallet);
+    }
+    final betaExisting = await walletRepo.load(betaKey);
+    if (betaExisting.lifetimePackagesPurchased == 0) {
+      await walletRepo.save(betaKey, betaWallet);
+    }
+
+    await ledger.tryClaimSignupBonus(alphaKey);
+    await ledger.tryClaimSignupBonus(betaKey);
+    await ledger.tryClaimVerificationBonus(alphaKey);
+    await ledger.tryClaimVerificationBonus(betaKey);
   }
 
   static Future<void> _ensureCorporateRegistry() async {

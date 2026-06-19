@@ -36,11 +36,18 @@ class LocalHiringRepository {
     if (raw == null || raw.isEmpty) return [];
     final decoded = jsonDecode(raw);
     if (decoded is! List) return [];
-    return decoded
-        .whereType<Map>()
-        .map((item) => HiringApplication.fromJson(item.cast<String, dynamic>()))
-        .toList()
-      ..sort((a, b) => b.appliedAt.compareTo(a.appliedAt));
+    final items = <HiringApplication>[];
+    for (final entry in decoded) {
+      if (entry is! Map) continue;
+      try {
+        items.add(
+          HiringApplication.fromJson(entry.cast<String, dynamic>()),
+        );
+      } on Object {
+        continue;
+      }
+    }
+    return items..sort((a, b) => b.appliedAt.compareTo(a.appliedAt));
   }
 
   Future<List<HiringApplication>> fetchForSeeker(String email) async {

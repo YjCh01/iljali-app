@@ -1,0 +1,1000 @@
+{
+  "repo": "https://github.com/YjCh01/iljali-app.git",
+  "workspace": "file:///d%3A/1jari",
+  "exportedAt": "2026-06-18T15:03:52.325Z",
+  "count": 125,
+  "chats": [
+    {
+      "composerId": "task-ce5a7db6-6fbe-4925-8417-34f428d36342",
+      "name": "Explore UX pain points across app",
+      "createdAt": 1779853561380,
+      "lastUpdatedAt": 1781795032322,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "fa47dce9-23b9-4ef4-84b3-65c85ad362bb",
+      "name": "Implement mutual check-in loop",
+      "createdAt": 1779962465865,
+      "lastUpdatedAt": 1781795032321,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "task-381b4884-be06-40ea-9966-ddd56b907d02",
+      "name": "Explore signup and hiring flow",
+      "createdAt": 1779858147748,
+      "lastUpdatedAt": 1781795032321,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "task-45f5da21-b51c-4b48-9d16-e87928aee920",
+      "name": "Explore corporate push/attendance flow",
+      "createdAt": 1779855356382,
+      "lastUpdatedAt": 1781795032321,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "task-04989d9d-7dc5-4d0b-b4f2-88c8d57efc22",
+      "name": "Explore corporate auth/signup flow",
+      "createdAt": 1779851664041,
+      "lastUpdatedAt": 1781795032321,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "task-9f02eada-510e-453a-a302-33b473e64bc8",
+      "name": "Review map app holistically",
+      "createdAt": 1779812893782,
+      "lastUpdatedAt": 1781795032321,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "task-4d614542-acb2-4c4e-8325-460aa65b22c4",
+      "name": "Explore map project structure",
+      "createdAt": 1779803262583,
+      "lastUpdatedAt": 1781795032321,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "fb10deaf-4ebc-4d95-805a-325bc5424cc5",
+      "createdAt": 1779775694019,
+      "lastUpdatedAt": 1781795032321,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "f1276e5a-d606-4f66-a64d-dfd58acf6337",
+      "createdAt": 1781759610087,
+      "lastUpdatedAt": 1781795032319,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "eea8876b-3d64-485e-9d31-0fba2ef08093",
+      "name": "Refactor seeker signup flow",
+      "createdAt": 1780121123933,
+      "lastUpdatedAt": 1781795032319,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "f21e8dcf-a1a7-4ab0-988c-c09ec3753c2a",
+      "name": "Fix credit badge countdown",
+      "createdAt": 1779966608681,
+      "lastUpdatedAt": 1781795032319,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "e928af97-e334-4910-a0de-ca26c0eaf011",
+      "name": "셔틀·근태 MVP 전체 구현",
+      "createdAt": 1780973920846,
+      "lastUpdatedAt": 1781795032318,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "e8583a24-bcdb-4fa1-ba63-75f478d906b7",
+      "name": "Corporate signup biz verify",
+      "createdAt": 1779961859376,
+      "lastUpdatedAt": 1781795032317,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "db254f3f-856d-4dae-b2fa-1935db91136d",
+      "createdAt": 1779956176593,
+      "lastUpdatedAt": 1781795032317,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "dcec1c40-846d-40b6-90bb-8c8f8d335797",
+      "name": "Complete remaining platform items",
+      "createdAt": 1779874252479,
+      "lastUpdatedAt": 1781795032317,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "e7af91ea-8ebb-44af-97b7-332c355d8898",
+      "name": "Review map app holistically",
+      "createdAt": 1779812893782,
+      "lastUpdatedAt": 1781795032317,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "d648f775-3970-43f6-a3cd-5bf97138aa5f",
+      "name": "Explore job seeker signup flows",
+      "createdAt": 1779951433775,
+      "lastUpdatedAt": 1781795032315,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "d624812f-2b68-48de-88b9-3789145022ed",
+      "name": "Job post registration flow refactor",
+      "createdAt": 1781716209376,
+      "lastUpdatedAt": 1781795032314,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "d610198e-166d-4948-896b-380e082f1827",
+      "name": "Create Flutter project",
+      "createdAt": 1779771259593,
+      "lastUpdatedAt": 1781795032314,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "d22c1984-271a-471f-aa82-aff112d0da38",
+      "name": "Explore pricing architecture",
+      "createdAt": 1781454984269,
+      "lastUpdatedAt": 1781795032313,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "cd8bf64a-015b-4a56-870f-85dbbde6836b",
+      "name": "E2E hiring flow verification",
+      "createdAt": 1780121500499,
+      "lastUpdatedAt": 1781795032311,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "ccf38c7b-d0f8-4db1-8901-c85e9fe678bd",
+      "name": "Map pins location credits fixes",
+      "createdAt": 1781761107940,
+      "lastUpdatedAt": 1781795032310,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "cab939a9-c54b-415f-9be1-25340394bed9",
+      "name": "Explore map pin UI code",
+      "createdAt": 1781753419076,
+      "lastUpdatedAt": 1781795032308,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "c6633f0a-d5b8-46d9-93f6-6697bfd342cc",
+      "name": "Fix shuttle overlay linking",
+      "createdAt": 1781713681352,
+      "lastUpdatedAt": 1781795032307,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "c56b1b24-b7d8-4145-929c-ad583967c643",
+      "name": "Explore shuttle route flows",
+      "createdAt": 1781259352510,
+      "lastUpdatedAt": 1781795032307,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "c13d4aef-ea24-4926-8165-b86a816ca4e7",
+      "name": "Fix shuttle payment lock bug",
+      "createdAt": 1781725178484,
+      "lastUpdatedAt": 1781795032306,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "bedd7d7f-9fcb-4645-bfd9-1a89cc8662bc",
+      "name": "Explore permanent commission codebase",
+      "createdAt": 1779875433269,
+      "lastUpdatedAt": 1781795032306,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "bd6afdfb-bc17-41de-94a1-e1eccdd6038c",
+      "name": "Fix credit UI mismatch",
+      "createdAt": 1779966756589,
+      "lastUpdatedAt": 1781795032305,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "bca6be9c-672c-4d51-b96f-ab905c3db203",
+      "name": "Push strategy redesign",
+      "createdAt": 1779881497529,
+      "lastUpdatedAt": 1781795032305,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "bd0e0f53-e290-4d38-a5e9-f33ef70ba1b6",
+      "name": "Implement Naver Map integration",
+      "createdAt": 1779871343485,
+      "lastUpdatedAt": 1781795032305,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "b6cde628-8ea5-42e3-96c3-f60790270686",
+      "name": "Attendance calendar + salary calc",
+      "createdAt": 1781502420912,
+      "lastUpdatedAt": 1781795032301,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "ae82d4ba-3b56-43e2-b01d-76b7d7ce1d3b",
+      "name": "Restore AI import entry",
+      "createdAt": 1781468615998,
+      "lastUpdatedAt": 1781795032299,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "a869649c-d924-410f-bc6a-c753f1c8bb2c",
+      "name": "Full policy audit & fix",
+      "createdAt": 1779991205959,
+      "lastUpdatedAt": 1781795032299,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "b471e6d1-9645-4779-ab8d-126c4e56dd83",
+      "name": "Implement feature flags + disable non-daily flows",
+      "createdAt": 1779950846987,
+      "lastUpdatedAt": 1781795032299,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "aedb16ee-28ba-47cd-b722-ba04f96c5fcb",
+      "name": "Explore corporate feature scope",
+      "createdAt": 1779950774719,
+      "lastUpdatedAt": 1781795032299,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "a4d3fe39-45a9-4a4e-8b9d-d1ed506d94c3",
+      "name": "Explore shuttle exposure flow",
+      "createdAt": 1781722294748,
+      "lastUpdatedAt": 1781795032298,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "a1c782ec-c522-4b22-a0ff-6a616b17435d",
+      "name": "Persist map view state",
+      "createdAt": 1781793656743,
+      "lastUpdatedAt": 1781795032297,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "a4419b45-74f9-4a6e-91bf-23a601521792",
+      "name": "Complete next MVP tasks",
+      "createdAt": 1779877496599,
+      "lastUpdatedAt": 1781795032297,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "a1044ee5-a2ac-43bb-9bbe-60d0753c79e7",
+      "name": "Explore payment & org flows",
+      "createdAt": 1781709256800,
+      "lastUpdatedAt": 1781795032295,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "a1459207-f6c1-49a4-86c0-bc80445b38d4",
+      "name": "Find Cursor Agent UI location",
+      "createdAt": 1779909552203,
+      "lastUpdatedAt": 1781795032295,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "9f086ace-5df8-4376-875c-214cc2cfab62",
+      "name": "Geofence commission anti-fraud",
+      "createdAt": 1781322510460,
+      "lastUpdatedAt": 1781795032294,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "9d20e364-5c56-43e8-a68c-42112df17169",
+      "name": "Apply paid-only push policy",
+      "createdAt": 1780070213039,
+      "lastUpdatedAt": 1781795032293,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "9b9e085c-c982-4441-b56a-0a37290afb54",
+      "name": "PRD Phase 1 implementation",
+      "createdAt": 1779880614787,
+      "lastUpdatedAt": 1781795032293,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "9d456b77-f163-4cac-ba96-bdd17a80fede",
+      "name": "Explore signup and hiring flow",
+      "createdAt": 1779858147748,
+      "lastUpdatedAt": 1781795032293,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "94c1714a-d9e8-4bab-a775-e4bc7963c42a",
+      "name": "셔틀 노선 지도 기능 조사",
+      "createdAt": 1780937130845,
+      "lastUpdatedAt": 1781795032292,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "951ad80d-6a1b-4220-af05-8e26fcfc49fe",
+      "name": "Fix wage hours + Daum Postcode",
+      "createdAt": 1779882475909,
+      "lastUpdatedAt": 1781795032292,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "92aa74d2-3e76-40fa-bd06-e39f25fb00e0",
+      "name": "Explore payment delegation UX",
+      "createdAt": 1781711254017,
+      "lastUpdatedAt": 1781795032291,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "88afc81c-a336-4f1d-b935-9001bf44849a",
+      "name": "Workplace terminal stop UX",
+      "createdAt": 1781728781910,
+      "lastUpdatedAt": 1781795032290,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "8c38443e-3d8e-4c35-8c60-1e651935ce3d",
+      "name": "Explore map project structure",
+      "createdAt": 1779803262583,
+      "lastUpdatedAt": 1781795032290,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "8638419e-2753-497a-b553-ae1a11e20dd5",
+      "name": "Fix shuttle map UX",
+      "createdAt": 1781681557300,
+      "lastUpdatedAt": 1781795032289,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "859c0df3-b732-4bd2-b8eb-27312129af14",
+      "name": "셔틀 노선 지도 오버레이 구현",
+      "createdAt": 1780937261165,
+      "lastUpdatedAt": 1781795032288,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "85a24bca-e95a-4af6-85ec-6fa1c473978e",
+      "name": "Explore corporate push/attendance flow",
+      "createdAt": 1779855356382,
+      "lastUpdatedAt": 1781795032288,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "7bcb04f8-a327-49be-b0b2-56a8d7dcbce9",
+      "name": "Implement worker-type payment date UX",
+      "createdAt": 1779932349456,
+      "lastUpdatedAt": 1781795032286,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "7dc63e0d-cad8-41f2-be58-37249c343c24",
+      "name": "Autonomous backlog execution",
+      "createdAt": 1779910034757,
+      "lastUpdatedAt": 1781795032286,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "7d757c37-5fef-40e5-b7d3-9c089d828af6",
+      "name": "Complete package migration",
+      "createdAt": 1779904123600,
+      "lastUpdatedAt": 1781795032286,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "825bc861-be09-4cbb-876b-7fbb46970eee",
+      "createdAt": 1779770067518,
+      "lastUpdatedAt": 1781795032286,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "7af22dd3-c7d5-47df-867c-21978983c1ee",
+      "name": "UX flow audit and fixes",
+      "createdAt": 1781467761444,
+      "lastUpdatedAt": 1781795032285,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "7aa53d3c-3917-4a19-a254-ec395b652017",
+      "name": "Real PG, server, scraping",
+      "createdAt": 1781266239477,
+      "lastUpdatedAt": 1781795032284,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "7a39bf64-d4a7-4067-9c53-4c63ab36045f",
+      "name": "Remove demo job/applicant data",
+      "createdAt": 1779878258159,
+      "lastUpdatedAt": 1781795032283,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "7952c65b-1ebe-44b2-b4fe-796b36596b2f",
+      "name": "Check MVP bat launcher",
+      "createdAt": 1779869942250,
+      "lastUpdatedAt": 1781795032283,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "746e456f-311b-48f1-9286-f43315769c7c",
+      "name": "Match alert pin color UI",
+      "createdAt": 1781767926769,
+      "lastUpdatedAt": 1781795032282,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "78361eb0-163f-4ab3-a810-4c74275e1b26",
+      "createdAt": 1779956176594,
+      "lastUpdatedAt": 1781795032282,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "728f25d2-4e9c-4840-968b-174d0c0343d5",
+      "name": "MVP 공고 간편등록 준비",
+      "createdAt": 1780892450794,
+      "lastUpdatedAt": 1781795032277,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "72d0174f-139e-4eb2-9e35-6ffb33eb8a6d",
+      "name": "Seeker map + bookmark vault",
+      "createdAt": 1780068083228,
+      "lastUpdatedAt": 1781795032277,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "70dd2b63-5d14-44d2-b324-9a50c01d8329",
+      "name": "Implement saved card payments",
+      "createdAt": 1781685579831,
+      "lastUpdatedAt": 1781795032276,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "703a52a4-4692-4cbc-aff9-68895d470417",
+      "name": "YOLO service readiness bulk",
+      "createdAt": 1780844832823,
+      "lastUpdatedAt": 1781795032276,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "659b5807-3952-4dc4-8c4d-b7f373a2f5e4",
+      "name": "Fix shuttle checkout push UI",
+      "createdAt": 1781718830087,
+      "lastUpdatedAt": 1781795032275,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "6fe2b01f-950a-4ff6-8441-7ba1d6884c9d",
+      "name": "Implement final push policy",
+      "createdAt": 1779988902051,
+      "lastUpdatedAt": 1781795032275,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "6ac81e72-a44c-4e28-a6dc-6964ef88b257",
+      "name": "Fix job card credit badge",
+      "createdAt": 1779966954821,
+      "lastUpdatedAt": 1781795032275,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "64e63691-d7c3-46f8-a67f-d468f36e1f83",
+      "name": "Chat job post tap navigation",
+      "createdAt": 1781284649700,
+      "lastUpdatedAt": 1781795032274,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "63880efe-7bc8-420d-a680-08ff855f0180",
+      "createdAt": 1781759610087,
+      "lastUpdatedAt": 1781795032273,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "618b0ab9-1fa8-409a-9acd-621705e27b2a",
+      "name": "PUSH purchase sheet + use UI",
+      "createdAt": 1781720184786,
+      "lastUpdatedAt": 1781795032273,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "5fa14367-c567-4210-be60-afd7ad385f62",
+      "name": "Implement full product vision",
+      "createdAt": 1780046722570,
+      "lastUpdatedAt": 1781795032273,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "618227b1-1236-48d6-ac4f-530a096a985c",
+      "name": "Fix free vs package credit UI",
+      "createdAt": 1779976682219,
+      "lastUpdatedAt": 1781795032273,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "62617d30-c610-4823-a040-aa4ee2961a9f",
+      "name": "Explore job post push flow",
+      "createdAt": 1779959587863,
+      "lastUpdatedAt": 1781795032273,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "5f1059ea-42be-4e14-8941-9253fc1fa373",
+      "name": "Daily worker + premium wage pin",
+      "createdAt": 1781515797420,
+      "lastUpdatedAt": 1781795032272,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "5e87ef7f-cb27-4ee9-a36d-ebb8f3ad6b8d",
+      "name": "Remove redundant link button",
+      "createdAt": 1781718716432,
+      "lastUpdatedAt": 1781795032271,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "5d45cdb9-4b7b-424c-9c62-77267c245d49",
+      "name": "Payment authority org structure",
+      "createdAt": 1781340361425,
+      "lastUpdatedAt": 1781795032271,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "57211353-f7d7-42f1-af4b-15adf5065b8a",
+      "name": "Unify job pin UX + naming",
+      "createdAt": 1781682297068,
+      "lastUpdatedAt": 1781795032270,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "5520862f-520e-466e-a89f-07b7b926afb7",
+      "name": "Run Flutter analyze and tests",
+      "createdAt": 1780057023691,
+      "lastUpdatedAt": 1781795032269,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "54652a74-039d-4eff-bda0-e000d202cb42",
+      "name": "Explore calendar date pickers",
+      "createdAt": 1779956693448,
+      "lastUpdatedAt": 1781795032269,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "559a6ad7-c6d3-4303-9938-89ab0284b348",
+      "name": "Explore hiring commission codebase",
+      "createdAt": 1779873322457,
+      "lastUpdatedAt": 1781795032269,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "5460fa08-ac8d-43ea-be2c-952d83e3f685",
+      "name": "Explore UX pain points across app",
+      "createdAt": 1779853561380,
+      "lastUpdatedAt": 1781795032269,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "5137e50d-a681-4c3b-8e27-ff82e4fec008",
+      "name": "Create 4 test accounts",
+      "createdAt": 1780120173332,
+      "lastUpdatedAt": 1781795032268,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "49ec031c-33c4-4b89-85a7-c1d5d0a9501e",
+      "name": "Expired workplace reactivate button",
+      "createdAt": 1781459327305,
+      "lastUpdatedAt": 1781795032267,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "4b860f1d-78c3-443c-901e-8d75304349a8",
+      "name": "Explore job seeker push inbox",
+      "createdAt": 1779988923528,
+      "lastUpdatedAt": 1781795032267,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "4bf33f30-6945-4518-9d54-d0927e324598",
+      "name": "Audit codebase vs PRD",
+      "createdAt": 1779880582900,
+      "lastUpdatedAt": 1781795032267,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "4ca5e06a-8d8d-40b3-9ec0-46a87bf42562",
+      "createdAt": 1779770067518,
+      "lastUpdatedAt": 1781795032267,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "47a835e8-6c22-4b9a-8af4-8c847070b9bd",
+      "name": "Finish A/B payment delegation UX",
+      "createdAt": 1781711439375,
+      "lastUpdatedAt": 1781795032266,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "4916939d-b77e-44a8-93ec-dd2f779429ed",
+      "name": "Shuttle overlay activation UI",
+      "createdAt": 1781441391998,
+      "lastUpdatedAt": 1781795032266,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "455d0920-13b4-4f82-97c9-9974fbc3360a",
+      "name": "Fix voucher shop naming",
+      "createdAt": 1781681290325,
+      "lastUpdatedAt": 1781795032264,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "45dcb9c8-7cec-41e6-b17c-55edc97dca95",
+      "name": "Recruit applicants map confirm",
+      "createdAt": 1779945825072,
+      "lastUpdatedAt": 1781795032264,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "43baf84f-2cfb-49a2-906e-41b6ad5bc103",
+      "name": "Fix billing compile errors",
+      "createdAt": 1781456188891,
+      "lastUpdatedAt": 1781795032263,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "44adcf83-f73e-45be-a2d6-2b1ff37f0e26",
+      "name": "Explore corporate auth/signup flow",
+      "createdAt": 1779851664041,
+      "lastUpdatedAt": 1781795032263,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "3e64bc21-e793-474a-814b-0e5af1a7743c",
+      "name": "Corporate map shuttle density overlay",
+      "createdAt": 1781759768907,
+      "lastUpdatedAt": 1781795032261,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "408aee75-bba3-4b0c-b6d4-0621a30cc109",
+      "name": "Payment UI list redesign",
+      "createdAt": 1779882743429,
+      "lastUpdatedAt": 1781795032261,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "3e585ce6-c957-450d-9037-428a796c6be1",
+      "name": "Finish attendance no-show flow",
+      "createdAt": 1780119285450,
+      "lastUpdatedAt": 1781795032260,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "3b93601e-d98a-4f01-b006-d57a704fad25",
+      "name": "Multi-route batch checkout",
+      "createdAt": 1781719169461,
+      "lastUpdatedAt": 1781795032259,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "3424fbf1-df65-4e66-8143-90bf7d70f2c4",
+      "name": "Audit iljari CFS features",
+      "createdAt": 1780988922402,
+      "lastUpdatedAt": 1781795032259,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "2ecff0f0-2887-4885-8788-6ba25d57b6c3",
+      "name": "Fix Android dev login crash",
+      "createdAt": 1781751299440,
+      "lastUpdatedAt": 1781795032258,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "314b4c2d-a38a-47b4-921f-eb86d64927a9",
+      "name": "Fix push base point UX",
+      "createdAt": 1779933162572,
+      "lastUpdatedAt": 1781795032258,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "30d4bf52-c2c0-48d4-aeae-447e08bd687b",
+      "name": "Fix remaining analyze errors",
+      "createdAt": 1779903869152,
+      "lastUpdatedAt": 1781795032258,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "279dea38-e97c-487b-90cc-4db197166736",
+      "name": "Collapse job post pin lists",
+      "createdAt": 1781727413546,
+      "lastUpdatedAt": 1781795032256,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "2b33ecbb-b62c-4f12-b68e-61812384cc39",
+      "createdAt": 1779775694019,
+      "lastUpdatedAt": 1781795032256,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "2543baa6-037b-4bfe-a614-6a057b330ce1",
+      "name": "Update optional panel copy",
+      "createdAt": 1781472541650,
+      "lastUpdatedAt": 1781795032255,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "22c0bcc4-e9c4-4591-b2f7-3af5f7b4c353",
+      "name": "Explore job post registration flow",
+      "createdAt": 1781464982360,
+      "lastUpdatedAt": 1781795032255,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "23634b88-8945-43f5-9987-9ab1db81250f",
+      "name": "Add service differentiation UI",
+      "createdAt": 1781281078035,
+      "lastUpdatedAt": 1781795032255,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "221055cc-c7da-4c1d-9a00-337b6e923678",
+      "name": "Job post labels + map preview",
+      "createdAt": 1781278610758,
+      "lastUpdatedAt": 1781795032254,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "22313563-ef12-47d3-9cb8-42b758c0df13",
+      "name": "Systematic app QA audit",
+      "createdAt": 1780235893822,
+      "lastUpdatedAt": 1781795032254,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "1922306d-6b1c-4a4c-b406-e7298b1deb4d",
+      "name": "Fix shuttle link UX",
+      "createdAt": 1781713973742,
+      "lastUpdatedAt": 1781795032253,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "184a9a30-f5f5-4e98-9164-b4e543cb45be",
+      "name": "Simplify job post plan UI",
+      "createdAt": 1779882024592,
+      "lastUpdatedAt": 1781795032253,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "149ebd74-44a8-4a13-a5d3-f1003e82b7d0",
+      "name": "Redesign voucher shop layout",
+      "createdAt": 1781501123009,
+      "lastUpdatedAt": 1781795032252,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "16fbbc38-7996-437b-8b00-afd568767b38",
+      "name": "Explore codebase for implementation",
+      "createdAt": 1780046616012,
+      "lastUpdatedAt": 1781795032252,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "16d3a685-0ddf-4f56-aefe-a4c44d84da97",
+      "name": "Explore attendance fee flows",
+      "createdAt": 1779962182729,
+      "lastUpdatedAt": 1781795032252,
+      "unifiedMode": "chat",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "12a869f0-44e9-4d3b-a6ec-f8955ea5cab3",
+      "name": "Exposure pin shuttle push policy",
+      "createdAt": 1781420773686,
+      "lastUpdatedAt": 1781795032251,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "0acab355-daea-4d2c-bee7-80ca43f6365f",
+      "name": "Finish push credit policy",
+      "createdAt": 1779959819022,
+      "lastUpdatedAt": 1781795032250,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "08365f2a-0502-4af6-8ed5-a8317aa16fd3",
+      "name": "Continue overnight polish",
+      "createdAt": 1779908243111,
+      "lastUpdatedAt": 1781795032250,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "00c81d6c-68b1-492a-9e2a-950cbec0b41c",
+      "name": "Fix USP grid Basic copy",
+      "createdAt": 1779896326532,
+      "lastUpdatedAt": 1781795032249,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "423bac07-a63a-4f7a-a0fc-864c55a39533",
+      "name": "작업 내용 분실",
+      "createdAt": 1781794335396,
+      "lastUpdatedAt": 1781794544556,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "ba351e43-e44b-4221-a8f1-7ec22087ed1b",
+      "name": "Flutter app project structure and UI design",
+      "createdAt": 1779775979530,
+      "lastUpdatedAt": 1781793644372,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "cfd66ca1-a8bb-411d-9397-b0fe67f63600",
+      "name": "Admin dashboard project setup",
+      "createdAt": 1779963342257,
+      "lastUpdatedAt": 1781260855443,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "d996ce07-29f3-405e-9edd-a2f98b3f9273",
+      "name": "Job management app development plan",
+      "createdAt": 1781247326821,
+      "lastUpdatedAt": 1781259125026,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "735b3674-929f-43ad-adf0-d7ddeb2e50a8",
+      "name": "Fix Windows NaverMap build",
+      "createdAt": 1779775979530,
+      "lastUpdatedAt": 1779869902851,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "d456c2f0-7451-4fea-9ac5-1b1bab3e553e",
+      "name": "Flutter 앱 프로젝트 구조 및 초기 설정",
+      "createdAt": 1779774032040,
+      "lastUpdatedAt": 1779775128865,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    },
+    {
+      "composerId": "b72a8051-3728-4c8f-8ddb-accb6cc93650",
+      "name": "Flutter 앱 프로젝트 구조 및 초기 설정",
+      "createdAt": 1779770616122,
+      "lastUpdatedAt": 1779774032507,
+      "unifiedMode": "agent",
+      "workspace": "file:///d:/1jari"
+    }
+  ]
+}

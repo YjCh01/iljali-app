@@ -8,6 +8,7 @@ import 'package:map/features/map_dashboard/domain/entities/warehouse.dart';
 import 'package:map/features/map_dashboard/domain/usecases/get_warehouses_usecase.dart';
 import 'package:map/features/map_dashboard/presentation/map/warehouse_cluster_options_factory.dart';
 import 'package:map/features/map_dashboard/presentation/map/warehouse_marker_factory.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_current_location_button.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_unavailable_placeholder.dart';
 
 /// 네이버 지도 + 물류센터 마커·클러스터링
@@ -48,19 +49,26 @@ class _NaverMapBackgroundState extends State<NaverMapBackground> {
 
     final safeAreaPadding = MediaQuery.paddingOf(context);
 
-    return NaverMap(
-      options: NaverMapViewOptions(
-        contentPadding: safeAreaPadding,
-        initialCameraPosition: const NCameraPosition(
-          target: MapConstants.warehouseAreaCenter,
-          zoom: MapConstants.warehouseAreaZoom,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        NaverMap(
+          options: NaverMapViewOptions(
+            contentPadding: safeAreaPadding,
+            initialCameraPosition: const NCameraPosition(
+              target: MapConstants.warehouseAreaCenter,
+              zoom: MapConstants.warehouseAreaZoom,
+            ),
+            locationButtonEnable: false,
+          ),
+          clusterOptions: WarehouseClusterOptionsFactory.create(),
+          onMapReady: _handleMapReady,
+          onMapTapped: widget.onMapBackgroundTap == null
+              ? null
+              : (_, __) => widget.onMapBackgroundTap!(),
         ),
-      ),
-      clusterOptions: WarehouseClusterOptionsFactory.create(),
-      onMapReady: _handleMapReady,
-      onMapTapped: widget.onMapBackgroundTap == null
-          ? null
-          : (_, __) => widget.onMapBackgroundTap!(),
+        const MapCurrentLocationButton(),
+      ],
     );
   }
 

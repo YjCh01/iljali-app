@@ -14,6 +14,8 @@ class MapCameraHolder {
 
   bool get isReady => _controller != null;
 
+  NaverMapController? get controller => _controller;
+
   void bind(NaverMapController controller) => _controller = controller;
 
   void unbind() => _controller = null;
@@ -56,13 +58,24 @@ class MapCameraHolder {
   }
 
   Future<void> focusWarehouse(Warehouse warehouse) async {
+    await focusPin(
+      latitude: warehouse.position.latitude,
+      longitude: warehouse.position.longitude,
+    );
+  }
+
+  Future<void> focusPin({
+    required double latitude,
+    required double longitude,
+    double zoom = 14,
+  }) async {
     final controller = _controller;
     if (controller == null) return;
 
     await controller.updateCamera(
       NCameraUpdate.withParams(
-        target: warehouse.position,
-        zoom: 15,
+        target: NLatLng(latitude, longitude),
+        zoom: zoom,
       ),
     );
   }

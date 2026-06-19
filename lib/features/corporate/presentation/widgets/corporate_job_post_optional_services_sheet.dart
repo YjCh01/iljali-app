@@ -6,19 +6,11 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/corporate/presentation/navigation/push_base_point_args.dart';
+import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_optional_services_panel.dart';
 
 WorkplaceAddress workplaceFromJobPost(CorporateJobPost post) {
-  final settings = post.notificationSettings;
-  final primary =
-      settings != null && settings.basePoints.isNotEmpty
-          ? settings.basePoints.first
-          : null;
-  return WorkplaceAddress(
-    roadAddress: post.warehouseName,
-    coordinate: primary?.coordinate,
-    detailAddress: primary?.addressLabel,
-  );
+  return JobPostWorkplaceResolver.resolve(post);
 }
 
 /// 공고 — 유료 서비스 시트 (등록 직후 · 목록 · 수정 공통)

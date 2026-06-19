@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
@@ -56,8 +57,10 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
   int _positionAdjustIndex = -1;
   String? _savedRouteId;
   late GeoCoordinate _mapCenter;
+  final DraggableScrollableController _bottomSheetController =
+      DraggableScrollableController();
 
-  String? get _routeId => widget.existing?.id ?? _savedRouteId;
+  static const _bottomSheetSnaps = [0.22, 0.36, 0.58, 0.82];
 
   bool get _addOnlyMode => widget.lockedStopIds.isNotEmpty;
 
@@ -102,8 +105,11 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
     _boardingNotesController.dispose();
     _arrivalNotesController.dispose();
     _vehicleGuideController.dispose();
+    _bottomSheetController.dispose();
     super.dispose();
   }
+
+  String? get _routeId => widget.existing?.id ?? _savedRouteId;
 
   void _syncMapFromStops() {
     if (_intermediateStops.isEmpty) {
@@ -410,215 +416,227 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
     });
   }
 
-  Widget _buildBottomActions(double bottomInset) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + bottomInset),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          top: BorderSide(
-            color: AppColors.searchBarBorder.withValues(alpha: 0.85),
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: _saving
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text(
-                    '노선 저장',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: _saving ? null : _openRouteList,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              side: BorderSide(
-                color: AppColors.primary.withValues(alpha: 0.45),
+  Widget _sheetDragHandle() {
+    return MouseRegion(
+      cursor: SystemMouseCursors.grab,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggleBottomSheet,
+        onVerticalDragUpdate: (d) => _dragSheetByDelta(d.delta.dy),
+        onVerticalDragEnd: (_) => _snapSheetToNearest(),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+          child: Center(
+            child: Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textSecondary.withValues(alpha: 0.28),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            child: const Text(
-              '통근버스 노선도 리스트',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  void _dragSheetByDelta(double deltaDy) {
+    if (!_bottomSheetController.isAttached) return;
+    final height = MediaQuery.sizeOf(context).height;
+    if (height <= 0) return;
+    final next = (_bottomSheetController.size - deltaDy / height).clamp(
+      _bottomSheetSnaps.first,
+      _bottomSheetSnaps.last,
+    );
+    _bottomSheetController.jumpTo(next);
+  }
+
+  void _snapSheetToNearest() {
+    if (!_bottomSheetController.isAttached) return;
+    final current = _bottomSheetController.size;
+    var nearest = _bottomSheetSnaps.first;
+    var bestDist = (current - nearest).abs();
+    for (final snap in _bottomSheetSnaps) {
+      final dist = (current - snap).abs();
+      if (dist < bestDist) {
+        bestDist = dist;
+        nearest = snap;
+      }
+    }
+    _bottomSheetController.animateTo(
+      nearest,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _toggleBottomSheet() {
+    if (!_bottomSheetController.isAttached) return;
+    final current = _bottomSheetController.size;
+    final next = current < 0.28 ? _bottomSheetSnaps[1] : _bottomSheetSnaps.first;
+    _bottomSheetController.animateTo(
+      next,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+    );
+  }
+
+  Widget _buildMapLayer() {
+    return PushRadiusMapPicker(
+      key: ValueKey(
+        'shuttle_map_${_activeStopIndex}_${_positionAdjustIndex}_'
+        '${_stops.length}_'
+        '${_stops.map((s) => s.id).join('-')}',
+      ),
+      center: _mapCenter,
+      radiusMeters: 0,
+      hideZeroRadiusLabel: true,
+      centerEditable: true,
+      existingPoints: _mapOverlays,
+      activePointLabel: _activeMapLabel,
+      polylinePoints: _routePolylinePoints,
+      polylineColor: ShuttleRouteColorUtils.parseHex(_colorHex),
+      onExistingPointTap:
+          _intermediateStops.isNotEmpty ? _onMapPointTap : null,
+      onCenterChanged: _onMapCenterChanged,
+      maxZoom: 21,
+      myLocationButtonBottom: 110,
+    );
+  }
+
+  Widget _buildBottomSheetContent(ScrollController scrollController) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        leading: const AppBackButton(),
-        automaticallyImplyLeading: false,
-        title: Text(
-          widget.existing == null
-              ? '셔틀 노선 등록'
-              : _addOnlyMode
-                  ? '정류장 추가'
-                  : '셔틀 노선 수정',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _openRouteList,
-            child: const Text('목록'),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomActions(bottomInset),
-      body: Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_addOnlyMode)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Material(
-                color: AppColors.primaryLight.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(10),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Text(
-                    '노출 중인 정류장은 수정·삭제할 수 없습니다. 새 정류장만 추가해 주세요.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary.withValues(alpha: 0.88),
+          _sheetDragHandle(),
+          Expanded(
+            child: ListView(
+              controller: scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + bottomInset),
+              children: [
+                TextField(
+                  controller: _nameController,
+                  readOnly: _addOnlyMode,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: '노선 이름',
+                    hintText: '예: 평택1노선, 평택2노선',
+                    isDense: true,
+                  ),
+                ),
+                if (_addOnlyMode) ...[
+                  const SizedBox(height: 8),
+                  Material(
+                    color: AppColors.primaryLight.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      child: Text(
+                        '노출 중인 정류장은 수정·삭제할 수 없습니다. 새 정류장만 추가해 주세요.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              AppColors.textPrimary.withValues(alpha: 0.88),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                if (_positionAdjustIndex >= 0) ...[
+                  const SizedBox(height: 8),
+                  Material(
+                    color: ShuttleRouteColorUtils.parseHex(_colorHex)
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '지도를 움직여 정류장 위치를 조정하세요.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    ShuttleRouteColorUtils.parseHex(_colorHex),
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _finishPositionAdjust,
+                            child: const Text('완료'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                ShuttleRouteStopRowList(
+                  intermediateStops:
+                      List<CommuteRouteStop>.from(_intermediateStops),
+                  workplaceStop: _workplaceStop,
+                  activeIndex: _activeStopIndex,
+                  positionAdjustIndex: _positionAdjustIndex,
+                  routeColorHex: _colorHex,
+                  showActivationControls: false,
+                  lockedStopIds: widget.lockedStopIds,
+                  onSelect: _selectStop,
+                  onRemove: _removeStop,
+                  onAdd: _addStop,
+                  onEditDetails: _editStopDetails,
+                  onAdjustPosition: _startPositionAdjust,
+                  onReorder: _onReorder,
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                const Text(
+                  '노선 색상',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                IgnorePointer(
+                  ignoring: _addOnlyMode,
+                  child: Opacity(
+                    opacity: _addOnlyMode ? 0.55 : 1,
+                    child: ShuttleRouteColorPicker(
+                      colorHex: _colorHex,
+                      onChanged: (hex) => setState(() => _colorHex = hex),
                     ),
                   ),
                 ),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-            child: TextField(
-              controller: _nameController,
-              readOnly: _addOnlyMode,
-              decoration: const InputDecoration(
-                labelText: '노선 이름',
-                hintText: '예: 평택1노선, 평택2노선',
-                isDense: true,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-            child: IgnorePointer(
-              ignoring: _addOnlyMode,
-              child: Opacity(
-                opacity: _addOnlyMode ? 0.55 : 1,
-                child: ShuttleRouteColorPicker(
-                  colorHex: _colorHex,
-                  onChanged: (hex) => setState(() => _colorHex = hex),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (_positionAdjustIndex >= 0)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-              child: Material(
-                color: ShuttleRouteColorUtils.parseHex(_colorHex)
-                    .withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '지도를 움직여 정류장 위치를 조정하세요.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: ShuttleRouteColorUtils.parseHex(_colorHex),
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _finishPositionAdjust,
-                        child: const Text('완료'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: PushRadiusMapPicker(
-                  key: ValueKey(
-                    'shuttle_map_${_activeStopIndex}_${_positionAdjustIndex}_'
-                    '${_stops.length}_'
-                    '${_stops.map((s) => s.id).join('-')}',
-                  ),
-                  center: _mapCenter,
-                  radiusMeters: 0,
-                  hideZeroRadiusLabel: true,
-                  centerEditable: true,
-                  existingPoints: _mapOverlays,
-                  activePointLabel: _activeMapLabel,
-                  polylinePoints: _routePolylinePoints,
-                  polylineColor: ShuttleRouteColorUtils.parseHex(_colorHex),
-                  onExistingPointTap:
-                      _intermediateStops.isNotEmpty ? _onMapPointTap : null,
-                  onCenterChanged: _onMapCenterChanged,
-                ),
-              ),
-            ),
-          ),
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ShuttleRouteStopRowList(
-                    intermediateStops:
-                        List<CommuteRouteStop>.from(_intermediateStops),
-                    workplaceStop: _workplaceStop,
-                    activeIndex: _activeStopIndex,
-                    positionAdjustIndex: _positionAdjustIndex,
-                    routeColorHex: _colorHex,
-                    showActivationControls: false,
-                    lockedStopIds: widget.lockedStopIds,
-                    onSelect: _selectStop,
-                    onRemove: _removeStop,
-                    onAdd: _addStop,
-                    onEditDetails: _editStopDetails,
-                    onAdjustPosition: _startPositionAdjust,
-                    onReorder: _onReorder,
-                  ),
-                  if (!_addOnlyMode) ...[
+                if (!_addOnlyMode) ...[
                   const SizedBox(height: 12),
                   ExpansionTile(
                     tilePadding: EdgeInsets.zero,
@@ -627,7 +645,8 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
                         setState(() => _showOptionalNotes = v),
                     title: const Text(
                       '운행 안내 (선택)',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                     ),
                     subtitle: const Text(
                       '차량·탑승·현장 참고 메모',
@@ -648,8 +667,7 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
                         controller: _boardingNotesController,
                         decoration: const InputDecoration(
                           labelText: '탑승·정류장 안내',
-                          hintText:
-                              '예: 탑승을 위해서 5분 전 대기를 권장합니다',
+                          hintText: '예: 탑승을 위해서 5분 전 대기를 권장합니다',
                         ),
                         maxLines: 2,
                       ),
@@ -668,24 +686,114 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
                         decoration: BoxDecoration(
                           color: AppColors.background,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.searchBarBorder),
+                          border:
+                              Border.all(color: AppColors.searchBarBorder),
                         ),
                         child: Text(
                           ShuttleOperationGuideCopy.driverDisclaimer,
                           style: TextStyle(
                             fontSize: 11,
                             height: 1.45,
-                            color: AppColors.textSecondary.withValues(alpha: 0.95),
+                            color:
+                                AppColors.textSecondary.withValues(alpha: 0.95),
                           ),
                         ),
                       ),
                       const SizedBox(height: 8),
                     ],
                   ),
-                  ],
                 ],
-              ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: _saving ? null : _save,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(
+                          '노선 저장',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: _saving ? null : _openRouteList,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(
+                      color: AppColors.primary.withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: const Text(
+                    '통근버스 노선도 리스트',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      extendBody: true,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface.withValues(alpha: 0.94),
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: const AppBackButton(),
+        automaticallyImplyLeading: false,
+        title: Text(
+          widget.existing == null
+              ? '셔틀 노선 등록'
+              : _addOnlyMode
+                  ? '정류장 추가'
+                  : '셔틀 노선 수정',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _openRouteList,
+            child: const Text('목록'),
+          ),
+        ],
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(child: _buildMapLayer()),
+          DraggableScrollableSheet(
+            controller: _bottomSheetController,
+            initialChildSize: _bottomSheetSnaps[1],
+            minChildSize: _bottomSheetSnaps.first,
+            maxChildSize: _bottomSheetSnaps.last,
+            snap: true,
+            snapSizes: _bottomSheetSnaps,
+            builder: (context, scrollController) {
+              return ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.mouse,
+                    PointerDeviceKind.stylus,
+                    PointerDeviceKind.trackpad,
+                  },
+                ),
+                child: _buildBottomSheetContent(scrollController),
+              );
+            },
           ),
         ],
       ),

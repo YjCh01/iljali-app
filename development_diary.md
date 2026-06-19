@@ -1,5 +1,62 @@
 # Development Diary
 
+## 2026-06-19 — 공고 탭 노출·알림 서비스 카드 순서
+
+- **변경**: `corporate_post_services_guide` — 알림핀(일자리) → 통근버스(정류장) → 급구알림 순으로 정렬
+
+## 2026-06-19 — 유료 서비스 패널 설정 아이콘
+
+- **변경**: `corporate_job_post_optional_services_panel` `_ConfiguredServiceRow` — 일자리 알림핀·정류장 표시핀 우측 `Icons.edit_outlined` → `Icons.settings_outlined` (추가/저장/수정/삭제 설정 진입)
+
+## 2026-06-19 — Glass Repositories iljali-app 대화 노출 수정
+
+- **원인(2개만 보임)**: Agents > Repositories는 `composer.composerHeaders`가 아니라 **`agentLocation` + `trackedGitRepos.repoUrl`** 로 그룹핑. 125개 중 124개가 `agentLocation: null` → repo 섹션 미노출
+- **조치**: `fix-glass-repo-agents.mjs` — 125개에 `agentLocation`(local D:\\1jari) + `repoUrl: github.com/yjch01/iljali-app` + project membership 통합, 프로젝트명 `iljali-app`
+- **재실행**: Cursor 완전 종료 → `node scripts/chat-sync/fix-glass-repo-agents.mjs --apply`
+
+## 2026-06-18 — Cursor Agents 대화 iljali-app 재연결
+
+- **원인**: Cursor 3.0 `composer.composerHeaders`가 empty-window·Glass 세션(타임스탬프 workspace)에 묶여 iljali-app repo 목록에 안 보임
+- **조치**: `scripts/chat-sync/reindex-iljali-chats.mjs` — 125개 대화를 `D:\1jari` (`cc095c556477ec81d2f10f0fc17d9fa4`)로 retag; `.cursor/chat-archive/index.json` + `index.html` 생성
+- **백업**: `%APPDATA%\Cursor\User\globalStorage\state.vscdb.backup-*`
+- **재실행**: Cursor 완전 종료 후 `.\scripts\sync-cursor-chats.ps1 -Apply`
+
+## 2026-06-18 — 일자리 알림핀 색상 피커 통일
+
+- **변경**: `push_notification_base_point_page` — `_RecruitmentPinColorPicker`(6색 원형 스와치) 제거 → `ShuttleRouteColorPicker` 재사용 (원형/블록/RGB 세그먼트, HEX 미리보기, 팔레트 팝업)
+- **Verify**: `shuttle_route_color_utils_test` pass; analyze 0 errors on changed file
+
+## 2026-06-18 — QA 지도·지갑·알림핀 UX 배치
+
+- **위치 권한**: `MapUserLocationService` + Naver `locationButtonEnable` on corp home, seeker map, push radius picker
+- **근무지 중심**: `JobPostWorkplaceResolver`, `workplaceFromJobPost`, job pin maps maxZoom 21, setup purple line removed
+- **구직자 알림핀**: `JobRecruitmentMapPinFactory` + seeker solid link on tap
+- **corp-alpha 지갑**: dev profile embedded wallet removed; repo seed + ledger pre-claim; load prefers SharedPreferences
+- **라벨**: 일자리 알림핀 / 정류장 표시핀; add button always enabled → shop upsell
+- **셔틀 편집**: draggable top/bottom panels on `ShuttleRouteEditPage`
+- **Verify**: push_wallet + seeder tests pass; analyze 0 errors on changed files
+
+## 2026-06-18 — 황금핀 제거 + 무료 기업 지도 열람 정책
+
+- **황금핀 제거**: `JobMapPinDisplayTier.premiumPartner` 삭제 — 회색·하늘(고시급)·보라(알림핀)만 유지; 100회 팩은 크레딧/할인만
+- **기업 지도**: 무료 — 모든 핀·밀도 표시, 타사 공고 내용 차단 + 알림핀 구매 유도; 유료(지갑/레거시) — 경쟁 공고 열람 가능; 자사 공고는 항상 열람
+- **Policy**: `CorporateMapContentAccessPolicy`, `showCorporateMapIntelPaywall`
+- **Verify**: 25 tests pass (pin tier, ranking, visual theme, map access)
+
+## 2026-06-18 — 기업 홈 셔틀 밀도 오버레이
+
+- **Feature**: `CorporateShuttleDensityLoader` — 구직자 노출 기준(overlay post + activated stops)으로 전사 셔틀 정류장·폴리라인 표시
+- **Maps**: `corporate_home_map_background`, `corporate_home_naver_map`, `corporate_exposure_mini_map`, `corporate_home_exposure_map`
+- **Tap**: 경쟁 정류장 → `showCorporateMapIntelPaywall`; 자사 노선은 스낵바; `CommuteRouteRepository.loadAllActive`
+- **Verify**: shuttle density + map access tests 9 pass
+
+## 2026-06-18 — Android 개발 테스트 로그인 크래시
+
+- **Root cause**: `LocalHiringRepository.create()` → `fetchAll()` → `HiringApplication.fromJson` — legacy SharedPreferences에 `status: "approved"` 등 invalid enum → `ArgumentError` → dev login red screen
+- **Fix**: safe enum parsing in `HiringApplication.fromJson`; skip corrupt rows in `fetchAll`; SnackBar in `DevTestLoginPanel`; gateway scrollable (dev panel overflow)
+- **Build**: `build_apk_debug.bat` — reads `naver.map.client.id` from `android/local.properties` → `--dart-define`
+- **Verify**: corrupt prefs test + gateway + dev seeder tests pass; analyze 0 errors
+
 ## 2026-06-18 — 셔틀 노선 근무지 고정 UX
 
 - **UX**: `ShuttleRouteStopRowList` — 상단 연보라 「+ 정류장 추가」, 경유 4행 스크롤, 하단 근무지 고정(비삭제·비재정렬)

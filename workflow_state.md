@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- **셔틀 노선 근무지 고정 UX** — done
+- **Cursor Agents iljali-app 대화 재연결** — done (125 chats retagged)
 
 ## Backlog (priority order)
 
@@ -19,6 +19,12 @@
 - `workflow_state.md` updated
 
 ## Progress
+
+- [x] **Cursor Agents iljali-app 대화 재연결** — 125 chats retagged to D:\1jari; chat-archive index exported
+
+- [x] **일자리 알림핀 색상 피커 통일** — `ShuttleRouteColorPicker` 재사용, 6색 스와치 제거, shuttle color utils test pass
+
+- [x] **황금핀 제거 + 무료 기업 지도 열람** — premiumPartner 삭제, CorporateMapContentAccessPolicy, paywall, 25 tests pass
 
 - [x] **셔틀 노선 근무지 고정 UX** — split/merge stops, pinned workplace row, edit page refactor, tests 18 pass
 
@@ -66,6 +72,12 @@
 
 ## Completed (recent)
 
+- 2026-06-18 — **Cursor Agents iljali-app 대화 재연결** — 125 chats retagged; `.cursor/chat-archive/` index
+
+- 2026-06-18 — **일자리 알림핀 색상 피커 통일** — ShuttleRouteColorPicker 재사용, 6색 스와치 제거, shuttle color utils test pass
+
+- 2026-06-18 — **황금핀 제거 + 무료 기업 지도 열람** — 3-tier pins, map intel gating, PUSH_PACKAGE_PRICING updated, 25 tests pass
+
 - 2026-06-18 — **셔틀 노선 근무지 고정 UX** — pinned 근무지 row, split/merge policy, edit page refactor, 18 commute tests pass
 
 - 2026-06-18 — **정류장 표시핀 노출 잠금** — paid map reconcile, delta-only payment, 11 unit tests pass
@@ -106,5 +118,5 @@
 
 ## Verification
 
-- Tests: `commute_route_test` 18 pass; `commute_route_polyline_test` 2 pass
-- Lint: `flutter analyze` on changed commute files — 0 errors
+- Tests: pin tier / map access / visual theme — 25 pass
+- Lint: analyze on changed files — 0 errors

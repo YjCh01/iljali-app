@@ -20,7 +20,7 @@ void main() {
     );
   });
 
-  test('resolves premiumPartner for 100-pack holders', () {
+  test('100-pack buyer without credits stays standard pin tier', () {
     const profile = CorporateMemberProfile(
       companyName: '테스트',
       businessRegistrationNumber: '1112223334',
@@ -32,7 +32,14 @@ void main() {
 
     expect(
       MapPinTierResolver.resolveFromProfile(registeredBy: profile),
-      JobMapPinDisplayTier.premiumPartner,
+      JobMapPinDisplayTier.standard,
+    );
+  });
+
+  test('legacy premiumPartner maps to packageActive', () {
+    expect(
+      JobMapPinDisplayTierX.tryParseLegacy('premiumPartner'),
+      JobMapPinDisplayTier.packageActive,
     );
   });
 }

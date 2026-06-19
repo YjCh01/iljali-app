@@ -4,8 +4,13 @@ import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
+import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_overlay.dart';
+import 'package:map/features/corporate/domain/services/corporate_shuttle_density_loader.dart';
 import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
+import 'package:map/features/corporate/domain/utils/corporate_map_content_access_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_exposure_mini_map.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_map_intel_paywall.dart';
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase.dart';
@@ -27,6 +32,7 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
 
   List<JobMapPin> _allPins = [];
   List<JobMapPin> _ownPins = [];
+  List<CorporateShuttleMapOverlay> _shuttleOverlays = [];
   Set<String> _ownPostIds = {};
   int _ownCount = 0;
   bool _loading = true;
@@ -55,6 +61,12 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
     JobBoardRefresh.consumeIfDirty();
     final pins = await _getPins();
     final posts = await _getPosts();
+    final routeRepo = await CommuteRouteRepository.create();
+    final shuttleOverlays = await CorporateShuttleDensityLoader.load(
+      routeRepo: routeRepo,
+      posts: posts,
+      pins: pins,
+    );
     final companyKey =
         AuthSession.instance.currentUser?.corporateProfile?.companyKey;
 
@@ -72,6 +84,7 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
     setState(() {
       _allPins = pins;
       _ownPins = ownPins;
+      _shuttleOverlays = shuttleOverlays;
       _ownPostIds = ownIds;
       _ownCount = ownActive.length;
       _loading = false;
@@ -92,13 +105,40 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('다른 기업의 채용 공고는 열람할 수 없습니다.'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
-    );
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (CorporateMapContentAccessPolicy.canViewPostContent(
+      viewerProfile: profile,
+      ownPostIds: _ownPostIds,
+      post: pin.post,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${pin.companyName} · ${pin.post.title}'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    showCorporateMapIntelPaywall(context);
+  }
+
+  void _onShuttleStopTap(CorporateShuttleMapOverlay overlay) {
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (CorporateMapContentAccessPolicy.canViewShuttleContent(
+      viewerProfile: profile,
+      routeCompanyKey: overlay.companyKey,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('셔틀 노선 · ${overlay.route.routeName}'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    showCorporateMapIntelPaywall(context);
   }
 
   @override
@@ -171,8 +211,10 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
                         key: ValueKey('exposure_map_$_expanded'),
                         pins: mapPins,
                         ownPostIds: _ownPostIds,
+                        shuttleOverlays: _shuttleOverlays,
                         interactive: _expanded,
                         onPinTap: _expanded ? _onPinTap : null,
+                        onShuttleStopTap: _expanded ? _onShuttleStopTap : null,
                         initialZoom: _expanded ? 12.5 : 12.0,
                       ),
               ),

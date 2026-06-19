@@ -20,6 +20,7 @@ import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
+import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
 import 'package:map/features/corporate/presentation/widgets/select_all_toggle_bar.dart';
 
 class PushTicketUseArgs {
@@ -734,6 +735,8 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
                             centerEditable: false,
                             existingPoints: _mapOverlays(),
                             onCenterChanged: (_) {},
+                            viewportSessionKey:
+                                MapViewportSessionKeys.pushTicketUse,
                           ),
                         ),
                       ),

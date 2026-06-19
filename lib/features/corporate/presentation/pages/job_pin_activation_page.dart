@@ -11,6 +11,7 @@ import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 import 'package:map/features/corporate/presentation/widgets/select_all_toggle_bar.dart';
+import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
 
 class JobPinActivationArgs {
   const JobPinActivationArgs({
@@ -134,9 +135,6 @@ class _JobPinActivationPageState extends State<JobPinActivationPage> {
 
   GeoCoordinate _mapCenter() {
     if (_points.isEmpty) return defaultPushMapCenter();
-    if (_recruitmentPins.isNotEmpty) {
-      return _recruitmentPins.first.coordinate;
-    }
     return _points.first.coordinate;
   }
 
@@ -280,6 +278,9 @@ class _JobPinActivationPageState extends State<JobPinActivationPage> {
                             centerEditable: false,
                             existingPoints: _mapOverlays(),
                             onCenterChanged: (_) {},
+                            maxZoom: 21,
+                            viewportSessionKey:
+                                MapViewportSessionKeys.jobPinActivation,
                           ),
                         ),
                       ),

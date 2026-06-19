@@ -1,0 +1,87 @@
+[
+  {
+    "type": "workspace",
+    "id": "workspace:b60376a7fe22cdbf13fa53a251008cdd",
+    "name": "HYJM",
+    "lastUsedAt": 1781792951699,
+    "workspaceIdentifier": {
+      "id": "b60376a7fe22cdbf13fa53a251008cdd",
+      "uri": {
+        "$mid": 1,
+        "fsPath": "d:\\HYJM",
+        "_sep": 1,
+        "external": "file:///d%3A/HYJM",
+        "path": "/D:/HYJM",
+        "scheme": "file"
+      }
+    }
+  },
+  {
+    "type": "workspace",
+    "id": "workspace:ff396ba4caae55d3f0a279b0286b9f21",
+    "name": "lumi-ai",
+    "lastUsedAt": 1780248295600,
+    "workspaceIdentifier": {
+      "id": "ff396ba4caae55d3f0a279b0286b9f21",
+      "uri": {
+        "$mid": 1,
+        "fsPath": "d:\\lumi-ai",
+        "_sep": 1,
+        "external": "file:///d%3A/lumi-ai",
+        "path": "/D:/lumi-ai",
+        "scheme": "file"
+      }
+    }
+  },
+  {
+    "type": "workspace",
+    "id": "workspace:cd14c440b8ec8dfa70513da36228ba99",
+    "name": "1jari-v2",
+    "lastUsedAt": 1780038966740,
+    "workspaceIdentifier": {
+      "id": "cd14c440b8ec8dfa70513da36228ba99",
+      "uri": {
+        "$mid": 1,
+        "fsPath": "d:\\1jari-v2",
+        "_sep": 1,
+        "external": "file:///d%3A/1jari-v2",
+        "path": "/D:/1jari-v2",
+        "scheme": "file"
+      }
+    }
+  },
+  {
+    "type": "workspace",
+    "id": "workspace:5db58f2af74c60da46322339782efd83",
+    "name": "1jari-admin",
+    "lastUsedAt": 1779962924454,
+    "workspaceIdentifier": {
+      "id": "5db58f2af74c60da46322339782efd83",
+      "uri": {
+        "$mid": 1,
+        "fsPath": "d:\\1jari-admin",
+        "_sep": 1,
+        "external": "file:///d%3A/1jari-admin",
+        "path": "/D:/1jari-admin",
+        "scheme": "file"
+      }
+    }
+  },
+  {
+    "type": "workspace",
+    "id": "workspace:cc095c556477ec81d2f10f0fc17d9fa4",
+    "name": "1jari",
+    "lastUsedAt": 1779775835490,
+    "workspaceIdentifier": {
+      "id": "cc095c556477ec81d2f10f0fc17d9fa4",
+      "uri": {
+        "$mid": 1,
+        "fsPath": "d:\\1jari",
+        "_sep": 1,
+        "external": "file:///d%3A/1jari",
+        "path": "/D:/1jari",
+        "scheme": "file"
+      }
+    }
+  }
+]

@@ -756,7 +756,7 @@ class _CorporateJobPostOptionalServicesPanelState
               ),
               const SizedBox(height: 10),
               _WalletCreditLabel(
-                label: '노출 이용권',
+                label: '일자리 알림핀',
                 count: _exposureCredits,
                 detailLine: _hasExtraPins
                     ? '등록 $_recruitmentPinCount핀 · 노출 $_activatedJobPinCount핀'
@@ -774,12 +774,19 @@ class _CorporateJobPostOptionalServicesPanelState
                   onEdit: widget.workplaceReady
                       ? widget.onConfigurePins
                       : null,
+                ),
+              if (widget.workplaceReady)
+                Padding(
+                  padding: EdgeInsets.only(top: _hasExtraPins ? 8 : 0),
+                  child: _ServiceOutlineButton(
+                    onPressed: widget.onConfigurePins,
+                    icon: Icons.add_location_alt_outlined,
+                    label: '일자리 알림핀 추가',
+                  ),
                 )
-              else
+              else if (!_hasExtraPins)
                 _ServiceOutlineButton(
-                  onPressed: widget.workplaceReady
-                      ? widget.onConfigurePins
-                      : null,
+                  onPressed: null,
                   icon: Icons.add_location_alt_outlined,
                   label: '일자리 알림핀 추가',
                 ),
@@ -868,7 +875,7 @@ class _CorporateJobPostOptionalServicesPanelState
               ),
               const SizedBox(height: 10),
               _WalletCreditLabel(
-                label: '노출 이용권',
+                label: '정류장 표시핀',
                 count: _exposureCredits,
                 detailLine: _hasShuttleRoute
                     ? '등록 $_shuttleStopCount핀 · 노출 $_shuttleExposedStopCount핀'
@@ -1182,7 +1189,7 @@ class _ConfiguredServiceRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Icon(Icons.edit_outlined, size: 20),
+          child: const Icon(Icons.settings_outlined, size: 20),
         ),
       ],
     );

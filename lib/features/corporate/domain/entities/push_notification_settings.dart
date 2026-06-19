@@ -108,6 +108,7 @@ class PushNotificationBasePoint {
     this.exposureActivated = false,
     this.activationCoordinate,
     this.exposurePaidAt,
+    this.pinColorHex,
   });
 
   final String id;
@@ -127,6 +128,9 @@ class PushNotificationBasePoint {
   /// 노출 결제 시각 — D+1 23:59:59까지 잠금
   final DateTime? exposurePaidAt;
 
+  /// 일자리 알림핀 색상 (#RRGGBB) — 미설정 시 연보라
+  final String? pinColorHex;
+
   int get radiusMeters => radiusTier.radiusMeters;
 
   PushNotificationBasePoint copyWith({
@@ -140,8 +144,10 @@ class PushNotificationBasePoint {
     bool? exposureActivated,
     GeoCoordinate? activationCoordinate,
     DateTime? exposurePaidAt,
+    String? pinColorHex,
     bool clearActivationCoordinate = false,
     bool clearExposurePaidAt = false,
+    bool clearPinColorHex = false,
   }) {
     return PushNotificationBasePoint(
       id: id ?? this.id,
@@ -157,6 +163,8 @@ class PushNotificationBasePoint {
           : activationCoordinate ?? this.activationCoordinate,
       exposurePaidAt:
           clearExposurePaidAt ? null : exposurePaidAt ?? this.exposurePaidAt,
+      pinColorHex:
+          clearPinColorHex ? null : pinColorHex ?? this.pinColorHex,
     );
   }
 }

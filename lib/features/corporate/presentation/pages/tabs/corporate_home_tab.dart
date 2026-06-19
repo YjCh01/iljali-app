@@ -7,11 +7,14 @@ import 'package:map/core/widgets/push_wallet_bonus_feedback.dart';
 import 'package:map/features/corporate/data/datasources/corporate_dashboard_local_data_source.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/domain/usecases/get_corporate_dashboard_summary_usecase.dart';
-import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
-import 'package:map/features/corporate/presentation/widgets/corporate_job_post_preview_panel.dart';
+import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/features/job_seeker/presentation/pages/job_post_detail_page.dart';
+import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_callout_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_home_feature_highlights.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_home_map_background.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_map_intel_paywall.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_stat_card.dart';
+import 'package:map/features/corporate/domain/utils/corporate_map_content_access_policy.dart';
 
 /// 기업회원 홈 — 지도 전체 + 당근형 드래그 시트
 class CorporateHomeTab extends StatefulWidget {
@@ -46,7 +49,7 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
 
   CorporateDashboardSummary? _summary;
   bool _loading = true;
-  CorporateJobPost? _previewPost;
+  JobMapPin? _calloutPin;
 
   @override
   void initState() {
@@ -63,20 +66,48 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
     if (mounted) _load();
   }
 
-  void _closePreview() {
-    if (_previewPost == null) return;
-    setState(() => _previewPost = null);
+  void _closeCallout() {
+    if (_calloutPin == null) return;
+    setState(() => _calloutPin = null);
   }
 
-  void _onSelectedPostChanged(CorporateJobPost? post) {
-    setState(() => _previewPost = post);
-    if (post != null && _sheetController.isAttached) {
+  void _onSelectedPinChanged(JobMapPin? pin) {
+    setState(() => _calloutPin = pin);
+    if (pin != null && _sheetController.isAttached) {
       _sheetController.animateTo(
         0.18,
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOutCubic,
       );
     }
+  }
+
+  void _openDetailPreview(JobMapPin pin) {
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (!CorporateMapContentAccessPolicy.canViewPostContent(
+      viewerProfile: profile,
+      ownPostIds: _isOwnPin(pin) ? {pin.post.id} : const {},
+      post: pin.post,
+    )) {
+      showCorporateMapIntelPaywall(context);
+      return;
+    }
+    final isOwnPreview = _isOwnPin(pin);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => JobPostDetailPage(
+          pin: pin,
+          employerPreview: isOwnPreview,
+        ),
+      ),
+    );
+  }
+
+  bool _isOwnPin(JobMapPin pin) {
+    final viewerKey =
+        AuthSession.instance.currentUser?.corporateProfile?.companyKey;
+    final ownerKey = pin.post.registeredBy?.companyKey;
+    return viewerKey != null && ownerKey != null && viewerKey == ownerKey;
   }
 
   @override
@@ -200,18 +231,20 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
       children: [
         CorporateHomeMapBackground(
           focusPostId: widget.focusPostId,
-          selectedPostId: _previewPost?.id,
-          onSelectedPostChanged: _onSelectedPostChanged,
+          selectedPostId: _calloutPin?.post.id,
+          onSelectedPinChanged: _onSelectedPinChanged,
           onFocusConsumed: widget.onFocusConsumed,
         ),
-        if (_previewPost != null)
+        if (_calloutPin != null)
           Positioned(
             left: 0,
             right: 0,
-            bottom: 0,
-            child: _MapPreviewOverlay(
-              post: _previewPost!,
-              onClose: _closePreview,
+            bottom: MediaQuery.sizeOf(context).height * _sheetSnapSizes.first + 8,
+            child: JobMapPinCalloutCard(
+              pin: _calloutPin!,
+              employerPreview: _isOwnPin(_calloutPin!),
+              onClose: _closeCallout,
+              onViewDetail: () => _openDetailPreview(_calloutPin!),
             ),
           ),
         DraggableScrollableSheet(
@@ -374,50 +407,6 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
           },
         ),
       ],
-    );
-  }
-}
-
-class _MapPreviewOverlay extends StatelessWidget {
-  const _MapPreviewOverlay({
-    required this.post,
-    required this.onClose,
-  });
-
-  final CorporateJobPost post;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.48;
-
-    return SafeArea(
-      top: false,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.14),
-                blurRadius: 16,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: CorporateJobPostPreviewPanel(
-              post: post,
-              onClose: onClose,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

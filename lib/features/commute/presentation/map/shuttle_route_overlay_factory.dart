@@ -15,6 +15,8 @@ abstract final class ShuttleRouteOverlayFactory {
   static Set<NAddableOverlay> build(
     CommuteRoute route, {
     GeoCoordinate? workplace,
+    void Function(CommuteRoute route)? onStopTap,
+    bool showStopCaptions = true,
   }) {
     final points = CommuteRoutePolyline.pathIncludingWorkplace(
       route: route,
@@ -41,24 +43,28 @@ abstract final class ShuttleRouteOverlayFactory {
       final timeSuffix = stop.departureTime == null
           ? ''
           : ' · ${stop.departureTime}';
-      overlays.add(
-        NMarker(
-          id: '$stopIdPrefix${stop.id}',
-          position: NLatLng(
-            stop.coordinate.latitude,
-            stop.coordinate.longitude,
-          ),
-          iconTintColor: color,
-          size: const Size(14, 14),
-          caption: NOverlayCaption(
-            text: '${stop.label}$timeSuffix',
-            color: Colors.white,
-            haloColor: color.withValues(alpha: 0.85),
-            textSize: 11,
-          ),
-          isHideCollidedCaptions: true,
+      final marker = NMarker(
+        id: '$stopIdPrefix${stop.id}',
+        position: NLatLng(
+          stop.coordinate.latitude,
+          stop.coordinate.longitude,
         ),
+        iconTintColor: color,
+        size: const Size(14, 14),
+        caption: showStopCaptions
+            ? NOverlayCaption(
+                text: '${stop.label}$timeSuffix',
+                color: Colors.white,
+                haloColor: color.withValues(alpha: 0.85),
+                textSize: 11,
+              )
+            : null,
+        isHideCollidedCaptions: true,
       );
+      if (onStopTap != null) {
+        marker.setOnTapListener((_) => onStopTap(route));
+      }
+      overlays.add(marker);
     }
 
     if (workplace != null) {

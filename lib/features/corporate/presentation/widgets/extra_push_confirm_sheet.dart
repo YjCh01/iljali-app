@@ -13,10 +13,12 @@ import 'package:map/features/corporate/domain/entities/exposure_activation_credi
 import 'package:map/features/corporate/domain/services/exposure_activation_service.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/domain/utils/exposure_slot_policy.dart';
+import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/exposure_zone_add_row.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
+import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
 
 const _kZoneListMaxHeight = 200.0;
 const _kMapHeightExpanded = 220.0;
@@ -120,11 +122,12 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
     if (settings != null && settings.basePoints.isNotEmpty) {
       _points = List.from(settings.basePoints);
     } else {
+      final workplace = JobPostWorkplaceResolver.resolve(widget.post);
       _points = [
         PushNotificationBasePoint(
           id: 'workplace',
-          coordinate: defaultPushMapCenter(),
-          addressLabel: widget.post.warehouseName,
+          coordinate: workplace.coordinate ?? defaultPushMapCenter(),
+          addressLabel: workplace.roadAddress,
           radiusTier: PushRadiusTier.standardFree1km,
           isPrimary: true,
         ),
@@ -741,6 +744,9 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
                   onCenterChanged: (coordinate) {
                     setState(() => _center = coordinate);
                   },
+                  maxZoom: 21,
+                  viewportSessionKey:
+                      '${MapViewportSessionKeys.extraPushConfirm}_$_activeIndex',
                 ),
               ),
               ),

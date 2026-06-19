@@ -7,11 +7,14 @@ import 'package:map/core/geo/geo_coordinate.dart';
 
 import 'package:map/core/geo/map_viewport_bounds.dart';
 
+import 'package:map/core/geo/map_user_location_service.dart';
 import 'package:map/core/utils/naver_map_platform.dart';
+import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
+import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
 
-import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
+
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
-
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 
 import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase.dart';
@@ -24,12 +27,14 @@ import 'package:map/features/job_seeker/presentation/map/job_map_marker_factory.
 
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/presentation/map/shuttle_route_overlay_factory.dart';
+import 'package:map/features/job_seeker/presentation/map/job_recruitment_map_pin.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_seeker_mock_map.dart';
 
 import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
 
 import 'package:map/features/map_dashboard/presentation/map/warehouse_cluster_options_factory.dart';
 
+import 'package:map/features/map_dashboard/presentation/widgets/map_current_location_button.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_search_area_button.dart';
 
 
@@ -54,6 +59,10 @@ class JobSeekerMapView extends StatefulWidget {
     this.overlay,
     this.shuttleRoute,
     this.shuttleWorkplace,
+    this.recruitmentPins = const [],
+    this.selectedRecruitmentPin,
+    this.onRecruitmentPinTap,
+    this.recruitmentLinkPolylines = const [],
 
     GetJobMapPinsUseCase? getPins,
 
@@ -77,6 +86,14 @@ class JobSeekerMapView extends StatefulWidget {
   final CommuteRoute? shuttleRoute;
 
   final GeoCoordinate? shuttleWorkplace;
+
+  final List<JobRecruitmentMapPin> recruitmentPins;
+
+  final JobRecruitmentMapPin? selectedRecruitmentPin;
+
+  final ValueChanged<JobRecruitmentMapPin>? onRecruitmentPinTap;
+
+  final List<PushRadiusMapPolyline> recruitmentLinkPolylines;
 
   final GetJobMapPinsUseCase? _getPins;
 
@@ -167,6 +184,12 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
       _syncMapOverlays();
 
+    }
+
+    if (oldWidget.recruitmentPins != widget.recruitmentPins ||
+        oldWidget.selectedRecruitmentPin != widget.selectedRecruitmentPin ||
+        oldWidget.recruitmentLinkPolylines != widget.recruitmentLinkPolylines) {
+      _syncMapOverlays();
     }
 
   }
@@ -350,6 +373,47 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
     }
 
+    for (final pin in widget.recruitmentPins) {
+      final tint = pin.point.resolvedPinColor;
+      overlays.add(
+        NMarker(
+          id: 'recruitment_pin_${pin.post.id}_${pin.index}',
+          position: NLatLng(
+            pin.coordinate.latitude,
+            pin.coordinate.longitude,
+          ),
+          iconTintColor: tint,
+          size: const Size(30, 30),
+          caption: NOverlayCaption(
+            text: ExposurePointLabels.title(pin.index),
+            color: Colors.white,
+            haloColor: tint.withValues(alpha: 0.85),
+            textSize: 11,
+          ),
+        )..setOnTapListener((_) {
+            widget.onRecruitmentPinTap?.call(pin);
+          }),
+      );
+    }
+
+    for (var i = 0; i < widget.recruitmentLinkPolylines.length; i++) {
+      final line = widget.recruitmentLinkPolylines[i];
+      if (line.points.length < 2) continue;
+      overlays.add(
+        NPathOverlay(
+          id: 'recruitment_link_$i',
+          coords: [
+            for (final p in line.points)
+              NLatLng(p.latitude, p.longitude),
+          ],
+          width: 4,
+          color: line.color,
+          outlineColor: Colors.white,
+          outlineWidth: 1,
+        ),
+      );
+    }
+
     if (overlays.isNotEmpty) {
 
       controller.addOverlayAll(overlays);
@@ -459,6 +523,8 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
             ),
 
+            locationButtonEnable: false,
+
           ),
 
           clusterOptions: WarehouseClusterOptionsFactory.create(),
@@ -499,6 +565,8 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
           ),
 
+        const MapCurrentLocationButton(),
+
       ],
 
     );
@@ -513,7 +581,7 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
     MapCameraHolder.instance.bind(controller);
 
-
+    await MapUserLocationService.prepareForMap();
 
     final viewport = await MapCameraHolder.instance.getViewportBounds();
 

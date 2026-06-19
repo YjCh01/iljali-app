@@ -48,6 +48,31 @@ void main() {
     );
   });
 
+  test('configure preview remaining add slots ignores wallet credits', () {
+    const cap = 10;
+    expect(
+      PushWalletCreditPolicy.configurePreviewRemainingAddSlots(
+        pointsLength: 1,
+        previewRecruitmentPinCap: cap,
+      ),
+      cap,
+    );
+    expect(
+      PushWalletCreditPolicy.configurePreviewRemainingAddSlots(
+        pointsLength: 6,
+        previewRecruitmentPinCap: cap,
+      ),
+      5,
+    );
+    expect(
+      PushWalletCreditPolicy.configurePreviewRemainingAddSlots(
+        pointsLength: 11,
+        previewRecruitmentPinCap: cap,
+      ),
+      0,
+    );
+  });
+
   test('configure mode max points uses wallet credits and existing zones', () {
     const walletWithZones = EmployerPushWallet(packageCredits: 0);
     expect(

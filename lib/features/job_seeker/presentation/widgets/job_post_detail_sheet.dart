@@ -34,6 +34,8 @@ class JobPostDetailSheet extends StatefulWidget {
     this.onVaultChanged,
     this.shuttleRoute,
     this.onShowRouteOnMap,
+    this.embeddedInPage = false,
+    this.onBookmarkStateChanged,
   });
 
   final JobMapPin pin;
@@ -43,14 +45,23 @@ class JobPostDetailSheet extends StatefulWidget {
   final VoidCallback? onVaultChanged;
   final CommuteRoute? shuttleRoute;
   final VoidCallback? onShowRouteOnMap;
+  final bool embeddedInPage;
+  final ValueChanged<bool>? onBookmarkStateChanged;
 
   @override
-  State<JobPostDetailSheet> createState() => _JobPostDetailSheetState();
+  State<JobPostDetailSheet> createState() => JobPostDetailSheetState();
 }
 
-class _JobPostDetailSheetState extends State<JobPostDetailSheet> {
+class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   bool _isBookmarked = false;
   bool _vaultBusy = false;
+
+  bool get isBookmarked => _isBookmarked;
+  bool get vaultBusy => _vaultBusy;
+
+  Future<void> applyFromExternal() => _apply();
+
+  Future<void> toggleBookmarkFromExternal() => _toggleBookmark();
   ShuttleBookingSelection? _pendingShuttleSelection;
 
   @override
@@ -66,6 +77,7 @@ class _JobPostDetailSheetState extends State<JobPostDetailSheet> {
     final saved = await repo.isBookmarked(widget.pin.post.id);
     if (!mounted) return;
     setState(() => _isBookmarked = saved);
+    widget.onBookmarkStateChanged?.call(saved);
     widget.onVaultChanged?.call();
   }
 
@@ -78,6 +90,7 @@ class _JobPostDetailSheetState extends State<JobPostDetailSheet> {
         await repo.removeBookmark(widget.pin.post.id);
         if (!mounted) return;
         setState(() => _isBookmarked = false);
+        widget.onBookmarkStateChanged?.call(false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('보관함에서 삭제했습니다.')),
         );
@@ -87,6 +100,7 @@ class _JobPostDetailSheetState extends State<JobPostDetailSheet> {
         await repo.saveBookmark(widget.pin, folderId: folderId);
         if (!mounted) return;
         setState(() => _isBookmarked = true);
+        widget.onBookmarkStateChanged?.call(true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('보관함에 저장했습니다.')),
         );
@@ -213,37 +227,42 @@ class _JobPostDetailSheetState extends State<JobPostDetailSheet> {
     return Material(
       color: Colors.transparent,
       child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x337C5CFC),
-              blurRadius: 24,
-              offset: Offset(0, -4),
-            ),
-          ],
-        ),
+        decoration: widget.embeddedInPage
+            ? null
+            : BoxDecoration(
+                color: AppColors.surface,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x337C5CFC),
+                    blurRadius: 24,
+                    offset: Offset(0, -4),
+                  ),
+                ],
+              ),
         child: SafeArea(
           top: false,
-          minimum: const EdgeInsets.only(bottom: 8),
+          minimum: EdgeInsets.only(bottom: widget.embeddedInPage ? 0 : 8),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+            padding: EdgeInsets.fromLTRB(20, widget.embeddedInPage ? 16 : 10, 20, 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(2),
+                if (!widget.embeddedInPage) ...[
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 14),
+                  const SizedBox(height: 14),
+                ],
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -378,7 +397,7 @@ class _JobPostDetailSheetState extends State<JobPostDetailSheet> {
                     label: const Text('길찾기'),
                   ),
                 ),
-                if (widget.vaultRepo != null) ...[
+                if (widget.vaultRepo != null && !widget.embeddedInPage) ...[
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
@@ -407,50 +426,52 @@ class _JobPostDetailSheetState extends State<JobPostDetailSheet> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: widget.onClose,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textPrimary,
-                          side: BorderSide(
-                            color:
-                                AppColors.primaryLight.withValues(alpha: 0.6),
+                if (!widget.embeddedInPage) ...[
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: widget.onClose,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textPrimary,
+                            side: BorderSide(
+                              color:
+                                  AppColors.primaryLight.withValues(alpha: 0.6),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                          child: const Text(
+                            '닫기',
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
-                        ),
-                        child: const Text(
-                          '닫기',
-                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: _apply,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _apply,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            '지원하기',
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
-                        child: const Text(
-                          '지원하기',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
