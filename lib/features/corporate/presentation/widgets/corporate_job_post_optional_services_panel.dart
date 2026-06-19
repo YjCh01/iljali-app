@@ -1182,7 +1182,7 @@ class _ConfiguredServiceRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Icon(Icons.edit_outlined, size: 20),
+          child: const Icon(Icons.settings_outlined, size: 20),
         ),
       ],
     );

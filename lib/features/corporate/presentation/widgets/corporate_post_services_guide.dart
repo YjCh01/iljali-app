@@ -4,7 +4,7 @@ import 'package:map/features/corporate/domain/entities/push_package_catalog.dart
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/features/corporate/presentation/widgets/urgent_hire_brand.dart';
 
-/// 공고 탭 하단 — 통근버스·알림핀·급구알림 안내 (금액 없음, 탭 후 상세)
+/// 공고 탭 하단 — 알림핀·통근버스·급구알림 안내 (금액 없음, 탭 후 상세)
 class CorporatePostServicesGuide extends StatelessWidget {
   const CorporatePostServicesGuide({super.key});
 
@@ -57,21 +57,21 @@ class CorporatePostServicesGuide extends StatelessWidget {
           children: [
             Expanded(
               child: _GuideTile(
-                icon: Icons.directions_bus_filled_outlined,
-                iconColor: AppColors.primary,
-                title: '통근버스',
-                subtitle: '노선·정류장 등록',
-                onTap: () => _openShuttle(context),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _GuideTile(
                 icon: Icons.push_pin_outlined,
                 iconColor: AppColors.primary,
                 title: '알림핀',
                 subtitle: '지도 거점 노출',
                 onTap: () => _openPinShop(context),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _GuideTile(
+                icon: Icons.directions_bus_filled_outlined,
+                iconColor: AppColors.primary,
+                title: '통근버스',
+                subtitle: '노선·정류장 등록',
+                onTap: () => _openShuttle(context),
               ),
             ),
             const SizedBox(width: 8),
