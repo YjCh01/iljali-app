@@ -127,6 +127,12 @@ class AdminOpsApiClient {
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<Map<String, dynamic>> getStats() async =>
+      _decode(await _client.get(
+        Uri.parse('$_baseUrl/v1/admin/ops/stats'),
+        headers: _headers,
+      ));
+
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body,

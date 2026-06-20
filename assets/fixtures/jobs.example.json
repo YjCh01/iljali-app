@@ -1,0 +1,28 @@
+[
+  {
+    "id": "qc_post_real_001",
+    "title": "[QC] 물류센터 야간 보조",
+    "company_name": "테스트기업 알파",
+    "company_key": "1000000001",
+    "warehouse_name": "경기도 이천시 마장면",
+    "hourly_wage": "12,500원",
+    "work_schedule": "22:00-06:00",
+    "summary": "QC fixture — 실기업 공고 형식 샘플",
+    "status": "recruiting",
+    "entitlements": {
+      "recruitment_pin_active": true,
+      "map_pin_tier": "packageActive"
+    }
+  },
+  {
+    "id": "qc_post_real_002",
+    "title": "[QC] 카페 홀서빙",
+    "company_name": "테스트기업 베타",
+    "company_key": "1000000002",
+    "warehouse_name": "서울특별시 강남구 역삼동",
+    "hourly_wage": "10,500원",
+    "work_schedule": "10:00-18:00",
+    "summary": "QC fixture — 2번째 거래처 공고 샘플",
+    "status": "recruiting"
+  }
+]

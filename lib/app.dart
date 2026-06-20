@@ -5,7 +5,7 @@ import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/core/theme/app_theme.dart';
 import 'package:map/features/admin/presentation/pages/admin_compliance_dashboard_page.dart';
-import 'package:map/features/admin/presentation/pages/admin_ops_page.dart';
+import 'package:map/features/admin/presentation/pages/admin_web_shell_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/login_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/member_login_gateway_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/signup_page.dart';
@@ -314,10 +314,15 @@ class MapApp extends StatelessWidget {
           settings: settings,
           builder: (_) => const AdminComplianceDashboardPage(),
         );
+      case AppRoutes.adminHome:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const AdminWebShellPage(),
+        );
       case AppRoutes.adminOps:
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => const AdminOpsPage(),
+          builder: (_) => const AdminWebShellPage(),
         );
       case AppRoutes.corporateBranchManagement:
         return MaterialPageRoute<void>(

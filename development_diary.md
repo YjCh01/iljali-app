@@ -1,5 +1,13 @@
 # Development Diary
 
+## 2026-06-21 — Admin Web Console Phase A
+
+- **AdminWebShellPage** — 좌측 네비 + 넓은 화면(900px+) 레일 레이아웃, `/admin` 진입
+- **패널 6개**: 대시보드(stats), 기업·이용권, 회원·제재, 공고·핀, QC 시드, 감사 로그
+- **서버**: `GET /v1/admin/ops/stats` — seekers/jobs/applications/suspended counts
+- **실행**: `run_admin.sh` + `Admin 실행.command` — port 8081, `ADMIN_ENTRY=true`
+- **Mac-only dev** 기준; 구인자 앱과 동일 repo `features/admin/`
+
 ## 2026-06-21 — 웹 NAVER 지도 로딩 안정화
 
 - **원인**: `run_qc.sh`가 Naver 키 미전달; index.html·Dart 이중 script 로드; 실패 시 무한 스피너

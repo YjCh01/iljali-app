@@ -49,9 +49,11 @@ Future<void> main() async {
 
   runApp(
     MapApp(
-      initialRoute: AuthSession.instance.isLoggedIn
-          ? AppRoutes.home
-          : AppRoutes.memberGateway,
+      initialRoute: EnvConfig.adminEntry
+          ? AppRoutes.adminHome
+          : AuthSession.instance.isLoggedIn
+              ? AppRoutes.home
+              : AppRoutes.memberGateway,
     ),
   );
 }

@@ -206,3 +206,35 @@ def ops_audit(
     _: str = Depends(require_admin_api_key),
 ):
     return {"logs": list_audit_logs(db, limit=limit)}
+
+
+@router.get("/stats")
+def ops_stats(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    from app.job_sync_models import JobApplicationRow, JobPostRow
+
+    seekers = (
+        db.query(QcMemberRow).filter(QcMemberRow.member_type == "seeker").count()
+    )
+    corporates = (
+        db.query(QcMemberRow).filter(QcMemberRow.member_type == "corporate").count()
+    )
+    suspended = (
+        db.query(QcMemberRow)
+        .filter(
+            (QcMemberRow.is_suspended.is_(True))
+            | (QcMemberRow.is_permanently_banned.is_(True))
+        )
+        .count()
+    )
+    jobs = db.query(JobPostRow).count()
+    applications = db.query(JobApplicationRow).count()
+    return {
+        "seekers": seekers,
+        "corporates": corporates,
+        "suspended_members": suspended,
+        "job_posts": jobs,
+        "applications": applications,
+    }

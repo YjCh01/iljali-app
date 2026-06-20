@@ -2,14 +2,15 @@
 
 ## Current Task
 
-- **QC·Admin Ops MVP** — 완료; 다음: PG E2E / full job JSON sync
+- **Admin Web Console Phase A** — 완료; 다음: 구직자 핵심 UX (Phase B)
 
 ## Backlog (priority order)
 
-1. [ ] **QC DB 스냅샷** — export/import SQL for team-shared baseline
-2. [ ] **공고 full JSON sync** — CorporateJobPost 전체 필드 server payload
-3. [ ] **Feature flag 매트릭스** — env ↔ mock/live 경로
-4. [ ] **실 PG E2E** — Toss sandbox + webhook
+1. [ ] **구직자 핵심 4화면** — 지도·상세·지원·채팅·내 지원
+2. [ ] **AdaptiveSheet (웹 우측 패널)** — 결제·알림핀·정류장 핵심만
+3. [ ] **QC DB 스냅샷** — export/import SQL for team-shared baseline
+4. [ ] **공고 full JSON sync** — CorporateJobPost 전체 필드 server payload
+5. [ ] **실 PG E2E** — Toss sandbox + webhook
 5. [ ] **급여지급일 서버/API** — monthly rule 필드 영속화
 6. [ ] **카카오 알림톡 실연동** — notifications stub → Bizmessage
 7. [ ] **근태 달력** — table_calendar / geofence MVP 이후
@@ -22,6 +23,8 @@
 - `workflow_state.md` updated
 
 ## Progress
+
+- [x] **Admin Web Console Phase A** — shell, 6 panels, stats API, run_admin.sh, Admin 실행.command
 
 - [x] **QC·Admin Ops MVP** — admin_ops API, sync bootstrap, AdminOpsPage, seeker 1000 seed, run_qc, QC_MODE mock PG; flutter analyze 0 errors
 

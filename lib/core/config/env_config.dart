@@ -86,6 +86,12 @@ abstract final class EnvConfig {
     defaultValue: 'qc-admin-dev-key',
   );
 
+  /// `run_admin.sh` — 앱 시작 시 /admin 콘솔으로 바로 진입
+  static const bool adminEntry = bool.fromEnvironment(
+    'ADMIN_ENTRY',
+    defaultValue: false,
+  );
+
   static bool get isAdminOpsConfigured =>
       adminApiKey.isNotEmpty && adminApiKey != 'YOUR_ADMIN_API_KEY';
 }
