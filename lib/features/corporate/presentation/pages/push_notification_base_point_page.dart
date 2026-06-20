@@ -433,15 +433,25 @@ class _PushNotificationBasePointPageState
           : Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1) 지도 + 반경 슬라이더 — 항상 최상단
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  PushRadiusMapPicker(
+          // 1) 지도 + 반경 슬라이더 — 화면 높이에 맞게 (웹 와이드에서 overflow 방지)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final screen = MediaQuery.sizeOf(context);
+              final topInset =
+                  MediaQuery.paddingOf(context).top + kToolbarHeight;
+              final bodyHeight = screen.height - topInset;
+              final mapSide = math
+                  .min(constraints.maxWidth, math.min(bodyHeight * 0.42, 400))
+                  .clamp(220.0, 400.0)
+                  .toDouble();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: SizedBox(
+                  height: mapSide,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      PushRadiusMapPicker(
                     key: ValueKey(
                       'map_${_activePointIndex}_${_points.length}_'
                       '${_points.map((p) => p.id).join('-')}',
@@ -467,9 +477,11 @@ class _PushNotificationBasePointPageState
                       _points[_activePointIndex].id,
                     ),
                   ),
-                ],
-              ),
-            ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
           Expanded(
             child: SingleChildScrollView(

@@ -2,6 +2,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+# shellcheck source=scripts/naver_flutter_defines.sh
+source "scripts/naver_flutter_defines.sh"
+
 WEB_PORT=8080
 
 echo
@@ -38,6 +41,9 @@ validate_naver_id() {
 
 free_port
 
+read_naver_id() { _naver_read_id; }
+validate_naver_id() { _naver_valid_id; }
+
 NAVER_DEFINE=""
 WEB_DEFINE="--web-define=NAVER_MAP_NCP_KEY=unset"
 
@@ -66,11 +72,7 @@ if ! validate_naver_id; then
 fi
 
 if validate_naver_id; then
-  echo "[OK] Client ID: ${NAVER_ID:0:4}****"
-  mkdir -p web
-  cp -f "naver_map_client_id.txt" "web/naver_map_client_id.txt"
-  NAVER_DEFINE="--dart-define=NAVER_MAP_CLIENT_ID=${NAVER_ID}"
-  WEB_DEFINE="--web-define=NAVER_MAP_NCP_KEY=${NAVER_ID}"
+  naver_sync_flutter_defines || true
   echo
 fi
 

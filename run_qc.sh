@@ -2,6 +2,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+# shellcheck source=scripts/naver_flutter_defines.sh
+source "scripts/naver_flutter_defines.sh"
+
 WEB_PORT=8080
 API_PORT=8000
 ADMIN_KEY=qc-admin-dev-key
@@ -50,8 +53,12 @@ sleep 2
 echo "[3/4] flutter pub get..."
 flutter pub get
 
+naver_sync_flutter_defines || true
+
 echo "[4/4] Chrome QC..."
+# shellcheck disable=SC2086
 flutter run -d chrome --web-hostname=localhost --web-port="${WEB_PORT}" \
   --dart-define=COMPLIANCE_API_URL="http://127.0.0.1:${API_PORT}" \
   --dart-define=QC_MODE=true \
-  --dart-define=ADMIN_API_KEY="${ADMIN_KEY}"
+  --dart-define=ADMIN_API_KEY="${ADMIN_KEY}" \
+  ${WEB_DEFINE} ${NAVER_DEFINE}

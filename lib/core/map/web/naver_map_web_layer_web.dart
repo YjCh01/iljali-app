@@ -9,24 +9,39 @@ Future<void>? _scriptLoadFuture;
 String? _loadedClientId;
 String? _loadedAuthParam;
 
-Future<void> ensureNaverMapsScriptLoaded(String clientId) {
+Future<void> ensureNaverMapsScriptLoaded(String clientId) async {
   final trimmed = clientId.trim();
   if (trimmed.isEmpty) {
-    return Future.error(StateError('NAVER_MAP_CLIENT_ID is empty'));
+    throw StateError('NAVER_MAP_CLIENT_ID is empty');
   }
   if (_scriptLoadFuture != null &&
       _loadedClientId == trimmed &&
       _loadedAuthParam != null) {
-    return _scriptLoadFuture!;
+    await _scriptLoadFuture!;
+    return;
   }
   _loadedClientId = trimmed;
   _loadedAuthParam = null;
   _scriptLoadFuture = _loadScript(trimmed);
-  return _scriptLoadFuture!;
+  try {
+    await _scriptLoadFuture!.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => throw Exception(
+        'NAVER Maps 로드 시간 초과 — ./run_web.sh 또는 ./run_qc.sh 로 다시 실행',
+      ),
+    );
+  } on Object {
+    _scriptLoadFuture = null;
+    _loadedClientId = null;
+    _loadedAuthParam = null;
+    rethrow;
+  }
 }
 
 void _removeExistingNaverScripts() {
-  for (final node in html.document.querySelectorAll('script[data-iljari-naver-map]')) {
+  for (final node in html.document.querySelectorAll(
+    'script[data-iljari-naver-map], script[data-iljari-naver-bootstrap]',
+  )) {
     node.remove();
   }
   js_util.setProperty(html.window, 'naver', null);
@@ -34,6 +49,7 @@ void _removeExistingNaverScripts() {
 
 Future<void> _waitForNaverMapsReady({
   Duration timeout = const Duration(seconds: 20),
+  bool throwOnTimeout = false,
 }) async {
   if (_isNaverReady()) return;
   final deadline = DateTime.now().add(timeout);
@@ -41,18 +57,29 @@ Future<void> _waitForNaverMapsReady({
     if (_isNaverReady()) return;
     await Future<void>.delayed(const Duration(milliseconds: 50));
   }
+  if (throwOnTimeout && !_isNaverReady()) {
+    throw Exception('NAVER Maps 준비 시간 초과 (${timeout.inSeconds}s)');
+  }
 }
 
 Future<void> _loadScript(String clientId) async {
-  await _waitForNaverMapsReady(timeout: const Duration(seconds: 3));
-  if (_isNaverReady()) return;
+  // index.html bootstrap (run_web/qc.sh 가 web-define 으로 미리 주입)
+  await _waitForNaverMapsReady(timeout: const Duration(seconds: 12));
+  if (_isNaverReady()) {
+    _loadedAuthParam = 'bootstrap';
+    return;
+  }
 
   Object? lastError;
   for (final param in ['ncpKeyId', 'ncpClientId']) {
     try {
+      _removeExistingNaverScripts();
       await _loadScriptOnce(clientId, param);
       _loadedAuthParam = param;
-      await _waitForNaverMapsReady();
+      await _waitForNaverMapsReady(
+        timeout: const Duration(seconds: 12),
+        throwOnTimeout: true,
+      );
       if (_isNaverReady()) return;
     } on Object catch (error) {
       lastError = error;
@@ -75,10 +102,10 @@ Future<void> _loadScriptOnce(String clientId, String authParam) {
   js_util.setProperty(
     html.window,
     'navermap_authFailure',
-    js_util.allowInterop(() {
+    js_util.allowInterop((Object? error) {
       if (!completer.isCompleted) {
         completer.completeError(
-          Exception('NAVER Maps auth failed ($authParam)'),
+          Exception('NAVER Maps auth failed ($authParam): $error'),
         );
       }
     }),
@@ -87,7 +114,7 @@ Future<void> _loadScriptOnce(String clientId, String authParam) {
   js_util.setProperty(
     html.window,
     callbackName,
-    js_util.allowInterop((_) {
+    js_util.allowInterop((Object? _) {
       if (!completer.isCompleted) completer.complete();
     }),
   );
@@ -103,7 +130,13 @@ Future<void> _loadScriptOnce(String clientId, String authParam) {
     }
   });
   html.document.head!.append(script);
-  return completer.future;
+  return completer.future.timeout(
+    const Duration(seconds: 15),
+    onTimeout: () => throw Exception(
+      'NAVER Maps callback timeout ($authParam) — '
+      'NCP Web URL에 ${html.window.location.origin} 등록 확인',
+    ),
+  );
 }
 
 bool _isNaverReady() {
@@ -526,7 +559,12 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
 
   Future<void> _initMap(html.DivElement element) async {
     try {
-      await ensureNaverMapsScriptLoaded(widget.clientId);
+      await ensureNaverMapsScriptLoaded(widget.clientId).timeout(
+        const Duration(seconds: 28),
+        onTimeout: () => throw Exception(
+          'NAVER 지도 초기화 시간 초과 — 터미널에서 q 후 ./run_web.sh 재실행',
+        ),
+      );
       if (!mounted) return;
 
       await _waitForElementLayout(element);
@@ -552,12 +590,13 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
       js_util.callMethod(eventNs, 'addListener', [
         _map,
         'idle',
-        js_util.allowInterop((_) => _handleIdle()),
+        js_util.allowInterop((Object? _) => _handleIdle()),
       ]);
       js_util.callMethod(eventNs, 'addListener', [
         _map,
         'click',
-        js_util.allowInterop((Object e) {
+        js_util.allowInterop((Object? e) {
+          if (e == null) return;
           final coord = js_util.getProperty<Object>(e, 'coord');
           final lat = js_util.callMethod<num>(coord, 'lat', []).toDouble();
           final lng = js_util.callMethod<num>(coord, 'lng', []).toDouble();
@@ -674,7 +713,7 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
       js_util.callMethod(eventNs, 'addListener', [
         marker,
         'click',
-        js_util.allowInterop((_) {
+        js_util.allowInterop((Object? _) {
           widget.onMarkerTap?.call(spec.id);
         }),
       ]);

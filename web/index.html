@@ -33,6 +33,16 @@
   <link rel="manifest" href="manifest.json">
   <script>
     window.iljariNaverMapKey = '{{NAVER_MAP_NCP_KEY}}';
+    window.iljariNaverMapsBoot = function () {
+      window.__iljariNaverMapsBooted = true;
+    };
+    window.navermap_authFailure = function () {
+      window.__iljariNaverMapsAuthFailed = true;
+      console.error(
+        '[iljari] NAVER Maps auth failed — NCP Web URL에 등록:',
+        window.location.origin
+      );
+    };
     (function () {
       var key = window.iljariNaverMapKey;
       if (!key || key.indexOf('{{') === 0 || key === 'unset') return;
@@ -40,7 +50,8 @@
       script.type = 'text/javascript';
       script.src =
         'https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=' +
-        encodeURIComponent(key);
+        encodeURIComponent(key) +
+        '&callback=iljariNaverMapsBoot';
       script.dataset.iljariNaverBootstrap = '1';
       document.head.appendChild(script);
     })();

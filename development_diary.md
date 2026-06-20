@@ -1,5 +1,17 @@
 # Development Diary
 
+## 2026-06-21 — 웹 NAVER 지도 로딩 안정화
+
+- **원인**: `run_qc.sh`가 Naver 키 미전달; index.html·Dart 이중 script 로드; 실패 시 무한 스피너
+- **수정**: `scripts/naver_flutter_defines.sh` 공통화, run_qc/run_web 모두 `--web-define`+`--dart-define` 전달
+- **로더**: bootstrap 12s 대기 → 실패 시 단일 재주입, 30s 타임아웃·에러 표시, JS callback arity 수정
+
+## 2026-06-20 — Mac 웹 실행
+
+- GitHub `main` pull (`59cb1e4`) 후 `flutter run -d chrome --web-port=8080` 로 로컬 웹 기동
+- `naver_map_client_id.txt` 없음 → mock 지도 모드 (`NAVER_MAP_NCP_KEY=unset`)
+- 주소: http://localhost:8080
+
 ## 2026-06-19 — QC·Admin Ops MVP
 
 - **서버**: `/v1/admin/ops/*` (X-Admin-Api-Key) — wallet grant, member sanction, job-pin/shuttle entitlement, seeker 1000 seed, bulk jobs, application distribute, audit log
