@@ -664,7 +664,7 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
       fit: StackFit.expand,
       children: [
         NaverMapWebWidget(
-          clientId: EnvConfig.naverMapClientId,
+          clientId: NaverMapPlatform.webClientId,
           initialLatitude: MapConstants.warehouseAreaCenter.latitude,
           initialLongitude: MapConstants.warehouseAreaCenter.longitude,
           initialZoom: MapConstants.warehouseAreaZoom,

@@ -2,13 +2,17 @@
 
 ## Current Task
 
-- **웹 주소 검색 Phase 3** — Daum Postcode 웹 embed + Kakao geocode (done)
+- **QC·Admin Ops MVP** — 완료; 다음: PG E2E / full job JSON sync
 
 ## Backlog (priority order)
 
-1. [ ] **급여지급일 서버/API** — monthly rule 필드 영속화
-4. [ ] **카카오 알림톡 실연동** — notifications stub → Bizmessage
-5. [ ] **근태 달력 — table_calendar / 백그라운드 geofence** — MVP 이후
+1. [ ] **QC DB 스냅샷** — export/import SQL for team-shared baseline
+2. [ ] **공고 full JSON sync** — CorporateJobPost 전체 필드 server payload
+3. [ ] **Feature flag 매트릭스** — env ↔ mock/live 경로
+4. [ ] **실 PG E2E** — Toss sandbox + webhook
+5. [ ] **급여지급일 서버/API** — monthly rule 필드 영속화
+6. [ ] **카카오 알림톡 실연동** — notifications stub → Bizmessage
+7. [ ] **근태 달력** — table_calendar / geofence MVP 이후
 
 ## Definition of Done
 
@@ -18,6 +22,10 @@
 - `workflow_state.md` updated
 
 ## Progress
+
+- [x] **QC·Admin Ops MVP** — admin_ops API, sync bootstrap, AdminOpsPage, seeker 1000 seed, run_qc, QC_MODE mock PG; flutter analyze 0 errors
+
+- [x] **웹 PUSH·정류장 지도 `_createWrapper` fix** — Circle/Marker/Polyline `callConstructor`; Mac `run_web.sh` + `네이버키_설정.sh`; map tests 3 pass
 
 - [x] **웹 주소 검색 Phase 3** — `DaumPostcodeWebEmbed` (Kakao Postcode JS), `WorkplaceAddressPlatform.isPostcodeSupported`, 근무지 검색 웹 Daum 플로우, web build + 7 tests pass
 
@@ -77,6 +85,7 @@
 
 ## Completed (recent)
 
+- 2026-06-19 — **웹 PUSH·정류장 지도 + Mac** — NAVER Circle overlay js interop fix; `run_web.sh`; map tests 3 pass
 - 2026-06-19 — **웹 주소 검색 Phase 3** — DaumPostcodeWebEmbed, Chrome 근무지 Daum 플로우, Kakao geocode, web build + 7 tests pass
 
 - 2026-06-18 — **Cursor Agents iljali-app 대화 재연결** — 125 chats retagged; `.cursor/chat-archive/` index

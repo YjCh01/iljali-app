@@ -7,6 +7,9 @@ import 'package:map/features/corporate/domain/services/payment_gateway_service.d
 /// 환경에 맞는 PG 게이트웨이 선택
 abstract final class PaymentGatewayFactory {
   static PaymentGatewayService create() {
+    if (EnvConfig.qcMode) {
+      return const MockPaymentGatewayService();
+    }
     if (EnvConfig.isComplianceApiEnabled) {
       return RemotePaymentsGatewayService();
     }

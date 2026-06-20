@@ -48,6 +48,8 @@ app.*.map.json
 # Environment
 .env
 .env.*
+naver_map_client_id.txt
+web/naver_map_client_id.txt
 
 # Legacy nested clone (same repo checked out inside workspace)
 /iljali-app/

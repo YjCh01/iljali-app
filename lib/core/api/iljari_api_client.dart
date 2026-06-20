@@ -110,6 +110,30 @@ class IljariApiClient {
     });
   }
 
+  Future<Map<String, dynamic>> syncBootstrap({
+    String? seekerEmail,
+    String? companyKey,
+  }) async {
+    final query = <String, String>{};
+    if (seekerEmail != null) query['seeker_email'] = seekerEmail;
+    if (companyKey != null) query['company_key'] = companyKey;
+    final uri = Uri.parse('$_baseUrl/v1/sync/bootstrap')
+        .replace(queryParameters: query.isEmpty ? null : query);
+    final response = await _client.get(uri);
+    _ensureOk(response);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> pushApplication(
+    Map<String, dynamic> body,
+  ) async {
+    return createApplication(body);
+  }
+
+  Future<Map<String, dynamic>> pushJobPost(Map<String, dynamic> body) async {
+    return createJobPost(body);
+  }
+
   // ── Payments ──
 
   Future<Map<String, dynamic>> chargePayment(Map<String, dynamic> body) async {

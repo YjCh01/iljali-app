@@ -57,5 +57,9 @@ class Settings(BaseSettings):
     juso_confm_key: str = ""
     kakao_rest_api_key: str = ""
 
+    # QC·Admin Ops (로컬/QC 전용 — production 에서 반드시 교체)
+    admin_api_key: str = "qc-admin-dev-key"
+    qc_payment_mode: str = "wallet_only"
+
 
 settings = Settings()

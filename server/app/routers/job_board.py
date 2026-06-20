@@ -12,6 +12,7 @@ router = APIRouter(prefix="/v1/job-board", tags=["job-board"])
 
 
 class JobPostBody(BaseModel):
+    id: str | None = None
     title: str
     company_name: str = ""
     company_key: str = ""
@@ -61,8 +62,11 @@ def list_posts(db: Session = Depends(get_db)):
 
 @router.post("/posts")
 def create_post(body: JobPostBody, db: Session = Depends(get_db)):
+    post_id = body.id or f"post_{uuid4().hex[:12]}"
+    if db.get(JobPostRow, post_id) is not None:
+        raise HTTPException(status_code=409, detail="이미 존재하는 공고 ID")
     row = JobPostRow(
-        id=f"post_{uuid4().hex[:12]}",
+        id=post_id,
         title=body.title,
         company_name=body.company_name,
         company_key=body.company_key,

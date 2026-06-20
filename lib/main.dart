@@ -1,15 +1,22 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/app.dart';
 import 'package:map/core/config/env_config.dart';
+import 'package:map/core/config/naver_map_web_client_id_loader.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/utils/naver_map_platform.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/payments/payment_deep_link_bootstrap.dart';
 import 'package:map/core/compliance/services/subscription_renewal_service.dart';
+import 'package:map/core/sync/qc_sync_bootstrap.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (kIsWeb) {
+    await NaverMapWebClientIdLoader.load();
+  }
 
   if (NaverMapPlatform.shouldUseNativeMap) {
     await FlutterNaverMap().init(
@@ -28,6 +35,15 @@ Future<void> main() async {
   }
 
   await AuthSession.instance.restore();
+  if (AuthSession.instance.isLoggedIn && EnvConfig.isComplianceApiEnabled) {
+    try {
+      await QcSyncBootstrap.pullIfEnabled();
+    } on QcMemberSanctionException {
+      // signOut already handled
+    } on Object {
+      // offline server — keep local data
+    }
+  }
   await initializePaymentDeepLinks();
   await SubscriptionRenewalService().checkAndApplyExpiry();
 

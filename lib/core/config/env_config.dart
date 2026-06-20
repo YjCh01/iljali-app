@@ -73,4 +73,19 @@ abstract final class EnvConfig {
 
   static bool get isClovaOcrConfigured =>
       clovaOcrInvokeUrl.isNotEmpty && clovaOcrSecret.isNotEmpty;
+
+  /// QC 스테이징 — PG mock, Admin 부여·walletCredit만
+  static const bool qcMode = bool.fromEnvironment(
+    'QC_MODE',
+    defaultValue: false,
+  );
+
+  /// Admin Ops API key (QC/운영 콘솔)
+  static const String adminApiKey = String.fromEnvironment(
+    'ADMIN_API_KEY',
+    defaultValue: 'qc-admin-dev-key',
+  );
+
+  static bool get isAdminOpsConfigured =>
+      adminApiKey.isNotEmpty && adminApiKey != 'YOUR_ADMIN_API_KEY';
 }

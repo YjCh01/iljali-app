@@ -114,6 +114,7 @@ class NaverMapWebWidget extends StatelessWidget {
     this.onCenterChanged,
     this.onMapTap,
     this.onMarkerTap,
+    this.onInitFailed,
   });
 
   final String clientId;
@@ -131,6 +132,7 @@ class NaverMapWebWidget extends StatelessWidget {
   final NaverMapWebCenterCallback? onCenterChanged;
   final NaverMapWebTapCallback? onMapTap;
   final void Function(String markerId)? onMarkerTap;
+  final VoidCallback? onInitFailed;
 
   @override
   Widget build(BuildContext context) {

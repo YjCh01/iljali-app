@@ -2,8 +2,9 @@
 # Android/iOS: Mobile Dynamic Map · Web: Web Dynamic Map (동일 또는 별도 Client ID)
 
 NAVER_MAP_CLIENT_ID=
-# Web: NCP 콘솔 Web Dynamic Map + localhost/운영 도메인 등록 후
-#   flutter run -d chrome --dart-define=NAVER_MAP_CLIENT_ID=YOUR_WEB_CLIENT_ID
+# Web: NCP 콘솔 Dynamic Map + http://localhost 등록 후
+#   인증정보 Client ID → naver_map_client_id.txt 또는 run_web.bat
+#   (2024+ NCP: JS는 ncpKeyId 파라미터로 로드 — 값은 Client ID와 동일)
 # Windows MVP: NAVER_MAP 미설정 시 mock 지도
 COMPLIANCE_API_URL=http://10.0.2.2:8000
 TOSS_CLIENT_KEY=

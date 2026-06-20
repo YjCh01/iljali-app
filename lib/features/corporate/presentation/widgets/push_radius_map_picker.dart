@@ -1393,7 +1393,7 @@ class _PushRadiusWebMapPickerState extends State<_PushRadiusWebMapPicker> {
         fit: StackFit.expand,
         children: [
           NaverMapWebWidget(
-            clientId: EnvConfig.naverMapClientId,
+            clientId: NaverMapPlatform.webClientId,
             initialLatitude: initialLat,
             initialLongitude: initialLng,
             initialZoom: initialZoom,

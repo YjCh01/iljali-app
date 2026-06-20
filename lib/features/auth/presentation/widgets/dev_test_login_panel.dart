@@ -3,6 +3,7 @@ import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/dev/dev_auth_service.dart';
 import 'package:map/core/dev/dev_test_accounts.dart';
+import 'package:map/core/dev/qc_auth_service.dart';
 import 'package:map/core/session/member_type.dart';
 
 /// debug 빌드 — 검증 우회 테스트 계정 원탭 로그인
@@ -16,6 +17,14 @@ class DevTestLoginPanel extends StatefulWidget {
 class _DevTestLoginPanelState extends State<DevTestLoginPanel> {
   bool _expanded = false;
   bool _signingIn = false;
+  final _qcSeekerEmailCtrl =
+      TextEditingController(text: 'seeker-0001@qc.iljari.co.kr');
+
+  @override
+  void dispose() {
+    _qcSeekerEmailCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _signIn(DevTestAccount account) async {
     if (_signingIn) return;
@@ -83,9 +92,64 @@ class _DevTestLoginPanelState extends State<DevTestLoginPanel> {
               ),
             ),
           ),
+          if (QcAuthService.isQcSeekerEmailEnabled) ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: _qcSeekerEmailCtrl,
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.9)),
+              decoration: InputDecoration(
+                labelText: 'QC 구직자 이메일',
+                labelStyle:
+                    TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                hintText: 'seeker-0001@qc.iljari.co.kr',
+                hintStyle:
+                    TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+                enabledBorder: OutlineInputBorder(
+                  borderSide:
+                      BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton(
+              onPressed: _signingIn
+                  ? null
+                  : () => _signInQcSeeker(_qcSeekerEmailCtrl.text),
+              child: Text('QC 구직자 (${QcAuthService.qcSeekerPassword})'),
+            ),
+          ],
+          TextButton(
+            onPressed: _signingIn
+                ? null
+                : () => Navigator.of(context).pushNamed(AppRoutes.adminOps),
+            child: Text(
+              '관리자 Ops',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
+            ),
+          ),
         ],
       ],
     );
+  }
+
+  Future<void> _signInQcSeeker(String email) async {
+    if (_signingIn) return;
+    setState(() => _signingIn = true);
+    try {
+      await QcAuthService.signInSeeker(
+        email: email,
+        password: QcAuthService.qcSeekerPassword,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('QC 로그인 실패: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _signingIn = false);
+    }
   }
 }
 

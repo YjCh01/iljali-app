@@ -23,6 +23,13 @@ class CorporateJobPostLocalDataSourceImpl
   @visibleForTesting
   static void clearInMemoryStoreForTest() => _posts.clear();
 
+  /// QC 서버 sync — 기존 in-memory 공고를 서버 스냅샷으로 교체
+  static void replaceFromServer(List<CorporateJobPost> posts) {
+    _posts
+      ..clear()
+      ..addAll(posts);
+  }
+
   @override
   Future<List<CorporateJobPost>> fetchJobPosts() async =>
       List.unmodifiable(_posts);

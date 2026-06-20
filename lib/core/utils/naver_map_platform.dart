@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:map/core/config/env_config.dart';
+import 'package:map/core/config/naver_map_web_client_id_loader.dart';
 
 /// flutter_naver_map(Android/iOS) + NAVER Maps JS(웹) 플랫폼 분기
 abstract final class NaverMapPlatform {
@@ -8,8 +9,10 @@ abstract final class NaverMapPlatform {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  static String get webClientId => NaverMapWebClientIdLoader.resolve();
+
   static bool get isWebSupported =>
-      kIsWeb && EnvConfig.isNaverMapConfigured;
+      kIsWeb && webClientId.isNotEmpty;
 
   /// 네이티브 SDK 또는 웹 JS 지도 사용 (mock 아님)
   static bool get shouldShowMap =>

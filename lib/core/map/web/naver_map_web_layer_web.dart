@@ -1,41 +1,105 @@
 import 'dart:async';
 import 'dart:html' as html;
 import 'dart:js_util' as js_util;
-import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
 import 'package:map/core/geo/map_viewport_bounds.dart';
 
 Future<void>? _scriptLoadFuture;
 String? _loadedClientId;
+String? _loadedAuthParam;
 
 Future<void> ensureNaverMapsScriptLoaded(String clientId) {
-  if (clientId.isEmpty) {
+  final trimmed = clientId.trim();
+  if (trimmed.isEmpty) {
     return Future.error(StateError('NAVER_MAP_CLIENT_ID is empty'));
   }
-  if (_scriptLoadFuture != null && _loadedClientId == clientId) {
+  if (_scriptLoadFuture != null &&
+      _loadedClientId == trimmed &&
+      _loadedAuthParam != null) {
     return _scriptLoadFuture!;
   }
-  _loadedClientId = clientId;
-  _scriptLoadFuture = _loadScript(clientId);
+  _loadedClientId = trimmed;
+  _loadedAuthParam = null;
+  _scriptLoadFuture = _loadScript(trimmed);
   return _scriptLoadFuture!;
 }
 
-Future<void> _loadScript(String clientId) {
-  if (_isNaverReady()) return Future.value();
+void _removeExistingNaverScripts() {
+  for (final node in html.document.querySelectorAll('script[data-iljari-naver-map]')) {
+    node.remove();
+  }
+  js_util.setProperty(html.window, 'naver', null);
+}
 
+Future<void> _waitForNaverMapsReady({
+  Duration timeout = const Duration(seconds: 20),
+}) async {
+  if (_isNaverReady()) return;
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    if (_isNaverReady()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+}
+
+Future<void> _loadScript(String clientId) async {
+  await _waitForNaverMapsReady(timeout: const Duration(seconds: 3));
+  if (_isNaverReady()) return;
+
+  Object? lastError;
+  for (final param in ['ncpKeyId', 'ncpClientId']) {
+    try {
+      await _loadScriptOnce(clientId, param);
+      _loadedAuthParam = param;
+      await _waitForNaverMapsReady();
+      if (_isNaverReady()) return;
+    } on Object catch (error) {
+      lastError = error;
+      _removeExistingNaverScripts();
+    }
+  }
+
+  final origin = html.window.location.origin;
+  throw Exception(
+    'NAVER Maps 로드 실패 (origin=$origin). '
+    'NCP Web URL에 $origin 등록, Dynamic Map 체크. 원인: $lastError',
+  );
+}
+
+Future<void> _loadScriptOnce(String clientId, String authParam) {
   final completer = Completer<void>();
+  final callbackName =
+      'iljariNaverMapsReady_${DateTime.now().millisecondsSinceEpoch}';
+
+  js_util.setProperty(
+    html.window,
+    'navermap_authFailure',
+    js_util.allowInterop(() {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          Exception('NAVER Maps auth failed ($authParam)'),
+        );
+      }
+    }),
+  );
+
+  js_util.setProperty(
+    html.window,
+    callbackName,
+    js_util.allowInterop((_) {
+      if (!completer.isCompleted) completer.complete();
+    }),
+  );
+
   final script = html.ScriptElement()
     ..type = 'text/javascript'
     ..src =
-        'https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=$clientId';
+        'https://oapi.map.naver.com/openapi/v3/maps.js?$authParam=$clientId&callback=$callbackName';
   script.dataset['iljari-naver-map'] = '1';
-  script.onLoad.listen((_) {
-    if (!completer.isCompleted) completer.complete();
-  });
   script.onError.listen((_) {
     if (!completer.isCompleted) {
-      completer.completeError(Exception('NAVER Maps JS load failed'));
+      completer.completeError(Exception('NAVER Maps JS load failed ($authParam)'));
     }
   });
   html.document.head!.append(script);
@@ -54,7 +118,72 @@ Object _mapsNamespace() {
 }
 
 Object _latLng(double lat, double lng) {
-  return js_util.callMethod(_mapsNamespace(), 'LatLng', [lat, lng]);
+  final latLngCtor = js_util.getProperty<Object>(_mapsNamespace(), 'LatLng');
+  return js_util.callConstructor(latLngCtor, [lat, lng]);
+}
+
+Object _mapOptions({
+  required Object center,
+  required double zoom,
+  int? width,
+  int? height,
+}) {
+  final options = js_util.newObject();
+  js_util.setProperty(options, 'center', center);
+  js_util.setProperty(options, 'zoom', zoom);
+  js_util.setProperty(options, 'zoomControl', true);
+  if (width != null && height != null && width > 0 && height > 0) {
+    final sizeCtor = js_util.getProperty<Object>(_mapsNamespace(), 'Size');
+    js_util.setProperty(
+      options,
+      'size',
+      js_util.callConstructor(sizeCtor, [width, height]),
+    );
+  }
+  return options;
+}
+
+void _stretchElementTree(html.Element element) {
+  var node = element;
+  for (var depth = 0; depth < 8; depth++) {
+    node.style
+      ..display = 'block'
+      ..width = '100%'
+      ..height = '100%'
+      ..minWidth = '100%'
+      ..minHeight = '100%';
+    final parent = node.parent;
+    if (parent == null || parent is! html.Element) break;
+    node = parent;
+  }
+  element.style
+    ..position = 'absolute'
+    ..top = '0'
+    ..left = '0'
+    ..right = '0'
+    ..bottom = '0'
+    ..touchAction = 'none';
+}
+
+Future<void> _waitForElementLayout(html.DivElement element) async {
+  for (var attempt = 0; attempt < 80; attempt++) {
+    if (element.clientWidth > 240 && element.clientHeight > 240) return;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+}
+
+void _syncMapSize(Object map, html.DivElement element) {
+  final width = element.clientWidth;
+  final height = element.clientHeight;
+  if (width <= 0 || height <= 0) return;
+
+  final maps = _mapsNamespace();
+  final sizeCtor = js_util.getProperty<Object>(maps, 'Size');
+  final size = js_util.callConstructor(sizeCtor, [width, height]);
+  js_util.callMethod(map, 'setSize', [size]);
+
+  final eventNs = js_util.getProperty<Object>(maps, 'Event');
+  js_util.callMethod(eventNs, 'trigger', [map, 'resize']);
 }
 
 Object? _strokeStyleType(String style) {
@@ -64,6 +193,53 @@ Object? _strokeStyleType(String style) {
   } catch (_) {
     return null;
   }
+}
+
+Object _markerHtmlIcon(Object maps, String markerHtml, double size) {
+  final pointCtor = js_util.getProperty<Object>(maps, 'Point');
+  final anchor = js_util.callConstructor(pointCtor, [size / 2, size / 2]);
+  final icon = js_util.newObject();
+  js_util.setProperty(icon, 'content', markerHtml);
+  js_util.setProperty(icon, 'anchor', anchor);
+  return icon;
+}
+
+Object _circleOptions({
+  required Object map,
+  required NaverMapWebCircleSpec spec,
+}) {
+  final options = js_util.newObject();
+  js_util.setProperty(options, 'map', map);
+  js_util.setProperty(
+    options,
+    'center',
+    _latLng(spec.latitude, spec.longitude),
+  );
+  js_util.setProperty(options, 'radius', spec.radiusMeters);
+  js_util.setProperty(options, 'fillColor', spec.fillColorHex);
+  js_util.setProperty(options, 'fillOpacity', spec.fillOpacity);
+  js_util.setProperty(options, 'strokeColor', spec.strokeColorHex);
+  js_util.setProperty(options, 'strokeOpacity', spec.strokeOpacity);
+  js_util.setProperty(options, 'strokeWeight', spec.strokeWeight);
+  return options;
+}
+
+Object _polylineOptions({
+  required Object map,
+  required NaverMapWebPolylineSpec spec,
+  required List<Object> path,
+}) {
+  final options = js_util.newObject();
+  js_util.setProperty(options, 'map', map);
+  js_util.setProperty(options, 'path', path);
+  js_util.setProperty(options, 'strokeColor', spec.colorHex);
+  js_util.setProperty(options, 'strokeWeight', spec.strokeWeight);
+  js_util.setProperty(options, 'strokeOpacity', 0.85);
+  if (spec.dashed) {
+    final dash = _strokeStyleType('shortDash');
+    if (dash != null) js_util.setProperty(options, 'strokeStyle', dash);
+  }
+  return options;
 }
 
 typedef NaverMapWebIdleCallback = void Function();
@@ -231,6 +407,7 @@ class NaverMapWebWidget extends StatefulWidget {
     this.onCenterChanged,
     this.onMapTap,
     this.onMarkerTap,
+    this.onInitFailed,
   });
 
   final String clientId;
@@ -248,28 +425,28 @@ class NaverMapWebWidget extends StatefulWidget {
   final NaverMapWebCenterCallback? onCenterChanged;
   final NaverMapWebTapCallback? onMapTap;
   final void Function(String markerId)? onMarkerTap;
+  final VoidCallback? onInitFailed;
 
   @override
   State<NaverMapWebWidget> createState() => _NaverMapWebWidgetState();
 }
 
 class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
-  static int _viewCounter = 0;
-
-  late final String _viewType = 'iljari-naver-map-${_viewCounter++}';
   NaverMapWebController? _controller;
   Object? _map;
+  html.DivElement? _container;
+  StreamSubscription<html.Event>? _windowResize;
   final Map<String, Object> _markerHandles = {};
   final Map<String, Object> _circleHandles = {};
   final Map<String, Object> _polylineHandles = {};
-  bool _registered = false;
+  bool _elementInitialized = false;
+  bool _mapReady = false;
   String? _error;
   ({double lat, double lng})? _lastReportedCenter;
 
   @override
   void initState() {
     super.initState();
-    _registerView();
   }
 
   @override
@@ -298,6 +475,7 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
 
   @override
   void dispose() {
+    _windowResize?.cancel();
     _controller?.dispose();
     _clearOverlayHandles(_markerHandles);
     _clearOverlayHandles(_circleHandles);
@@ -312,17 +490,38 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
     handles.clear();
   }
 
-  void _registerView() {
-    if (_registered) return;
-    _registered = true;
-    ui_web.platformViewRegistry.registerViewFactory(_viewType, (int _) {
-      final div = html.DivElement()
-        ..style.width = '100%'
-        ..style.height = '100%'
-        ..style.touchAction = 'none';
-      unawaited(_initMap(div));
-      return div;
+  void _onElementCreated(Object element) {
+    if (_elementInitialized) return;
+    _elementInitialized = true;
+    final div = element as html.DivElement;
+    _container = div;
+    _stretchElementTree(div);
+    unawaited(_initMap(div));
+  }
+
+  void _bindResize(html.DivElement element, Object map) {
+    _windowResize?.cancel();
+    _windowResize = html.window.onResize.listen((_) {
+      if (_map == null) return;
+      _syncMapSize(map, element);
     });
+
+    try {
+      final observerCtor = js_util.getProperty<Object?>(
+        html.window,
+        'ResizeObserver',
+      );
+      if (observerCtor == null) return;
+      final observer = js_util.callConstructor(observerCtor, [
+        js_util.allowInterop((dynamic _, dynamic __) {
+          if (_map == null) return;
+          _syncMapSize(map, element);
+        }),
+      ]);
+      js_util.callMethod(observer, 'observe', [element]);
+    } on Object {
+      // ResizeObserver unavailable — window.onResize only
+    }
   }
 
   Future<void> _initMap(html.DivElement element) async {
@@ -330,21 +529,23 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
       await ensureNaverMapsScriptLoaded(widget.clientId);
       if (!mounted) return;
 
+      await _waitForElementLayout(element);
+      _stretchElementTree(element);
+      if (!mounted) return;
+
       final maps = _mapsNamespace();
       final center = _latLng(widget.initialLatitude, widget.initialLongitude);
-      final positionTopRight = js_util.getProperty<Object>(
-        js_util.getProperty<Object>(maps, 'Position'),
-        'TOP_RIGHT',
+      final options = _mapOptions(
+        center: center,
+        zoom: widget.initialZoom,
+        width: element.clientWidth,
+        height: element.clientHeight,
       );
-      final options = js_util.jsify({
-        'center': center,
-        'zoom': widget.initialZoom,
-        'zoomControl': true,
-        'zoomControlOptions': {'position': positionTopRight},
-      });
-
-      _map = js_util.callMethod(maps, 'Map', [element, options]);
+      final mapCtor = js_util.getProperty<Object>(maps, 'Map');
+      _map = js_util.callConstructor(mapCtor, [element, options]);
       _controller = NaverMapWebController(_map!);
+      _bindResize(element, _map!);
+      _syncMapSize(_map!, element);
       _syncAllOverlays();
 
       final eventNs = js_util.getProperty<Object>(maps, 'Event');
@@ -364,12 +565,26 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
         }),
       ]);
 
+      for (final delay in [100, 400, 1000]) {
+        Future<void>.delayed(Duration(milliseconds: delay), () {
+          if (!mounted || _map == null) return;
+          _stretchElementTree(element);
+          _syncMapSize(_map!, element);
+        });
+      }
+
       if (mounted) {
         widget.onMapReady?.call(_controller!);
-        setState(() => _error = null);
+        setState(() {
+          _error = null;
+          _mapReady = true;
+        });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) {
+        setState(() => _error = e.toString());
+        widget.onInitFailed?.call();
+      }
     }
   }
 
@@ -396,9 +611,13 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
   }
 
   void _syncAllOverlays() {
-    _syncMarkers();
-    _syncCircles();
-    _syncPolylines();
+    try {
+      _syncMarkers();
+      _syncCircles();
+      _syncPolylines();
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
   }
 
   void _syncMarkers() {
@@ -430,30 +649,26 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
           'box-shadow:0 2px 8px rgba(0,0,0,.35);cursor:pointer;">'
           '$safeLabel</div>';
 
+      final icon = _markerHtmlIcon(maps, markerHtml, size);
       final existing = _markerHandles[spec.id];
       if (existing != null) {
         js_util.callMethod(existing, 'setPosition', [
           _latLng(spec.latitude, spec.longitude),
         ]);
-        js_util.callMethod(existing, 'setIcon', [
-          js_util.jsify({
-            'content': markerHtml,
-            'anchor': {'x': size / 2, 'y': size / 2},
-          }),
-        ]);
+        js_util.callMethod(existing, 'setIcon', [icon]);
         continue;
       }
 
-      final marker = js_util.callMethod<Object>(maps, 'Marker', [
-        js_util.jsify({
-          'map': map,
-          'position': _latLng(spec.latitude, spec.longitude),
-          'icon': {
-            'content': markerHtml,
-            'anchor': {'x': size / 2, 'y': size / 2},
-          },
-        }),
-      ]);
+      final markerOptions = js_util.newObject();
+      js_util.setProperty(markerOptions, 'map', map);
+      js_util.setProperty(
+        markerOptions,
+        'position',
+        _latLng(spec.latitude, spec.longitude),
+      );
+      js_util.setProperty(markerOptions, 'icon', icon);
+      final markerCtor = js_util.getProperty<Object>(maps, 'Marker');
+      final marker = js_util.callConstructor(markerCtor, [markerOptions]);
 
       final eventNs = js_util.getProperty<Object>(maps, 'Event');
       js_util.callMethod(eventNs, 'addListener', [
@@ -484,23 +699,15 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
 
     for (final spec in widget.circles) {
       final existing = _circleHandles[spec.id];
-      final options = js_util.jsify({
-        'map': map,
-        'center': _latLng(spec.latitude, spec.longitude),
-        'radius': spec.radiusMeters,
-        'fillColor': spec.fillColorHex,
-        'fillOpacity': spec.fillOpacity,
-        'strokeColor': spec.strokeColorHex,
-        'strokeOpacity': spec.strokeOpacity,
-        'strokeWeight': spec.strokeWeight,
-      });
+      final options = _circleOptions(map: map, spec: spec);
 
       if (existing != null) {
         js_util.callMethod(existing, 'setOptions', [options]);
         continue;
       }
 
-      final circle = js_util.callMethod<Object>(maps, 'Circle', [options]);
+      final circleCtor = js_util.getProperty<Object>(maps, 'Circle');
+      final circle = js_util.callConstructor(circleCtor, [options]);
       _circleHandles[spec.id] = circle;
     }
   }
@@ -526,29 +733,15 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
         for (final p in spec.points) _latLng(p.latitude, p.longitude),
       ];
 
-      final optionsMap = <String, Object?>{
-        'map': map,
-        'path': path,
-        'strokeColor': spec.colorHex,
-        'strokeWeight': spec.strokeWeight,
-        'strokeOpacity': 0.85,
-      };
-      if (spec.dashed) {
-        final dash = _strokeStyleType('shortDash');
-        if (dash != null) optionsMap['strokeStyle'] = dash;
-      }
-
       final existing = _polylineHandles[spec.id];
       if (existing != null) {
         js_util.callMethod(existing, 'setPath', [path]);
         continue;
       }
 
-      final polyline = js_util.callMethod<Object>(
-        maps,
-        'Polyline',
-        [js_util.jsify(optionsMap)],
-      );
+      final options = _polylineOptions(map: map, spec: spec, path: path);
+      final polylineCtor = js_util.getProperty<Object>(maps, 'Polyline');
+      final polyline = js_util.callConstructor(polylineCtor, [options]);
       _polylineHandles[spec.id] = polyline;
     }
   }
@@ -561,13 +754,44 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
           padding: const EdgeInsets.all(24),
           child: Text(
             'NAVER 지도를 불러오지 못했습니다.\n'
-            'Web Dynamic Map Client ID와 도메인 등록을 확인해 주세요.\n\n$_error',
+            'NCP Application - Dynamic Map + Web URL 등록을 확인해 주세요.\n'
+            '아래 주소를 NCP Web URL에 그대로 추가: ${html.window.location.origin}\n\n$_error',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 13, height: 1.45),
           ),
         ),
       );
     }
-    return HtmlElementView(viewType: _viewType);
+
+    return SizedBox.expand(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: HtmlElementView.fromTagName(
+              tagName: 'div',
+              onElementCreated: _onElementCreated,
+            ),
+          ),
+          if (!_mapReady)
+            const ColoredBox(
+              color: Color(0xFFE8EDF2),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 12),
+                    Text(
+                      'NAVER 지도 불러오는 중…',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

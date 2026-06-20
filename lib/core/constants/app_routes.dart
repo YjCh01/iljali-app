@@ -27,6 +27,7 @@ abstract final class AppRoutes {
   static const String corporateInternalApprovalReport =
       '/corporate/internal-approval-report';
   static const String adminCompliance = '/admin/compliance';
+  static const String adminOps = '/admin/ops';
   static const String corporatePartnershipSubscription =
       '/corporate/partnership/subscribe';
   static const String corporatePushPackageShop = '/corporate/push-packages';

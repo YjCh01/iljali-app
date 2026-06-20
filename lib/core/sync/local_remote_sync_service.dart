@@ -1,7 +1,12 @@
 import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/config/env_config.dart';
+import 'package:map/core/hiring/hiring_application.dart';
+import 'package:map/core/hiring/local_hiring_repository.dart';
+import 'package:map/core/sync/qc_sync_bootstrap.dart';
+import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
+import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 
-/// 로컬 ↔ 서버 동기화 스텁 (API URL 없으면 no-op)
+/// 로컬 ↔ 서버 동기화 (QC/API URL 설정 시)
 class LocalRemoteSyncService {
   LocalRemoteSyncService({IljariApiClient? client})
       : _client = client ?? IljariApiClient();
@@ -11,41 +16,86 @@ class LocalRemoteSyncService {
   bool get isEnabled =>
       EnvConfig.isComplianceApiEnabled && _client.isEnabled;
 
-  /// 로컬 변경분을 서버로 push (스텁 — 성공 시 true)
-  Future<bool> pushLocalChanges() async {
+  Future<bool> pullFromServer() async {
     if (!isEnabled) return false;
     try {
-      await _client.listJobPosts();
+      await QcSyncBootstrap.pullIfEnabled();
       return true;
-    } catch (_) {
+    } on Object {
       return false;
     }
   }
 
-  /// 서버에서 pull (스텁 — 성공 시 목록 반환, 실패·비활성 시 빈 목록)
+  Future<bool> pushLocalChanges() async {
+    if (!isEnabled) return false;
+    try {
+      final posts =
+          await const CorporateJobPostLocalDataSourceImpl().fetchJobPosts();
+      for (final post in posts) {
+        await _client.pushJobPost(_jobPostPayload(post));
+      }
+
+      final hiring = await LocalHiringRepository.create();
+      for (final app in await hiring.fetchAll()) {
+        await _client.pushApplication(_applicationPayload(app));
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> pullJobPosts() async {
     if (!isEnabled) return const [];
     try {
       return await _client.listJobPosts();
-    } catch (_) {
+    } on Object {
       return const [];
     }
   }
 
-  /// 지원·채팅 동기화 시도 (스텁)
   Future<bool> syncHiringAndChat({
     String? seekerEmail,
     String? companyKey,
   }) async {
     if (!isEnabled) return false;
     try {
-      await _client.listApplications(
+      await _client.syncBootstrap(
         seekerEmail: seekerEmail,
         companyKey: companyKey,
       );
+      await QcSyncBootstrap.pullIfEnabled();
       return true;
-    } catch (_) {
+    } on Object {
       return false;
     }
+  }
+
+  Map<String, dynamic> _jobPostPayload(CorporateJobPost post) {
+    return {
+      'id': post.id,
+      'title': post.title,
+      'company_name': post.registeredBy?.companyName ?? '',
+      'company_key': post.registeredBy?.companyKey ?? '',
+      'warehouse_name': post.warehouseName,
+      'hourly_wage': post.hourlyWage,
+      'work_schedule': post.workSchedule,
+      'summary': post.summary,
+      'status': post.status.name,
+    };
+  }
+
+  Map<String, dynamic> _applicationPayload(HiringApplication app) {
+    return {
+      'id': app.id,
+      'post_id': app.postId,
+      'post_title': app.postTitle,
+      'company_name': app.companyName,
+      'company_key': app.companyKey ?? '',
+      'seeker_email': app.seekerEmail,
+      'seeker_name': app.seekerName,
+      'status': app.status.name,
+      'work_schedule': app.workSchedule,
+    };
   }
 }

@@ -7,7 +7,6 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/core/constants/map_constants.dart';
 
 import 'package:map/core/geo/map_user_location_service.dart';
-import 'package:map/core/config/env_config.dart';
 import 'package:map/core/map/web/job_map_web_marker_factory.dart';
 import 'package:map/core/map/web/shuttle_map_web_overlay_builder.dart';
 import 'package:map/core/map/web/naver_map_web_layer.dart';
@@ -92,6 +91,8 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
   NaverMapWebController? _webController;
 
   JobMapPin? _pendingCenterPin;
+
+  bool _webMapFailed = false;
 
 
 
@@ -397,7 +398,7 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
   Widget build(BuildContext context) {
 
-    if (NaverMapPlatform.shouldUseMockMap) {
+    if (NaverMapPlatform.shouldUseMockMap || _webMapFailed) {
 
       return CorporateExposureMiniMap(
 
@@ -456,7 +457,7 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
           NaverMapWebWidget(
 
-            clientId: EnvConfig.naverMapClientId,
+            clientId: NaverMapPlatform.webClientId,
 
             initialLatitude: initialLat,
 
@@ -504,6 +505,10 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
                 }
               }
 
+            },
+
+            onInitFailed: () {
+              if (mounted) setState(() => _webMapFailed = true);
             },
 
           ),

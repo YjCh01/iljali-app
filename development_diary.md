@@ -1,5 +1,21 @@
 # Development Diary
 
+## 2026-06-19 — QC·Admin Ops MVP
+
+- **서버**: `/v1/admin/ops/*` (X-Admin-Api-Key) — wallet grant, member sanction, job-pin/shuttle entitlement, seeker 1000 seed, bulk jobs, application distribute, audit log
+- **sync**: `/v1/sync/bootstrap` — posts·applications·wallet·member_status
+- **Flutter**: `AdminOpsPage` (`/admin/ops`), `QcSyncBootstrap`, `QcAuthService` (seeker-0001@qc.iljari.co.kr / QcTest1234!), `QC_MODE` → mock PG
+- **실행**: `run_qc.bat` / `run_qc.sh` — uvicorn + seed 1000 + Chrome
+- **fixture**: `server/fixtures/jobs.example.json`, `server/scripts/seed_qc.py`, `scripts/import_qc_jobs.dart`
+
+## 2026-06-19 — 웹 PUSH·정류장 지도 + Mac 실행 스크립트
+
+- **버그**: `/corporate/push-base-point` 등 `PushRadiusMapPicker` 웹 지도 — `NoSuchMethodError: _createWrapper` (빨간 화면). 메인탭 지도는 정상.
+- **원인**: Circle/Marker/Polyline 생성 시 `jsify`로 NAVER `Map`·`LatLng` JS 객체를 넘기면 NAVER v3 생성자가 깨짐. PUSH 거점 페이지는 반경 **Circle** 오버레이가 항상 있어서 재현.
+- **수정**: `naver_map_web_layer_web.dart` — `callConstructor` + `setProperty` 패턴으로 오버레이 통일; `_syncAllOverlays` try/catch.
+- **Mac**: `run_web.sh`, `네이버키_설정.sh` — Windows `run_web.bat` 와 동일 (8080, key 파일, web-define).
+- **Verify**: map tests 3 pass
+
 ## 2026-06-19 — 웹 주소 검색 Phase 3
 
 - **목표**: Chrome PC 공고 등록 — 근무지 Daum 주소 검색 (Phase 1·2 지도와 함께 웹 co-launch)

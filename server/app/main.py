@@ -19,6 +19,11 @@ from app.job_sync_models import (  # noqa: F401
     JobPostRow,
     PaymentOrderRow,
 )
+from app.qc_models import (  # noqa: F401
+    AdminAuditLogRow,
+    JobPostEntitlementRow,
+    QcMemberRow,
+)
 from app.permanent_commission_models import (  # noqa: F401
     InsuranceVerificationLog,
     MonthlyCommission,
@@ -28,6 +33,7 @@ from app.jobs.scheduler import start_reverify_scheduler, stop_reverify_scheduler
 from app.routers import (
     addresses,
     admin,
+    admin_ops,
     chat_sync,
     compliance,
     hiring,
@@ -41,6 +47,7 @@ from app.routers import (
     payments,
     permanent_commission,
     push_wallet,
+    sync,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -72,6 +79,7 @@ app.include_router(compliance.router)
 app.include_router(addresses.router)
 app.include_router(admin.router)
 app.include_router(admin.sub_router)
+app.include_router(admin_ops.router)
 app.include_router(payments.router)
 app.include_router(payment_webhook.router)
 app.include_router(ocr.router)
@@ -84,6 +92,7 @@ app.include_router(job_board.router)
 app.include_router(job_import.router)
 app.include_router(hiring.router)
 app.include_router(chat_sync.router)
+app.include_router(sync.router)
 
 
 @app.get("/health")
@@ -112,4 +121,6 @@ def health():
         "kakao_geocode_configured": bool(settings.kakao_rest_api_key),
         "reverify_batch_enabled": settings.reverify_batch_enabled,
         "reverify_batch_interval_hours": settings.reverify_batch_interval_hours,
+        "admin_ops_configured": bool(settings.admin_api_key),
+        "qc_payment_mode": settings.qc_payment_mode,
     }
