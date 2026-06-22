@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/map_constants.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/geo/map_user_location_service.dart';
@@ -60,7 +61,7 @@ class PushRadiusMapPicker extends StatefulWidget {
     required this.onCenterChanged,
     this.existingPoints = const [],
     this.activePointLabel,
-    this.mapZoom = 14,
+    this.mapZoom = MapConstants.defaultZoom,
     this.centerEditable = true,
     this.onExistingPointTap,
     this.visualTheme,
@@ -111,7 +112,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
   late GeoCoordinate _viewCenter;
   late double _mapZoom;
   Offset _dragOffset = Offset.zero;
-  double _scaleStartZoom = 14;
+  double _scaleStartZoom = MapConstants.defaultZoom;
   bool _isDragging = false;
 
   GeoCoordinate get _renderCenter =>
@@ -991,7 +992,7 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
       _syncOverlays();
     }
 
-    if (centerChanged && widget.centerEditable) {
+    if (centerChanged) {
       _moveCameraTo(widget.center, animate: false);
       _lastReportedCenter = widget.center;
     }
@@ -1018,11 +1019,12 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
     );
   }
 
-  Future<void> _restoreSavedViewportIfAny() async {
+  Future<bool> _restoreSavedViewportIfAny() async {
     final saved = _peekSavedViewport();
-    if (saved == null) return;
+    if (saved == null) return false;
     await _moveCameraTo(saved.center, zoom: saved.zoom, animate: false);
     _lastReportedCenter = saved.center;
+    return true;
   }
 
   Future<void> _moveCameraTo(
@@ -1048,7 +1050,10 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
     if (widget.enableMyLocation) {
       await MapUserLocationService.prepareForMap();
     }
-    await _restoreSavedViewportIfAny();
+    final restored = await _restoreSavedViewportIfAny();
+    if (!restored) {
+      await _moveCameraTo(widget.center, animate: false);
+    }
     await _syncOverlays();
     if (!mounted) return;
     setState(() => _mapReady = true);

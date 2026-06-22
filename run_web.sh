@@ -2,47 +2,49 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+export ILJARI_ROOT="$(pwd)"
 # shellcheck source=scripts/naver_flutter_defines.sh
 source "scripts/naver_flutter_defines.sh"
+# shellcheck source=scripts/server_dev.sh
+source "scripts/server_dev.sh"
 
 WEB_PORT=8080
+API_PORT=8000
+API_URL="http://localhost:${API_PORT}"
 
 echo
 echo "========================================"
 echo "  iljari 웹 실행 (Chrome)"
-echo "  주소: http://localhost:${WEB_PORT}"
+echo "  App : http://localhost:${WEB_PORT}"
+echo "  API : ${API_URL} (주소 검색·동기화)"
 echo "========================================"
 echo
 
 free_port() {
   local pids
-  pids="$(lsof -ti :"${WEB_PORT}" 2>/dev/null || true)"
+  pids="$(lsof -ti :"${1}" 2>/dev/null || true)"
   if [[ -n "${pids}" ]]; then
-    echo "[${WEB_PORT} 포트] 이전 실행 정리 중..."
+    echo "[${1} 포트] 이전 실행 정리 중..."
     # shellcheck disable=SC2086
     kill -9 ${pids} 2>/dev/null || true
     sleep 2
   fi
 }
 
-read_naver_id() {
-  NAVER_ID=""
-  if [[ -f "naver_map_client_id.txt" ]]; then
-    NAVER_ID="$(head -n 1 naver_map_client_id.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  fi
-}
-
-validate_naver_id() {
-  [[ -n "${NAVER_ID}" ]] || return 1
-  [[ "${NAVER_ID}" != "PASTE_CLIENT_ID_HERE" ]] || return 1
-  [[ "${NAVER_ID}" != "YOUR_NAVER_MAP_CLIENT_ID" ]] || return 1
-  return 0
-}
-
-free_port
-
 read_naver_id() { _naver_read_id; }
 validate_naver_id() { _naver_valid_id; }
+
+free_port "${WEB_PORT}"
+free_port "${API_PORT}"
+
+if [[ ! -f server/.env ]]; then
+  cp -f server/.env.example server/.env
+fi
+
+echo "[API] 주소 검색용 서버 시작..."
+iljari_ensure_server_env
+iljari_start_api_server "${API_PORT}"
+sleep 2
 
 NAVER_DEFINE=""
 WEB_DEFINE="--web-define=NAVER_MAP_NCP_KEY=unset"
@@ -82,7 +84,9 @@ flutter pub get
 echo
 echo "2. Chrome 실행..."
 # shellcheck disable=SC2086
-flutter run -d chrome --web-hostname=localhost --web-port="${WEB_PORT}" ${WEB_DEFINE} ${NAVER_DEFINE}
+flutter run -d chrome --web-hostname=localhost --web-port="${WEB_PORT}" \
+  --dart-define=COMPLIANCE_API_URL="${API_URL}" \
+  ${WEB_DEFINE} ${NAVER_DEFINE}
 RUN_EXIT=$?
 
 if [[ "${RUN_EXIT}" -ne 0 ]]; then

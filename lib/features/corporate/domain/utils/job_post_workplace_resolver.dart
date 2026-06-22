@@ -1,3 +1,4 @@
+import 'package:map/core/address/address_geocoder.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
@@ -15,15 +16,39 @@ abstract final class JobPostWorkplaceResolver {
     return settings.basePoints.first.coordinate;
   }
 
-  /// 근무지 좌표 — 알림 설정 0번 → [hint] → 기본 지도 중심 (본사 주소 사용 금지)
+  static GeoCoordinate? storedCoordinate(CorporateJobPost post) {
+    final fromPost = post.workplaceCoordinate;
+    if (fromPost != null) return fromPost;
+    return coordinateFromSettings(post.notificationSettings);
+  }
+
+  /// 근무지 좌표 — 저장 좌표 → 알림 0번 → hint → (비동기) 지오코딩 → 기본 중심
   static GeoCoordinate resolveCoordinate(
     CorporateJobPost post, {
     WorkplaceAddress? hint,
   }) {
-    final fromSettings = coordinateFromSettings(post.notificationSettings);
-    if (fromSettings != null) return fromSettings;
+    final stored = storedCoordinate(post);
+    if (stored != null) return stored;
 
     if (hint?.coordinate != null) return hint!.coordinate!;
+
+    return defaultPushMapCenter();
+  }
+
+  static Future<GeoCoordinate> resolveCoordinateAsync(
+    CorporateJobPost post, {
+    WorkplaceAddress? hint,
+  }) async {
+    final stored = storedCoordinate(post);
+    if (stored != null) return stored;
+
+    if (hint?.coordinate != null) return hint!.coordinate!;
+
+    final road = post.warehouseName.trim();
+    if (road.isNotEmpty) {
+      final geocoded = await AddressGeocoder.geocode(road);
+      if (geocoded != null) return geocoded;
+    }
 
     return defaultPushMapCenter();
   }

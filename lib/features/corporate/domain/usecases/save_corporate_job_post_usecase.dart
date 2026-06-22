@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:map/core/address/address_geocoder.dart';
 import 'package:map/core/address/services/workplace_address_mismatch_service.dart';
 import 'package:map/core/compliance/services/abuse_detection_service.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/core/sync/job_post_sync_service.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
@@ -66,6 +68,19 @@ String formatCorporateDailyWage(int amount) {
   };
 }
 
+Future<({double? latitude, double? longitude})> _workplaceCoordinateFields(
+  WorkplaceAddress workplace,
+) async {
+  var coordinate = workplace.coordinate;
+  if (coordinate == null && workplace.roadAddress.trim().isNotEmpty) {
+    coordinate = await AddressGeocoder.geocode(workplace.roadAddress);
+  }
+  if (coordinate == null) {
+    return (latitude: null, longitude: null);
+  }
+  return (latitude: coordinate.latitude, longitude: coordinate.longitude);
+}
+
 class CreateCorporateJobPostUseCase {
   const CreateCorporateJobPostUseCase(this._dataSource);
 
@@ -91,16 +106,12 @@ class CreateCorporateJobPostUseCase {
     List<String> linkedCommuteRouteIds = const [],
     bool hasShuttleRouteOverlay = false,
     String? workCategoryId,
-  }) {
+  }) async {
     if (title.trim().isEmpty) {
-      return Future.value(
-        const CorporateJobPostResult.failure('공고 제목을 입력해 주세요.'),
-      );
+      return const CorporateJobPostResult.failure('공고 제목을 입력해 주세요.');
     }
     if (workplace.roadAddress.trim().isEmpty) {
-      return Future.value(
-        const CorporateJobPostResult.failure('근무지를 검색해 주세요.'),
-      );
+      return const CorporateJobPostResult.failure('근무지를 검색해 주세요.');
     }
     final mismatch = WorkplaceAddressMismatchService.evaluate(
       workplace: workplace,
@@ -159,6 +170,8 @@ class CreateCorporateJobPostUseCase {
       summary: resolvedSummary,
     );
 
+    final workplaceCoord = await _workplaceCoordinateFields(workplace);
+
     final postedAt = DateTime.now();
     final post = CorporateJobPost(
       id: 'post_${postedAt.millisecondsSinceEpoch}',
@@ -166,6 +179,8 @@ class CreateCorporateJobPostUseCase {
       employmentType: employmentType ?? workerCategory.employmentType,
       workerCategory: workerCategory,
       warehouseName: workplace.displayLabel,
+      workplaceLatitude: workplaceCoord.latitude,
+      workplaceLongitude: workplaceCoord.longitude,
       hourlyWage: formatCorporateHourlyWage(hourlyWage),
       dailyWage: dailyWage,
       workSchedule: workSchedule.trim(),
@@ -192,9 +207,10 @@ class CreateCorporateJobPostUseCase {
       expiresAt: JobPostValidity.expiresAtFromRegistration(postedAt),
     );
 
-    return _dataSource.createJobPost(post).then(
-          (_) => CorporateJobPostResult.success(post),
-        );
+    return _dataSource.createJobPost(post).then((_) async {
+      await JobPostSyncService().pushPost(post);
+      return CorporateJobPostResult.success(post);
+    });
   }
 }
 
@@ -211,9 +227,10 @@ class ReactivateCorporateJobPostUseCase {
       status: CorporateJobPostStatus.recruiting,
     );
 
-    return _dataSource.updateJobPost(reactivated).then(
-          (_) => CorporateJobPostResult.success(reactivated),
-        );
+    return _dataSource.updateJobPost(reactivated).then((_) async {
+      await JobPostSyncService().pushPostUpdate(reactivated);
+      return CorporateJobPostResult.success(reactivated);
+    });
   }
 }
 
@@ -227,9 +244,10 @@ class CloseCorporateJobPostUseCase {
       return Future.value(CorporateJobPostResult.success(post));
     }
     final closed = post.copyWith(status: CorporateJobPostStatus.closed);
-    return _dataSource.updateJobPost(closed).then(
-          (_) => CorporateJobPostResult.success(closed),
-        );
+    return _dataSource.updateJobPost(closed).then((_) async {
+      await JobPostSyncService().pushPostUpdate(closed);
+      return CorporateJobPostResult.success(closed);
+    });
   }
 }
 
@@ -246,6 +264,8 @@ class DuplicateCorporateJobPostUseCase {
       employmentType: original.employmentType,
       workerCategory: original.workerCategory,
       warehouseName: original.warehouseName,
+      workplaceLatitude: original.workplaceLatitude,
+      workplaceLongitude: original.workplaceLongitude,
       hourlyWage: original.hourlyWage,
       dailyWage: original.dailyWage,
       workSchedule: original.workSchedule,
@@ -271,9 +291,10 @@ class DuplicateCorporateJobPostUseCase {
       expiresAt: JobPostValidity.expiresAtFromRegistration(postedAt),
     );
 
-    return _dataSource.createJobPost(duplicate).then(
-          (_) => CorporateJobPostResult.success(duplicate),
-        );
+    return _dataSource.createJobPost(duplicate).then((_) async {
+      await JobPostSyncService().pushPost(duplicate);
+      return CorporateJobPostResult.success(duplicate);
+    });
   }
 }
 
@@ -303,16 +324,12 @@ class UpdateCorporateJobPostUseCase {
     List<String>? linkedCommuteRouteIds,
     bool? hasShuttleRouteOverlay,
     String? workCategoryId,
-  }) {
+  }) async {
     if (title.trim().isEmpty) {
-      return Future.value(
-        const CorporateJobPostResult.failure('공고 제목을 입력해 주세요.'),
-      );
+      return const CorporateJobPostResult.failure('공고 제목을 입력해 주세요.');
     }
     if (!paymentSchedule.isComplete) {
-      return Future.value(
-        const CorporateJobPostResult.failure('급여지급일을 선택해 주세요.'),
-      );
+      return const CorporateJobPostResult.failure('급여지급일을 선택해 주세요.');
     }
     final mismatch = WorkplaceAddressMismatchService.evaluate(
       workplace: workplace,
@@ -358,12 +375,16 @@ class UpdateCorporateJobPostUseCase {
       summary: resolvedSummary,
     );
 
+    final workplaceCoord = await _workplaceCoordinateFields(workplace);
+
     final updated = CorporateJobPost(
       id: original.id,
       title: title.trim(),
       employmentType: employmentType ?? workerCategory.employmentType,
       workerCategory: workerCategory,
       warehouseName: workplace.displayLabel,
+      workplaceLatitude: workplaceCoord.latitude,
+      workplaceLongitude: workplaceCoord.longitude,
       hourlyWage: formatCorporateHourlyWage(hourlyWage),
       dailyWage: dailyWage ?? original.dailyWage,
       workSchedule: workSchedule.trim(),
@@ -395,9 +416,10 @@ class UpdateCorporateJobPostUseCase {
       expiresAt: original.expiresAt,
     );
 
-    return _dataSource.updateJobPost(updated).then(
-          (_) => CorporateJobPostResult.success(updated),
-        );
+    return _dataSource.updateJobPost(updated).then((_) async {
+      await JobPostSyncService().pushPostUpdate(updated);
+      return CorporateJobPostResult.success(updated);
+    });
   }
 }
 

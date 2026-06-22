@@ -5,6 +5,8 @@ import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/core/widgets/map_form_split_layout.dart';
+import 'package:map/core/widgets/web_right_navigation_rail.dart';
 import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
@@ -20,12 +22,14 @@ import 'package:map/features/corporate/presentation/widgets/push_radius_map_pick
 /// 노선 수정 화면 진입 인자 — [lockedStopIds]가 있으면 해당 정류장은 보호하고 추가만 허용
 class ShuttleRouteEditArgs {
   const ShuttleRouteEditArgs({
-    required this.route,
+    this.route,
     this.lockedStopIds = const {},
+    this.workplaceCoordinate,
   });
 
-  final CommuteRoute route;
+  final CommuteRoute? route;
   final Set<String> lockedStopIds;
+  final GeoCoordinate? workplaceCoordinate;
 }
 
 /// 기업 — 셔틀 노선 등록·수정
@@ -34,10 +38,12 @@ class ShuttleRouteEditPage extends StatefulWidget {
     super.key,
     this.existing,
     this.lockedStopIds = const {},
+    this.initialWorkplaceCoordinate,
   });
 
   final CommuteRoute? existing;
   final Set<String> lockedStopIds;
+  final GeoCoordinate? initialWorkplaceCoordinate;
 
   @override
   State<ShuttleRouteEditPage> createState() => _ShuttleRouteEditPageState();
@@ -92,7 +98,9 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
           existing.boardingNotes.trim().isNotEmpty ||
           existing.arrivalInstructions.trim().isNotEmpty;
     } else {
-      _workplaceStop = ShuttleRouteStopPolicy.defaultWorkplace();
+      _workplaceStop = ShuttleRouteStopPolicy.defaultWorkplace(
+        coordinate: widget.initialWorkplaceCoordinate,
+      );
       _boardingNotesController.text =
           ShuttleOperationGuideCopy.boardingWaitRecommendation;
     }
@@ -483,6 +491,7 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
   }
 
   Widget _buildMapLayer() {
+    final wide = WebLayoutBreakpoints.isWideWeb(context);
     return PushRadiusMapPicker(
       key: ValueKey(
         'shuttle_map_${_activeStopIndex}_${_positionAdjustIndex}_'
@@ -501,37 +510,12 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
           _intermediateStops.isNotEmpty ? _onMapPointTap : null,
       onCenterChanged: _onMapCenterChanged,
       maxZoom: 21,
-      myLocationButtonBottom: 110,
+      myLocationButtonBottom: wide ? 16 : 110,
     );
   }
 
-  Widget _buildBottomSheetContent(ScrollController scrollController) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _sheetDragHandle(),
-          Expanded(
-            child: ListView(
-              controller: scrollController,
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: ClampingScrollPhysics(),
-              ),
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + bottomInset),
-              children: [
+  List<Widget> _buildRouteFormFieldList() {
+    return [
                 TextField(
                   controller: _nameController,
                   readOnly: _addOnlyMode,
@@ -735,7 +719,36 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
-              ],
+    ];
+  }
+
+  Widget _buildBottomSheetContent(ScrollController scrollController) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _sheetDragHandle(),
+          Expanded(
+            child: ListView(
+              controller: scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + bottomInset),
+              children: _buildRouteFormFieldList(),
             ),
           ),
         ],
@@ -745,9 +758,10 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
 
   @override
   Widget build(BuildContext context) {
+    final wide = WebLayoutBreakpoints.isWideWeb(context);
     return Scaffold(
       backgroundColor: AppColors.background,
-      extendBody: true,
+      extendBody: !wide,
       appBar: AppBar(
         backgroundColor: AppColors.surface.withValues(alpha: 0.94),
         foregroundColor: AppColors.textPrimary,
@@ -770,7 +784,15 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
           ),
         ],
       ),
-      body: Stack(
+      body: wide
+          ? MapFormSplitLayout(
+              map: _buildMapLayer(),
+              panel: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _buildRouteFormFieldList(),
+              ),
+            )
+          : Stack(
         fit: StackFit.expand,
         children: [
           Positioned.fill(child: _buildMapLayer()),

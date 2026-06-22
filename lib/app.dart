@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/core/theme/app_theme.dart';
@@ -39,9 +40,13 @@ import 'package:map/features/corporate/domain/entities/tax_document_type.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_tax_documents_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_profile_setup_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_welcome_onboarding_page.dart';
+import 'package:map/features/corporate/presentation/pages/corporate_cash_charge_page.dart';
+import 'package:map/features/corporate/presentation/pages/exposure_renewal_page.dart';
 import 'package:map/features/corporate/presentation/pages/push_package_shop_page.dart';
 import 'package:map/features/corporate/presentation/pages/job_pin_activation_page.dart';
 import 'package:map/features/corporate/presentation/pages/push_notification_base_point_page.dart';
+import 'package:map/core/legal/legal_consent_gate.dart';
+import 'package:map/features/corporate/presentation/pages/payment_web_callback_page.dart';
 import 'package:map/features/corporate/presentation/pages/push_ticket_purchase_page.dart';
 import 'package:map/features/corporate/presentation/pages/push_ticket_use_page.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
@@ -54,6 +59,7 @@ import 'package:map/features/commute/presentation/pages/shuttle_stop_payment_pag
 import 'package:map/features/commute/presentation/pages/shuttle_stop_map_picker_page.dart';
 import 'package:map/features/corporate/presentation/pages/workplace_address_search_page.dart';
 import 'package:map/features/home/presentation/pages/role_based_home_page.dart';
+import 'package:map/features/job_seeker/presentation/pages/tabs/individual_my_jobs_tab.dart';
 import 'package:map/features/job_seeker/presentation/pages/health_insurance_verification_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_notification_settings_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_my_documents_page.dart';
@@ -108,13 +114,30 @@ class MapApp extends StatelessWidget {
         );
       case AppRoutes.home:
         final args = settings.arguments;
-        final seekerTabIndex =
-            args is Map ? (args['seekerTabIndex'] as int? ?? 0) : 0;
+        final rawTab = args is Map ? (args['seekerTabIndex'] as int? ?? 0) : 0;
+        final seekerTabIndex = normalizeSeekerTabIndex(rawTab);
+        final seekerMyJobsSegment = args is Map
+            ? (args['seekerMyJobsSegment'] as int? ??
+                seekerMyJobsSegmentFromLegacyTab(rawTab))
+            : 0;
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => RoleBasedHomePage(
-            initialSeekerTabIndex: seekerTabIndex,
+          builder: (_) => LegalConsentGate(
+            child: RoleBasedHomePage(
+              initialSeekerTabIndex: seekerTabIndex,
+              initialSeekerMyJobsSegment: seekerMyJobsSegment,
+            ),
           ),
+        );
+      case AppRoutes.paymentWebSuccess:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const PaymentWebCallbackPage(success: true),
+        );
+      case AppRoutes.paymentWebFail:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const PaymentWebCallbackPage(success: false),
         );
       case AppRoutes.search:
         return MaterialPageRoute<void>(
@@ -338,10 +361,12 @@ class MapApp extends StatelessWidget {
       case AppRoutes.corporateShuttleRouteEdit:
         CommuteRoute? existing;
         Set<String> lockedStopIds = const {};
+        GeoCoordinate? initialWorkplaceCoordinate;
         final editArgs = settings.arguments;
         if (editArgs is ShuttleRouteEditArgs) {
           existing = editArgs.route;
           lockedStopIds = editArgs.lockedStopIds;
+          initialWorkplaceCoordinate = editArgs.workplaceCoordinate;
         } else if (editArgs is CommuteRoute) {
           existing = editArgs;
         }
@@ -350,6 +375,7 @@ class MapApp extends StatelessWidget {
           builder: (_) => ShuttleRouteEditPage(
             existing: existing,
             lockedStopIds: lockedStopIds,
+            initialWorkplaceCoordinate: initialWorkplaceCoordinate,
           ),
         );
       case AppRoutes.corporateJobPinActivation:
@@ -369,6 +395,17 @@ class MapApp extends StatelessWidget {
         return MaterialPageRoute<ShuttleStopPaymentPageResult?>(
           settings: settings,
           builder: (_) => ShuttleStopPaymentPage(args: paymentArgs),
+        );
+      case AppRoutes.corporateExposureRenewal:
+        final renewalArgs = settings.arguments as ExposureRenewalArgs?;
+        return MaterialPageRoute<bool>(
+          settings: settings,
+          builder: (_) => ExposureRenewalPage(args: renewalArgs),
+        );
+      case AppRoutes.corporateCashCharge:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const CorporateCashChargePage(),
         );
       case AppRoutes.corporatePushTicketUse:
         final useArgs = settings.arguments as PushTicketUseArgs;

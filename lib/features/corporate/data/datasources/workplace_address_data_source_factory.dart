@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:map/core/config/env_config.dart';
 import 'package:map/features/corporate/data/datasources/workplace_address_kakao_data_source.dart';
 import 'package:map/features/corporate/data/datasources/workplace_address_local_data_source.dart';
@@ -9,12 +10,12 @@ abstract final class WorkplaceAddressDataSourceFactory {
     if (EnvConfig.isComplianceApiEnabled) {
       return _ChainedAddressDataSource(
         primary: WorkplaceAddressRemoteDataSource(),
-        secondary: EnvConfig.isKakaoAddressConfigured
+        secondary: (!kIsWeb && EnvConfig.isKakaoAddressConfigured)
             ? WorkplaceAddressKakaoDataSource()
             : const WorkplaceAddressLocalDataSource(),
       );
     }
-    if (EnvConfig.isKakaoAddressConfigured) {
+    if (EnvConfig.isKakaoAddressConfigured && !kIsWeb) {
       return WorkplaceAddressKakaoDataSource();
     }
     return const WorkplaceAddressLocalDataSource();

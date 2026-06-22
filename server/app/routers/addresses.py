@@ -148,13 +148,20 @@ def _mock_results(keyword: str) -> list[AddressItem]:
         ),
     ]
     trimmed = keyword.strip()
-    return [
-        item
-        for item in samples
-        if trimmed in item.road_address
-        or (item.dong_name and trimmed in item.dong_name)
-        or trimmed in (item.jibun_address or "")
-    ]
+    if not trimmed:
+        return []
+
+    def _matches(item: AddressItem) -> bool:
+        haystacks = [
+            item.road_address,
+            item.jibun_address or "",
+            item.dong_name or "",
+        ]
+        if any(trimmed in h for h in haystacks):
+            return True
+        return any(h and h in trimmed for h in haystacks if len(h) >= 2)
+
+    return [item for item in samples if _matches(item)]
 
 
 @router.get("/search", response_model=AddressSearchResponse)

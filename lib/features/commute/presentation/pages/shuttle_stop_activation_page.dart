@@ -15,6 +15,7 @@ import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart'
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_payment_preference.dart';
+import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
 import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_service_action_style.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
@@ -440,9 +441,22 @@ class _ShuttleStopActivationPageState extends State<ShuttleStopActivationPage> {
     }
   }
 
+  Future<GeoCoordinate?> _workplaceCoordinateForJob() async {
+    final jobPostId = widget.args?.jobPostId?.trim();
+    if (jobPostId == null || jobPostId.isEmpty) return null;
+    final post =
+        await const CorporateJobPostLocalDataSourceImpl().findById(jobPostId);
+    if (post == null) return null;
+    return JobPostWorkplaceResolver.resolveCoordinateAsync(post);
+  }
+
   Future<void> _createRoute() async {
+    final workplaceCoordinate = await _workplaceCoordinateForJob();
     final created = await Navigator.of(context).pushNamed<CommuteRoute>(
       AppRoutes.corporateShuttleRouteEdit,
+      arguments: ShuttleRouteEditArgs(
+        workplaceCoordinate: workplaceCoordinate,
+      ),
     );
     if (created == null || !mounted) return;
     await _loadRoutes();

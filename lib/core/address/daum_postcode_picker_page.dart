@@ -7,7 +7,7 @@ import 'package:map/core/address/web/daum_postcode_web_layer.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 
-/// Daum 우편번호 — 모바일 WebView · 웹 DOM embed
+/// 도로명주소 — 앱(WebView) · 웹(동일 HTML iframe)
 class DaumPostcodePickerPage extends StatelessWidget {
   const DaumPostcodePickerPage({super.key});
 

@@ -1,25 +1,33 @@
+import 'package:map/core/address/address_geocoder.dart';
 import 'package:map/core/constants/map_constants.dart';
+import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/job_seeker/data/datasources/closed_ghost_pin_local_data_source.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/features/job_seeker/domain/factories/closed_ghost_job_map_pin_factory.dart';
 import 'package:map/features/map_dashboard/data/datasources/warehouse_local_data_source.dart';
 import 'package:map/features/map_dashboard/domain/entities/warehouse.dart';
 
 abstract class JobMapPinsDataSource {
-  Future<List<JobMapPin>> fetchActiveJobPins();
+  Future<List<JobMapPin>> fetchActiveJobPins({bool includeClosedGhosts = false});
 }
 
 class JobMapPinsLocalDataSource implements JobMapPinsDataSource {
   const JobMapPinsLocalDataSource({
     this.jobPosts = const CorporateJobPostLocalDataSourceImpl(),
     this.warehouses = const WarehouseLocalDataSourceImpl(),
+    this.ghostPins = const ClosedGhostPinLocalDataSourceImpl(),
   });
 
   final CorporateJobPostLocalDataSource jobPosts;
   final WarehouseLocalDataSource warehouses;
+  final ClosedGhostPinLocalDataSource ghostPins;
 
   @override
-  Future<List<JobMapPin>> fetchActiveJobPins() async {
+  Future<List<JobMapPin>> fetchActiveJobPins({
+    bool includeClosedGhosts = false,
+  }) async {
     final posts = await jobPosts.fetchJobPosts();
     final warehouseList = await warehouses.fetchWarehouses();
 
@@ -31,41 +39,129 @@ class JobMapPinsLocalDataSource implements JobMapPinsDataSource {
     );
 
     var fallbackIndex = 0;
-    return activePosts.map((post) {
-      final settingsCoord =
-          post.notificationSettings?.basePoints.isNotEmpty == true
-              ? post.notificationSettings!.basePoints.first.coordinate
-              : null;
-      if (settingsCoord != null) {
-        return JobMapPin(
-          post: post,
-          latitude: settingsCoord.latitude,
-          longitude: settingsCoord.longitude,
-          companyName: post.registeredBy?.companyName ?? post.warehouseName,
-          displayTier: post.effectiveMapPinTier,
-        );
-      }
-
-      final warehouse = _matchWarehouse(post, warehouseList);
-      if (warehouse != null) {
-        return JobMapPin(
-          post: post,
-          latitude: warehouse.latitude,
-          longitude: warehouse.longitude,
-          companyName: post.registeredBy?.companyName ?? warehouse.name,
-          displayTier: post.effectiveMapPinTier,
-        );
-      }
-
-      final offset = _fallbackOffset(fallbackIndex++);
-      return JobMapPin(
-        post: post,
-        latitude: MapConstants.warehouseAreaCenter.latitude + offset.$1,
-        longitude: MapConstants.warehouseAreaCenter.longitude + offset.$2,
-        companyName: post.registeredBy?.companyName ?? post.warehouseName,
-        displayTier: post.effectiveMapPinTier,
+    final activePins = <JobMapPin>[];
+    for (final post in activePosts) {
+      activePins.add(
+        await _pinFromPost(
+          post,
+          warehouseList: warehouseList,
+          fallbackIndex: fallbackIndex++,
+        ),
       );
-    }).toList();
+    }
+
+    if (!includeClosedGhosts) return activePins;
+
+    final ghostMapPins = await _fetchClosedGhostPins(
+      posts: posts,
+      warehouseList: warehouseList,
+    );
+    return [...activePins, ...ghostMapPins];
+  }
+
+  Future<List<JobMapPin>> _fetchClosedGhostPins({
+    required List<CorporateJobPost> posts,
+    required List<Warehouse> warehouseList,
+  }) async {
+    final adminPins = await ghostPins.fetchAll();
+    final postsById = {for (final post in posts) post.id: post};
+    final coveredPostIds = <String>{};
+    final result = <JobMapPin>[];
+
+    for (final adminPin in adminPins) {
+      final sourceId = adminPin.sourcePostId?.trim();
+      final sourcePost =
+          sourceId != null && sourceId.isNotEmpty ? postsById[sourceId] : null;
+      result.add(
+        ClosedGhostJobMapPinFactory.fromAdminPin(
+          adminPin,
+          sourcePost: sourcePost,
+        ),
+      );
+      if (sourceId != null && sourceId.isNotEmpty) {
+        coveredPostIds.add(sourceId);
+      }
+    }
+
+    var fallbackIndex = 0;
+    for (final post in posts) {
+      if (coveredPostIds.contains(post.id)) continue;
+      if (!ClosedGhostJobMapPinFactory.qualifiesExpiredFreePost(post)) {
+        continue;
+      }
+      final coordinate = await _coordinateForPost(
+        post,
+        warehouseList: warehouseList,
+        fallbackIndex: fallbackIndex++,
+      );
+      result.add(ClosedGhostJobMapPinFactory.fromPost(post, coordinate));
+    }
+
+    return result;
+  }
+
+  Future<JobMapPin> _pinFromPost(
+    CorporateJobPost post, {
+    required List<Warehouse> warehouseList,
+    required int fallbackIndex,
+  }) async {
+    final coordinate = await _coordinateForPost(
+      post,
+      warehouseList: warehouseList,
+      fallbackIndex: fallbackIndex,
+    );
+    return JobMapPin(
+      post: post,
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+      companyName: post.registeredBy?.companyName ?? post.warehouseName,
+      displayTier: post.effectiveMapPinTier,
+    );
+  }
+
+  Future<GeoCoordinate> _coordinateForPost(
+    CorporateJobPost post, {
+    required List<Warehouse> warehouseList,
+    required int fallbackIndex,
+  }) async {
+    final stored = post.workplaceCoordinate;
+    if (stored != null) return stored;
+
+    final settingsCoord =
+        post.notificationSettings?.basePoints.isNotEmpty == true
+            ? post.notificationSettings!.basePoints.first.coordinate
+            : null;
+    if (settingsCoord != null) return settingsCoord;
+
+    final warehouse = _matchWarehouse(post, warehouseList);
+    if (warehouse != null) {
+      return GeoCoordinate(
+        latitude: warehouse.latitude,
+        longitude: warehouse.longitude,
+      );
+    }
+
+    final road = post.warehouseName.trim();
+    if (road.isNotEmpty) {
+      final geocoded = await AddressGeocoder.geocode(road);
+      if (geocoded != null) {
+        if (post.workplaceLatitude == null) {
+          await jobPosts.updateJobPost(
+            post.copyWith(
+              workplaceLatitude: geocoded.latitude,
+              workplaceLongitude: geocoded.longitude,
+            ),
+          );
+        }
+        return geocoded;
+      }
+    }
+
+    final offset = _fallbackOffset(fallbackIndex);
+    return GeoCoordinate(
+      latitude: MapConstants.warehouseAreaCenter.latitude + offset.$1,
+      longitude: MapConstants.warehouseAreaCenter.longitude + offset.$2,
+    );
   }
 
   Warehouse? _matchWarehouse(

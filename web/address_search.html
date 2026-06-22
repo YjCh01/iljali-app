@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>주소 검색</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #fff; }
+    #container { height: 100%; width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <script src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+  <script>
+    // 앱(daum_postcode_search WebView)과 동일한 postcode.v2.js + embed
+    function notifyParent(data) {
+      try {
+        window.parent.postMessage(JSON.stringify(data), '*');
+      } catch (e) {
+        console.error('postMessage failed', e);
+      }
+    }
+
+    function mountPostcode() {
+      new kakao.Postcode({
+        oncomplete: notifyParent,
+        width: '100%',
+        height: '100%',
+        maxSuggestItems: 5,
+        hideMapBtn: true,
+        hideEngBtn: false,
+      }).embed(document.getElementById('container'));
+    }
+
+    if (window.kakao && kakao.postcode && typeof kakao.postcode.load === 'function') {
+      kakao.postcode.load(mountPostcode);
+    } else {
+      mountPostcode();
+    }
+  </script>
+</body>
+</html>

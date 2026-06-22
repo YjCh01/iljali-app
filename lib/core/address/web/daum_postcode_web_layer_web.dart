@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:html' as html;
-import 'dart:js_util' as js_util;
 import 'dart:ui_web' as ui_web;
 
 import 'package:daum_postcode_search/daum_postcode_search.dart';
@@ -8,46 +7,7 @@ import 'package:flutter/material.dart';
 
 typedef DaumPostcodeWebCompleteCallback = void Function(DataModel data);
 
-Future<void>? _scriptLoadFuture;
-
-Future<void> ensureDaumPostcodeScriptLoaded() {
-  if (_scriptLoadFuture != null) return _scriptLoadFuture!;
-  _scriptLoadFuture = _loadScript();
-  return _scriptLoadFuture!;
-}
-
-Future<void> _loadScript() {
-  if (_isPostcodeReady()) return Future.value();
-
-  final existing = html.document.querySelector('script[data-iljari-daum-postcode]');
-  if (existing != null && _isPostcodeReady()) {
-    return Future.value();
-  }
-
-  final completer = Completer<void>();
-  final script = html.ScriptElement()
-    ..type = 'text/javascript'
-    ..src =
-        'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
-  script.dataset['iljari-daum-postcode'] = '1';
-  script.onLoad.listen((_) {
-    if (!completer.isCompleted) completer.complete();
-  });
-  script.onError.listen((_) {
-    if (!completer.isCompleted) {
-      completer.completeError(Exception('Daum Postcode JS load failed'));
-    }
-  });
-  html.document.head!.append(script);
-  return completer.future;
-}
-
-bool _isPostcodeReady() {
-  final kakao = js_util.getProperty<Object?>(html.window, 'kakao');
-  if (kakao == null) return false;
-  return js_util.getProperty<Object?>(kakao, 'Postcode') != null;
-}
-
+/// 웹 — 앱과 동일한 postcode.v2.js HTML을 iframe으로 로드
 class DaumPostcodeWebEmbed extends StatefulWidget {
   const DaumPostcodeWebEmbed({
     super.key,
@@ -68,28 +28,43 @@ class _DaumPostcodeWebEmbedState extends State<DaumPostcodeWebEmbed> {
   String? _viewType;
   bool _loading = true;
   String? _errorMessage;
+  StreamSubscription<html.MessageEvent>? _messageSub;
 
   @override
   void initState() {
     super.initState();
+    _messageSub = html.window.onMessage.listen(_onWindowMessage);
     _registerView();
   }
 
-  Future<void> _registerView() async {
-    try {
-      await ensureDaumPostcodeScriptLoaded();
-      if (!mounted) return;
+  void _onWindowMessage(html.MessageEvent event) {
+    final data = event.data;
+    if (data is! String || data.isEmpty) return;
 
-      final viewType = 'iljari-daum-postcode-${_viewCounter++}';
+    try {
+      final result = DaumPostcodeCallbackParser.fromPostMessage(data);
+      if (result != null) widget.onComplete(result);
+    } on Object catch (error) {
+      widget.onError?.call(error.toString());
+    }
+  }
+
+  void _registerView() {
+    try {
+      final viewType = 'iljari-address-search-${_viewCounter++}';
       ui_web.platformViewRegistry.registerViewFactory(viewType, (int _) {
-        final container = html.DivElement()
+        final iframe = html.IFrameElement()
+          ..src = '/address_search.html'
+          ..style.border = '0'
           ..style.width = '100%'
           ..style.height = '100%'
-          ..style.margin = '0'
-          ..style.padding = '0';
+          ..allowFullscreen = true;
 
-        _embedPostcode(container);
-        return container;
+        iframe.onError.listen((_) {
+          widget.onError?.call('주소 검색 페이지를 불러오지 못했습니다.');
+        });
+
+        return iframe;
       });
 
       setState(() {
@@ -98,36 +73,18 @@ class _DaumPostcodeWebEmbedState extends State<DaumPostcodeWebEmbed> {
         _errorMessage = null;
       });
     } on Object catch (error) {
-      if (!mounted) return;
-      final message = error.toString();
       setState(() {
         _loading = false;
-        _errorMessage = message;
+        _errorMessage = error.toString();
       });
-      widget.onError?.call(message);
+      widget.onError?.call(error.toString());
     }
   }
 
-  void _embedPostcode(html.DivElement container) {
-    final kakao = js_util.getProperty<Object>(html.window, 'kakao');
-    final postcodeCtor = js_util.getProperty<Object>(kakao, 'Postcode');
-    final options = js_util.jsify({
-      'oncomplete': js_util.allowInterop((dynamic data) {
-        final dartified = js_util.dartify(data);
-        if (dartified is! Map) return;
-        final model = DaumPostcodeCallbackParser.fromMap(
-          Map<String, dynamic>.from(dartified),
-        );
-        if (model != null) widget.onComplete(model);
-      }),
-      'width': '100%',
-      'height': '100%',
-      'maxSuggestItems': 5,
-      'hideMapBtn': true,
-      'hideEngBtn': false,
-    });
-    final postcode = js_util.callConstructor(postcodeCtor, [options]);
-    js_util.callMethod(postcode, 'embed', [container]);
+  @override
+  void dispose() {
+    _messageSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -136,9 +93,34 @@ class _DaumPostcodeWebEmbedState extends State<DaumPostcodeWebEmbed> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            _errorMessage!,
-            textAlign: TextAlign.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48),
+              const SizedBox(height: 12),
+              const Text(
+                '주소 검색을 불러오지 못했습니다',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _errorMessage = null;
+                    _loading = true;
+                    _viewType = null;
+                  });
+                  _registerView();
+                },
+                child: const Text('다시 시도'),
+              ),
+            ],
           ),
         ),
       );
@@ -151,3 +133,5 @@ class _DaumPostcodeWebEmbedState extends State<DaumPostcodeWebEmbed> {
     return HtmlElementView(viewType: _viewType!);
   }
 }
+
+Future<void> ensureDaumPostcodeScriptLoaded() => Future.value();

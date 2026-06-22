@@ -2,11 +2,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:map/core/address/address_geocoder.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/core/widgets/map_form_split_layout.dart';
 import 'package:map/core/widgets/transient_snack_bar.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
@@ -56,6 +58,7 @@ class _PushNotificationBasePointPageState
   String _addressLabel = '';
   List<WorkplaceAddress> _searchResults = [];
   bool _searching = false;
+  String? _searchStatusMessage;
   bool _walletReady = false;
 
   @override
@@ -108,6 +111,29 @@ class _PushNotificationBasePointPageState
     _searchController.text = _addressLabel;
     _clampAllToPlan();
     _ensureWalletLoaded();
+    _resolveWorkplaceCenterIfNeeded();
+  }
+
+  Future<void> _resolveWorkplaceCenterIfNeeded() async {
+    final hint = widget.workplaceHint;
+    if (hint == null || hint.coordinate != null) return;
+    if (widget.initialSettings != null &&
+        widget.initialSettings!.basePoints.isNotEmpty) {
+      return;
+    }
+    final geocoded = await AddressGeocoder.geocode(hint.roadAddress);
+    if (geocoded == null || !mounted) return;
+    setState(() {
+      _center = geocoded;
+      if (_points.isNotEmpty) {
+        _points[0] = _points[0].copyWith(
+          coordinate: geocoded,
+          addressLabel: hint.roadAddress,
+        );
+        _addressLabel = hint.roadAddress;
+        _searchController.text = _addressLabel;
+      }
+    });
   }
 
   Future<void> _ensureWalletLoaded() async {
@@ -270,7 +296,10 @@ class _PushNotificationBasePointPageState
 
   Future<void> _runAddressSearch(String query) async {
     if (query.trim().length < 2) {
-      setState(() => _searchResults = []);
+      setState(() {
+        _searchResults = [];
+        _searchStatusMessage = null;
+      });
       return;
     }
     setState(() => _searching = true);
@@ -279,6 +308,11 @@ class _PushNotificationBasePointPageState
     setState(() {
       _searchResults = result.addresses;
       _searching = false;
+      _searchStatusMessage = result.addresses.isEmpty
+          ? (result.message ??
+              '검색 결과가 없습니다. server/.env 에 JUSO_CONFM_KEY 또는 KAKAO_REST_API_KEY 를 설정하거나, '
+              '「테헤란로」「역삼동」 등 샘플 키워드를 입력해 보세요.')
+          : result.message;
     });
   }
 
@@ -430,266 +464,239 @@ class _PushNotificationBasePointPageState
       ),
       body: !_walletReady
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1) 지도 + 반경 슬라이더 — 화면 높이에 맞게 (웹 와이드에서 overflow 방지)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final screen = MediaQuery.sizeOf(context);
-              final topInset =
-                  MediaQuery.paddingOf(context).top + kToolbarHeight;
-              final bodyHeight = screen.height - topInset;
-              final mapSide = math
-                  .min(constraints.maxWidth, math.min(bodyHeight * 0.42, 400))
-                  .clamp(220.0, 400.0)
-                  .toDouble();
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: SizedBox(
-                  height: mapSide,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      PushRadiusMapPicker(
-                    key: ValueKey(
-                      'map_${_activePointIndex}_${_points.length}_'
-                      '${_points.map((p) => p.id).join('-')}',
+          : MapFormSplitLayout(
+              map: _buildMapPicker(activeTheme),
+              panel: _buildSettingsPanel(activeTheme),
+            ),
+    );
+  }
+
+  Widget _buildMapPicker(PushCreditVisualTheme activeTheme) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        PushRadiusMapPicker(
+          key: ValueKey(
+            'map_${_activePointIndex}_${_points.length}_'
+            '${_points.map((p) => p.id).join('-')}',
+          ),
+          center: _center,
+          radiusMeters: _radiusTier.radiusMeters,
+          centerEditable: _canEditActivePointLocation,
+          existingPoints: _existingMapOverlays,
+          activePointLabel: _activeMapLabel,
+          visualTheme: activeTheme,
+          onExistingPointTap: _points.length > 1 ? _selectPointTab : null,
+          onCenterChanged: (coordinate) {
+            if (!_canEditActivePointLocation) return;
+            setState(() {
+              _center = coordinate;
+              _syncActivePointToList();
+            });
+          },
+          maxZoom: 21,
+          viewportSessionKey: MapViewportSessionKeys.pushBasePoint(
+            _points[_activePointIndex].id,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingsPanel(PushCreditVisualTheme activeTheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ExposureZoneRowList(
+          points: _points,
+          activeIndex: _activePointIndex,
+          remainingAddSlots: _remainingAddSlots,
+          onSelect: _selectPointTab,
+          onRemove: _removePoint,
+          onAdd: _onAddZoneFromRow,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          _pointTabLabel(_activePointIndex),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: activeTheme.accent,
+          ),
+        ),
+        const SizedBox(height: 2),
+        if (ExposurePointLabels.zoneRowSubtitle(_activePointIndex).isNotEmpty)
+          Text(
+            ExposurePointLabels.zoneRowSubtitle(_activePointIndex),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary.withValues(alpha: 0.9),
+            ),
+          ),
+        if (_activePointIndex > 0 && _isPinExposureLocked(_activePointIndex)) ...[
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.textSecondary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.searchBarBorder),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.lock_clock_outlined,
+                  size: 18,
+                  color: AppColors.textSecondary.withValues(alpha: 0.7),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '노출 중인 알림핀은 위치를 수정할 수 없습니다. '
+                    '${_points[_activePointIndex].exposureExpiresAt == null ? 'D+1 23:59:59까지' : ShuttleExposurePolicy.remainingLabel(_points[_activePointIndex].exposureExpiresAt!)} · 새 핀만 추가 가능',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: AppColors.textSecondary.withValues(alpha: 0.92),
                     ),
-                    center: _center,
-                    radiusMeters: _radiusTier.radiusMeters,
-                    centerEditable: _canEditActivePointLocation,
-                    existingPoints: _existingMapOverlays,
-                    activePointLabel: _activeMapLabel,
-                    visualTheme: activeTheme,
-                    onExistingPointTap: _points.length > 1
-                        ? _selectPointTab
-                        : null,
-                    onCenterChanged: (coordinate) {
-                      if (!_canEditActivePointLocation) return;
-                      setState(() {
-                        _center = coordinate;
-                        _syncActivePointToList();
-                      });
-                    },
-                    maxZoom: 21,
-                    viewportSessionKey: MapViewportSessionKeys.pushBasePoint(
-                      _points[_activePointIndex].id,
-                    ),
-                  ),
-                    ],
                   ),
                 ),
-              );
+              ],
+            ),
+          ),
+        ] else if (_activePointIndex > 0) ...[
+          const SizedBox(height: 6),
+          const Text(
+            '알림핀 색상',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          ShuttleRouteColorPicker(
+            colorHex: (_points[_activePointIndex].pinColorHex ?? '#9B86F0')
+                .toUpperCase(),
+            onChanged: (hex) {
+              setState(() {
+                _points = [
+                  for (var i = 0; i < _points.length; i++)
+                    if (i == _activePointIndex)
+                      _points[i].copyWith(pinColorHex: hex)
+                    else
+                      _points[i],
+                ];
+              });
             },
           ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _ExposureZoneRowList(
-                    points: _points,
-                    activeIndex: _activePointIndex,
-                    remainingAddSlots: _remainingAddSlots,
-                    onSelect: _selectPointTab,
-                    onRemove: _removePoint,
-                    onAdd: _onAddZoneFromRow,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _pointTabLabel(_activePointIndex),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: activeTheme.accent,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  if (ExposurePointLabels
-                      .zoneRowSubtitle(_activePointIndex)
-                      .isNotEmpty)
-                    Text(
-                      ExposurePointLabels.zoneRowSubtitle(_activePointIndex),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  if (_activePointIndex > 0 && _isPinExposureLocked(_activePointIndex)) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.textSecondary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.searchBarBorder),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.lock_clock_outlined,
-                            size: 18,
-                            color: AppColors.textSecondary.withValues(alpha: 0.7),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '노출 중인 알림핀은 위치를 수정할 수 없습니다. '
-                              '${_points[_activePointIndex].exposureExpiresAt == null ? 'D+1 23:59:59까지' : ShuttleExposurePolicy.remainingLabel(_points[_activePointIndex].exposureExpiresAt!)} · 새 핀만 추가 가능',
-                              style: TextStyle(
-                                fontSize: 12,
-                                height: 1.4,
-                                color: AppColors.textSecondary
-                                    .withValues(alpha: 0.92),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (_activePointIndex > 0) ...[
-                    const SizedBox(height: 6),
-                    const Text(
-                      '알림핀 색상',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ShuttleRouteColorPicker(
-                      colorHex: (_points[_activePointIndex].pinColorHex ??
-                              '#9B86F0')
-                          .toUpperCase(),
-                      onChanged: (hex) {
-                        setState(() {
-                          _points = [
-                            for (var i = 0; i < _points.length; i++)
-                              if (i == _activePointIndex)
-                                _points[i].copyWith(pinColorHex: hex)
-                              else
-                                _points[i],
-                          ];
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '근무지와 점선으로 연결됩니다 · 1개부터 표시',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary.withValues(alpha: 0.85),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    PushRadiusKmSlider(
-                      selectedKm: _radiusTier.radiusKm,
-                      allowedKmSteps: PushPlanEnforcement.allowedSliderKmSteps,
-                      accentColor: activeTheme.accent,
-                      suppressCenterLabel: true,
-                      onChanged: (km) =>
-                          _selectRadius(PushRadiusOptions.fromKm(km)),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  if (_canEditActivePointLocation) ...[
-                    TextField(
-                      controller: _searchController,
-                      textInputAction: TextInputAction.search,
-                      onSubmitted: _runAddressSearch,
-                      onChanged: _runAddressSearch,
-                      decoration: InputDecoration(
-                        hintText:
-                            '${_pointTabLabel(_activePointIndex)} — 도로명·동 검색',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide:
-                              BorderSide(color: AppColors.searchBarBorder),
-                        ),
-                      ),
-                    ),
-                    if (_searching) ...[
-                      const SizedBox(height: 4),
-                      const LinearProgressIndicator(minHeight: 2),
-                    ],
-                    if (_searchResults.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 44,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _searchResults.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final item = _searchResults[index];
-                            return ActionChip(
-                              label: Text(
-                                item.dongName ?? item.roadAddress,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              onPressed: () => _selectSearchResult(item),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ] else if (_activePointIndex == 0) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.searchBarBorder),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.storefront_outlined,
-                            size: 18,
-                            color: AppColors.textSecondary.withValues(alpha: 0.9),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _addressLabel,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary
-                                    .withValues(alpha: 0.95),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: _confirm,
-                    style: CorporateServiceActionStyle.setupFilled(),
-                    child: const Text(
-                      '설정 완료',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
+          const SizedBox(height: 4),
+          Text(
+            '근무지와 점선으로 연결됩니다 · 1개부터 표시',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary.withValues(alpha: 0.85),
+            ),
+          ),
+          const SizedBox(height: 8),
+          PushRadiusKmSlider(
+            selectedKm: _radiusTier.radiusKm,
+            allowedKmSteps: PushPlanEnforcement.allowedSliderKmSteps,
+            accentColor: activeTheme.accent,
+            suppressCenterLabel: true,
+            onChanged: (km) => _selectRadius(PushRadiusOptions.fromKm(km)),
+          ),
+        ],
+        const SizedBox(height: 12),
+        if (_canEditActivePointLocation) ...[
+          TextField(
+            controller: _searchController,
+            textInputAction: TextInputAction.search,
+            onSubmitted: _runAddressSearch,
+            onChanged: _runAddressSearch,
+            decoration: InputDecoration(
+              hintText: '${_pointTabLabel(_activePointIndex)} — 도로명·동 검색',
+              prefixIcon: const Icon(Icons.search_rounded),
+              filled: true,
+              fillColor: AppColors.background,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: AppColors.searchBarBorder),
               ),
             ),
           ),
+          if (_searching) ...[
+            const SizedBox(height: 4),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+          if (_searchStatusMessage != null && _searchResults.isEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              _searchStatusMessage!,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
+              ),
+            ),
+          ],
+          if (_searchResults.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 44,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _searchResults.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final item = _searchResults[index];
+                  return ActionChip(
+                    label: Text(
+                      item.dongName ?? item.roadAddress,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: () => _selectSearchResult(item),
+                  );
+                },
+              ),
+            ),
+          ],
+        ] else if (_activePointIndex == 0) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.searchBarBorder),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.storefront_outlined,
+                  size: 18,
+                  color: AppColors.textSecondary.withValues(alpha: 0.9),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _addressLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary.withValues(alpha: 0.95),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-      ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _confirm,
+          style: CorporateServiceActionStyle.setupFilled(),
+          child: const Text(
+            '설정 완료',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
     );
   }
 

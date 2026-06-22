@@ -1,3 +1,4 @@
+import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
@@ -60,6 +61,8 @@ class CorporateJobPost {
     this.shuttleExposurePaidAt,
     this.hasShuttleRouteOverlay = false,
     this.workCategoryId,
+    this.workplaceLatitude,
+    this.workplaceLongitude,
   });
 
   final String id;
@@ -71,6 +74,10 @@ class CorporateJobPost {
 
   /// 근무지 표시명 (도로명 주소 또는 센터명)
   final String warehouseName;
+
+  /// 근무지 좌표 — 알림핀 미설정 공고·지도 중심용
+  final double? workplaceLatitude;
+  final double? workplaceLongitude;
   final String hourlyWage;
   final String? dailyWage;
   final String workSchedule;
@@ -153,6 +160,8 @@ class CorporateJobPost {
     DateTime? shuttleExposurePaidAt,
     bool? hasShuttleRouteOverlay,
     String? workCategoryId,
+    double? workplaceLatitude,
+    double? workplaceLongitude,
     CorporateJobPostStatus? status,
     int? applicantCount,
     DateTime? postedAt,
@@ -192,6 +201,8 @@ class CorporateJobPost {
       hasShuttleRouteOverlay:
           hasShuttleRouteOverlay ?? this.hasShuttleRouteOverlay,
       workCategoryId: workCategoryId ?? this.workCategoryId,
+      workplaceLatitude: workplaceLatitude ?? this.workplaceLatitude,
+      workplaceLongitude: workplaceLongitude ?? this.workplaceLongitude,
       status: status ?? this.status,
       applicantCount: applicantCount ?? this.applicantCount,
       postedAt: postedAt ?? this.postedAt,
@@ -228,6 +239,18 @@ extension CorporateJobPostPaymentScheduleX on CorporateJobPost {
 
   bool get hasCompletePaymentSchedule =>
       paymentSchedule?.isComplete ?? false;
+}
+
+extension CorporateJobPostWorkplaceCoordX on CorporateJobPost {
+  GeoCoordinate? get workplaceCoordinate {
+    if (workplaceLatitude != null && workplaceLongitude != null) {
+      return GeoCoordinate(
+        latitude: workplaceLatitude!,
+        longitude: workplaceLongitude!,
+      );
+    }
+    return null;
+  }
 }
 
 extension CorporateJobPostShuttleRoutesX on CorporateJobPost {
