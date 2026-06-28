@@ -8,7 +8,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.job_sync_models import JobApplicationRow
 
+from app.services.sanction_service import auto_seeker_noshow_sanction
+
 router = APIRouter(prefix="/v1/hiring", tags=["hiring"])
+
+
+class NoShowSanctionBody(BaseModel):
+    seeker_email: str
+    streak: int = 1
 
 
 class ApplicationBody(BaseModel):
@@ -57,13 +64,26 @@ def list_applications(
 
 @router.post("/applications")
 def create_application(body: ApplicationBody, db: Session = Depends(get_db)):
+    email = body.seeker_email.strip().lower()
+    existing = (
+        db.query(JobApplicationRow)
+        .filter(
+            JobApplicationRow.post_id == body.post_id,
+            JobApplicationRow.seeker_email == email,
+        )
+        .order_by(JobApplicationRow.applied_at.desc())
+        .first()
+    )
+    if existing is not None:
+        return _row_to_dict(existing)
+
     row = JobApplicationRow(
         id=f"app_{uuid4().hex[:12]}",
         post_id=body.post_id,
         post_title=body.post_title,
         company_name=body.company_name,
         company_key=body.company_key,
-        seeker_email=body.seeker_email,
+        seeker_email=email,
         seeker_name=body.seeker_name,
         status=body.status,
         work_schedule=body.work_schedule,
@@ -81,3 +101,16 @@ def get_application(application_id: str, db: Session = Depends(get_db)):
     if row is None:
         raise HTTPException(status_code=404, detail="지원 내역을 찾을 수 없습니다.")
     return _row_to_dict(row)
+
+
+@router.post("/seeker/no-show/sync")
+def sync_seeker_noshow_sanction(
+    body: NoShowSanctionBody, db: Session = Depends(get_db)
+):
+    """No-show 누적 → 구직자 자동 주의/경고 (셔틀·근무 연동)."""
+    result = auto_seeker_noshow_sanction(
+        db, email=body.seeker_email, streak=body.streak
+    )
+    if result is None:
+        return {"applied": False}
+    return {"applied": True, "sanction": result}

@@ -1,18 +1,21 @@
 import 'dart:convert';
 
 import 'package:intl/intl.dart';
+import 'package:map/core/api/iljari_api_client.dart';
+import 'package:map/core/config/env_config.dart';
 import 'package:map/core/hiring/attendance_geofence_service.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/hiring/commission_calculator.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
 import 'package:map/core/hiring/hiring_application.dart';
+import 'package:map/core/sync/member_sanction_store.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/commission_chat_prompt_service.dart';
 import 'package:map/core/hiring/hiring_refresh.dart';
 import 'package:map/core/hiring/mutual_attendance_side_effects.dart';
 import 'package:map/features/corporate/domain/services/commission_payer_resolver.dart';
 import 'package:map/core/session/auth_session.dart';
-import 'package:map/features/work_category/domain/services/work_achievement_service.dart';
 import 'package:map/features/attendance/domain/entities/check_in_method.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,8 +54,84 @@ class LocalHiringRepository {
   }
 
   Future<List<HiringApplication>> fetchForSeeker(String email) async {
+    await dedupeActiveApplicationsForSeeker(email);
     final all = await fetchAll();
     return all.where((item) => item.seekerEmail == email).toList();
+  }
+
+  static String _normalizeEmail(String email) =>
+      email.trim().toLowerCase();
+
+  static int _statusRank(HiringApplicationStatus status) => switch (status) {
+        HiringApplicationStatus.chatting => 5,
+        HiringApplicationStatus.scheduled => 4,
+        HiringApplicationStatus.checkedIn => 3,
+        HiringApplicationStatus.applied => 2,
+        HiringApplicationStatus.inquiry => 1,
+        _ => 0,
+      };
+
+  /// 같은 공고·구직자에 활성 지원이 2건 이상이면 1건만 유지 (로컬·서버 ID 불일치 대응)
+  Future<void> dedupeActiveApplicationsForSeeker(String email) async {
+    final normalized = _normalizeEmail(email);
+    final all = await fetchAll();
+    final byPost = <String, List<HiringApplication>>{};
+
+    for (final app in all) {
+      if (_normalizeEmail(app.seekerEmail) != normalized) continue;
+      if (app.status == HiringApplicationStatus.rejected ||
+          app.status == HiringApplicationStatus.noShow ||
+          app.status == HiringApplicationStatus.commissionPaid) {
+        continue;
+      }
+      byPost.putIfAbsent(app.postId, () => []).add(app);
+    }
+
+    final removeIds = <String>{};
+    for (final group in byPost.values) {
+      if (group.length <= 1) continue;
+      group.sort((a, b) {
+        final byStatus = _statusRank(b.status).compareTo(_statusRank(a.status));
+        if (byStatus != 0) return byStatus;
+        return b.appliedAt.compareTo(a.appliedAt);
+      });
+      for (final dup in group.skip(1)) {
+        removeIds.add(dup.id);
+      }
+    }
+
+    if (removeIds.isEmpty) return;
+    await _save(all.where((a) => !removeIds.contains(a.id)).toList());
+    HiringRefresh.markUpdated();
+  }
+
+  /// 서버 sync — 동일 공고·구직자 로컬 건이 있으면 추가하지 않고 메타만 갱신
+  Future<void> mergeServerApplication(HiringApplication fromServer) async {
+    final existing = await findActiveForPost(
+      postId: fromServer.postId,
+      seekerEmail: fromServer.seekerEmail,
+    );
+    if (existing != null && existing.id != fromServer.id) {
+      await _upsert(
+        existing.copyWith(
+          postTitle: fromServer.postTitle.isNotEmpty
+              ? fromServer.postTitle
+              : existing.postTitle,
+          companyName: fromServer.companyName.isNotEmpty
+              ? fromServer.companyName
+              : existing.companyName,
+          companyKey: fromServer.companyKey ?? existing.companyKey,
+          workSchedule: fromServer.workSchedule.isNotEmpty
+              ? fromServer.workSchedule
+              : existing.workSchedule,
+          status: _statusRank(fromServer.status) > _statusRank(existing.status)
+              ? fromServer.status
+              : existing.status,
+        ),
+      );
+      return;
+    }
+    await ensureSeedApplication(fromServer);
   }
 
   Future<List<HiringApplication>> fetchApplicantsForCorporate({
@@ -114,8 +193,125 @@ class LocalHiringRepository {
   Future<bool> hasApplied(String postId, String seekerEmail) async {
     final all = await fetchForSeeker(seekerEmail);
     return all.any((item) =>
-        item.postId == postId &&
-        item.status != HiringApplicationStatus.rejected);
+        item.postId == postId && item.status.countsAsApplied);
+  }
+
+  Future<HiringApplication?> findInquiryForPost({
+    required String postId,
+    required String seekerEmail,
+  }) async {
+    final active = await findActiveForPost(
+      postId: postId,
+      seekerEmail: seekerEmail,
+    );
+    if (active?.status == HiringApplicationStatus.inquiry) return active;
+    return null;
+  }
+
+  /// 지원 전 공고 문의 — 채팅방 생성·재진입
+  Future<HiringApplication> openInquiry({
+    required String postId,
+    required String postTitle,
+    required String companyName,
+    required String seekerEmail,
+    required String seekerName,
+    required String seekerPhoneMasked,
+    String? companyKey,
+    String? recruiterEmail,
+    String? branchId,
+    String? branchName,
+    double? workplaceLatitude,
+    double? workplaceLongitude,
+  }) async {
+    final existing = await findActiveForPost(
+      postId: postId,
+      seekerEmail: seekerEmail,
+    );
+    if (existing != null) return existing;
+
+    final application = HiringApplication(
+      id: 'inq_${DateTime.now().millisecondsSinceEpoch}',
+      postId: postId,
+      postTitle: postTitle,
+      companyName: companyName,
+      seekerEmail: seekerEmail,
+      seekerName: seekerName,
+      seekerPhoneMasked: seekerPhoneMasked,
+      appliedAt: DateTime.now(),
+      status: HiringApplicationStatus.inquiry,
+      workSchedule: '공고 문의',
+      companyKey: companyKey,
+      recruiterEmail: recruiterEmail,
+      branchId: branchId,
+      branchName: branchName,
+      workplaceLatitude: workplaceLatitude,
+      workplaceLongitude: workplaceLongitude,
+    );
+    await _upsert(application);
+    HiringRefresh.markUpdated();
+    await _syncApplicationToServer(application);
+    return application;
+  }
+
+  Future<HiringApplication?> findActiveForPost({
+    required String postId,
+    required String seekerEmail,
+  }) async {
+    final all = await fetchForSeeker(seekerEmail);
+    for (final item in all) {
+      if (item.postId != postId) continue;
+      if (item.status == HiringApplicationStatus.rejected ||
+          item.status == HiringApplicationStatus.noShow) {
+        continue;
+      }
+      return item;
+    }
+    return null;
+  }
+
+  static bool canSeekerWithdraw(HiringApplication application) {
+    if (application.seekerCheckedIn) return false;
+    return switch (application.status) {
+      HiringApplicationStatus.inquiry => true,
+      HiringApplicationStatus.applied => true,
+      HiringApplicationStatus.chatting => true,
+      HiringApplicationStatus.scheduled => true,
+      _ => false,
+    };
+  }
+
+  static String? seekerWithdrawBlockReason(HiringApplication application) {
+    if (canSeekerWithdraw(application)) return null;
+    if (application.seekerCheckedIn ||
+        application.status == HiringApplicationStatus.checkedIn) {
+      return '출근 확인 후에는 지원을 취소할 수 없습니다.';
+    }
+    if (application.status == HiringApplicationStatus.commissionPaid) {
+      return '정산이 완료된 근무는 취소할 수 없습니다.';
+    }
+    return '이 공고는 지원 취소할 수 없습니다.';
+  }
+
+  Future<bool> withdrawBySeeker({
+    required String postId,
+    required String seekerEmail,
+  }) async {
+    final application = await findActiveForPost(
+      postId: postId,
+      seekerEmail: seekerEmail,
+    );
+    if (application == null) return false;
+    if (!canSeekerWithdraw(application)) {
+      throw StateError(
+        seekerWithdrawBlockReason(application) ?? 'not_withdrawable',
+      );
+    }
+
+    final all = await fetchAll();
+    all.removeWhere((item) => item.id == application.id);
+    await _save(all);
+    HiringRefresh.markUpdated();
+    return true;
   }
 
   Future<HiringApplication> submitApplication({
@@ -139,9 +335,56 @@ class LocalHiringRepository {
     String? shiftSlot,
     String? shuttleBookingId,
     String? preferredStopId,
+    List<ResumeItemKind> disclosedResumeItems = const [],
+    List<String> requiredCredentialIds = const [],
   }) async {
+    final existingInquiry = await findInquiryForPost(
+      postId: postId,
+      seekerEmail: seekerEmail,
+    );
+    if (existingInquiry != null) {
+      final upgraded = existingInquiry.copyWith(
+        status: HiringApplicationStatus.applied,
+        workSchedule: workSchedule,
+        seekerName: seekerName,
+        seekerPhoneMasked: seekerPhoneMasked,
+        employmentType: employmentType,
+        workDate: suggestedWorkDate,
+        companyKey: companyKey ?? existingInquiry.companyKey,
+        recruiterEmail: recruiterEmail ?? existingInquiry.recruiterEmail,
+        branchId: branchId ?? existingInquiry.branchId,
+        branchName: branchName ?? existingInquiry.branchName,
+        workplaceLatitude: workplaceLatitude ?? existingInquiry.workplaceLatitude,
+        workplaceLongitude:
+            workplaceLongitude ?? existingInquiry.workplaceLongitude,
+        commissionAmountKrw: employmentType == JobEmploymentType.daily
+            ? (hourlyWageText != null
+                ? CommissionCalculator.dailyWorkerFee()
+                : CommissionCalculator.defaultKrw())
+            : null,
+        selectedShiftDate: selectedShiftDate,
+        shiftSlot: shiftSlot,
+        shuttleBookingId: shuttleBookingId,
+        preferredStopId: preferredStopId,
+        disclosedResumeItems: disclosedResumeItems,
+        requiredCredentialIds: requiredCredentialIds,
+      );
+      await _upsert(upgraded);
+      HiringRefresh.markUpdated();
+      await _syncApplicationToServer(upgraded);
+      return upgraded;
+    }
+
     if (await hasApplied(postId, seekerEmail)) {
       throw StateError('already_applied');
+    }
+
+    final sanctionStore = await MemberSanctionStore.create();
+    if (sanctionStore.isApplyRestricted(seekerEmail)) {
+      throw StateError(
+        sanctionStore.applyRestrictionMessage(seekerEmail) ??
+            '이용 제한으로 지원할 수 없습니다.',
+      );
     }
 
     final application = HiringApplication(
@@ -172,11 +415,34 @@ class LocalHiringRepository {
       shiftSlot: shiftSlot,
       shuttleBookingId: shuttleBookingId,
       preferredStopId: preferredStopId,
+      disclosedResumeItems: disclosedResumeItems,
+      requiredCredentialIds: requiredCredentialIds,
     );
 
     await _upsert(application);
     HiringRefresh.markUpdated();
+    await _syncApplicationToServer(application);
     return application;
+  }
+
+  Future<void> _syncApplicationToServer(HiringApplication application) async {
+    if (!EnvConfig.isComplianceApiEnabled) return;
+    final client = IljariApiClient();
+    if (!client.isEnabled) return;
+    try {
+      await client.createApplication({
+        'post_id': application.postId,
+        'post_title': application.postTitle,
+        'company_name': application.companyName,
+        'company_key': application.companyKey ?? '',
+        'seeker_email': application.seekerEmail,
+        'seeker_name': application.seekerName,
+        'status': application.status.name,
+        'work_schedule': application.workSchedule,
+      });
+    } on Object {
+      // 로컬 지원은 유지 — 서버 실패는 비차단
+    }
   }
 
   Future<HiringApplication?> findById(String id) async {
@@ -195,6 +461,9 @@ class LocalHiringRepository {
     required String applicationId,
     DateTime? workDate,
   }) async {
+    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
+      throw StateError('attendance_flow_disabled');
+    }
     final existing = await findById(applicationId);
     if (existing == null) throw StateError('not_found');
 
@@ -217,6 +486,9 @@ class LocalHiringRepository {
     required String applicationId,
     required bool asEmployer,
   }) async {
+    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
+      throw StateError('attendance_flow_disabled');
+    }
     final existing = await findById(applicationId);
     if (existing == null) throw StateError('not_found');
     if (existing.status == HiringApplicationStatus.rejected ||
@@ -401,6 +673,9 @@ class LocalHiringRepository {
   Future<List<HiringApplication>> fetchOverdueUncheckedShifts(
     String seekerEmail,
   ) async {
+    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
+      return const [];
+    }
     final all = await fetchForSeeker(seekerEmail);
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
@@ -547,7 +822,6 @@ class LocalHiringRepository {
   static Future<void> _handleMutualConfirmation(
     HiringApplication application,
   ) async {
-    await WorkAchievementService().tryAwardForApplication(application);
     await MutualAttendanceSideEffects.handle(application);
   }
 

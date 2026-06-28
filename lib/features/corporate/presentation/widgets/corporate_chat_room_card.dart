@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
+import 'package:map/features/hiring/presentation/widgets/chat/chat_room_leave_menu.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 
 class CorporateChatRoomCard extends StatelessWidget {
@@ -8,10 +9,12 @@ class CorporateChatRoomCard extends StatelessWidget {
     super.key,
     required this.room,
     this.onTap,
+    this.onLeave,
   });
 
   final CorporateChatRoom room;
   final VoidCallback? onTap;
+  final VoidCallback? onLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +103,10 @@ class CorporateChatRoomCard extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+          if (onLeave != null && !room.isOfficialNotice) ...[
+            const SizedBox(width: 4),
+            ChatRoomLeaveMenu(onLeave: onLeave!),
           ],
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/hiring/chat_room_leave_service.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
@@ -7,6 +8,7 @@ import 'package:map/core/hiring/seeker_attendance_gate_service.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/features/chat/domain/services/chat_access_policy.dart';
+import 'package:map/features/hiring/presentation/widgets/chat/chat_room_leave_menu.dart';
 import 'package:map/features/hiring/presentation/pages/application_chat_page.dart';
 import 'package:map/features/hiring/presentation/widgets/seeker_attendance_lock_dialog.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
@@ -45,13 +47,28 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
             a.status != HiringApplicationStatus.noShow &&
             a.status != HiringApplicationStatus.commissionPaid)
         .toList();
+    final visible = await ChatRoomLeaveService.filterVisible(
+      items: active,
+      applicationIdOf: (a) => a.id,
+      userEmail: email,
+    );
     if (mounted) {
       setState(() {
         _gate = gate;
-        _applications = active;
+        _applications = visible;
         _loading = false;
       });
     }
+  }
+
+  Future<void> _leaveChat(HiringApplication app) async {
+    final left = await ChatRoomLeaveService.confirmAndLeave(
+      context,
+      applicationId: app.id,
+      roomTitle: app.companyName,
+      roomSubtitle: '「${app.postTitle}」',
+    );
+    if (left && mounted) await _load();
   }
 
   Future<void> _openChat(HiringApplication app) async {
@@ -97,7 +114,7 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
               SizedBox(height: 48),
               Center(
                 child: Text(
-                  '진행 중인 채팅이 없습니다.\n지원 후 기업과 대화를 시작하세요.',
+                  '진행 중인 채팅이 없습니다.\n공고 상세에서 문의하기로 기업과 대화를 시작하세요.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, height: 1.45),
                 ),
@@ -181,6 +198,7 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
                       color: AppColors.textSecondary.withValues(alpha: 0.85),
                     ),
                   ),
+                  ChatRoomLeaveMenu(onLeave: () => _leaveChat(app)),
                 ],
               ),
             );

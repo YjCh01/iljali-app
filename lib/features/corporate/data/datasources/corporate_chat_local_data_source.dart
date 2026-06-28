@@ -1,4 +1,5 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
+import 'package:map/core/hiring/chat_room_leave_service.dart';
 import 'package:map/core/dev/dev_chat_test_support.dart';
 import 'package:map/core/dev/dev_test_accounts.dart';
 import 'package:map/core/hiring/application_chat_message_repository.dart';
@@ -9,6 +10,7 @@ import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
+import 'package:map/features/corporate/domain/services/exposure_renewal_service.dart';
 
 abstract class CorporateChatLocalDataSource {
   Future<List<CorporateChatRoom>> fetchChatRooms();
@@ -55,11 +57,23 @@ class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
     final chatRepo = await ApplicationChatMessageRepository.create();
     final applications =
         await repo.fetchApplicantsForCorporate(companyKey: companyKey);
-    final rooms = <CorporateChatRoom>[];
+    final noticeRooms =
+        await ExposureRenewalNoticeService().fetchNoticeRooms(
+      companyKey: companyKey,
+    );
+    final rooms = <CorporateChatRoom>[...noticeRooms];
+    final userEmail = AuthSession.instance.currentUser?.email ?? '';
     for (final app in applications) {
       if (app.status == HiringApplicationStatus.rejected ||
           app.status == HiringApplicationStatus.noShow ||
           app.status == HiringApplicationStatus.commissionPaid) {
+        continue;
+      }
+      if (userEmail.isNotEmpty &&
+          await ChatRoomLeaveService.isLeft(
+            applicationId: app.id,
+            userEmail: userEmail,
+          )) {
         continue;
       }
       rooms.add(await _mapApplication(app, chatRepo));
@@ -79,9 +93,10 @@ class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
         : ProductFeatureFlags.isHiringCommissionEnabled &&
                 app.needsCommissionPayment
             ? '출근 확인 완료 · 수수료 ${CommissionCalculator.formatKrw(CommissionCalculator.forApplication(app))} 결제 필요'
-            : app.isWorkAgreementComplete
+            : ProductFeatureFlags.isHiringCommissionEnabled &&
+                    app.isWorkAgreementComplete
                 ? '근무 일정 합의 완료 · ${app.status.label}'
-                : '채팅 진행 중 · ${app.status.label}';
+                : '지원 접수 · ${app.status.label}';
 
     return CorporateChatRoom(
       id: app.id,
@@ -94,7 +109,8 @@ class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
       unreadCount: ProductFeatureFlags.isHiringCommissionEnabled &&
               app.needsCommissionPayment
           ? 1
-          : app.status == HiringApplicationStatus.chatting
+          : app.status == HiringApplicationStatus.chatting ||
+                  app.status == HiringApplicationStatus.inquiry
               ? 1
               : 0,
     );

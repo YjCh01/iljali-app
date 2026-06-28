@@ -1,6 +1,171 @@
-# Development Diary
+- **고객센터 이메일**: iljariapp@gmail.com (`BusinessDisclosure` · 약관 · 스토어 listing)
 
-## 2026-06-19 — 지도 근무지 중심 재편 (웹·앱)
+## 2026-06-28 — 대화방 나가기 (구직자·기업)
+
+- 채팅 목록 ⋮ 메뉴 + 채팅 화면 햄버거 메뉴 → `대화방 나가기`
+- 확인 다이얼로그 후 목록에서만 숨김 (`ChatRoomLeaveService`, 사용자별 localStorage)
+- 지원·채용 상태는 유지 (지원 취소와 별개)
+
+## 2026-06-28 — 채팅 목록 중복 (로컬+서버 지원 ID)
+
+- **원인** 지원 시 로컬 `app_{timestamp}` + 서버 sync `app_{uuid}` 각각 저장 · 배포와 무관(localStorage 유지)
+- **수정** `mergeServerApplication` · `dedupeActiveApplicationsForSeeker` · 서버 POST 중복 방지
+
+
+- **사유** 개인 앙심 기반 평점·신뢰 점수는 신뢰성 낮음
+- **MVP** `ENABLE_EMPLOYER_TRUST_DISPLAY=false` — 공고 상세 별점·신뢰100·우수 고용주 배지 숨김
+- **페이즈 2** 구직자 평점(어드민 전용)·고용주 평가 다이얼로그 — `ENABLE_SEEKER_EMPLOYER_RATING`
+
+
+- **요청** 채용 확정 전 구직자 채팅에 「근무예정 합의하기」 노출 금지 · 출근·수수료 플로우 제거
+- **플로우** 공고 업로드 → 지원 → 기업 이력서 열람·채팅 (채용 여부는 기업 자율)
+- **구현** `ENABLE_HIRING_COMMISSION=false`(기본) 시 합의 UI·instantAccept·출근 잠금 비활성 · 테스트 `hiring_mvp_apply_chat_test.dart`
+
+
+- **기존** `도구_실서비스한방배포.command` → API + 웹만
+- **변경** ③ App — AAB + APK + iOS(no codesign) · Play/TestFlight credentials 있으면 fastlane 자동 업로드
+- **옵션** `--no-app`(웹만) · `--app-only` · `--store-upload`(업로드 실패 시 exit 1)
+
+
+- **요청** 지원 시 기업이 등록한 달력(일용·단기·계약·정규) 그대로 표시 · 교대 선택 제거
+- **일용·단기** `근무일자 선택(중복가능)` + `모든날짜 선택하기`
+- **계약·정규** `근무 시작 희망일` 단일 선택
+- **구현** `WorkScheduleCalendarView` · `WorkScheduleCalendarX` · `SelectedShiftDates`(복수 ISO 쉼표) · `job_apply_flow_sheet` 개편
+
+
+- **문제** 지원 시 일반 온보딩(여기까지 저장하기)으로 빠짐 → 저장 후 공고로 복귀·지원 재개 안 됨
+- **수정** `forJobApply` 모드 — 필수 4단계 후 「완료하고 지원하기」·하단 저장 그리드 숨김 · 프로필 완료 시 `showJobApplyDialog` 자동 재개
+
+## 2026-06-28 — 구직자 프로필 로그인 시 초기화 수정
+
+- **원인** 서버 로그인 응답의 빈 `seeker_profile`이 로컬(SharedPreferences)에 저장된 이력서·온보딩 데이터를 덮어씀 → 재로그인 후 지원 불가·빈 프로필 폼
+- **수정** `SeekerProfileMerge` 로컬·서버 병합 · `SeekerProfileSyncService` 저장 시 서버 `PATCH /v1/auth/me/seeker-profile` · 온보딩 저장도 동기화
+
+## 2026-06-28 — 자격증 열람·다운로드 (채용 확정 후)
+
+- **규칙** 채용 확정(`isMutuallyConfirmed` / `commissionPaid`) 전 — 기업은 **보유 여부·이름만** · 확정 후 **원본 열람·다운로드**
+- **구현** `HiringCredentialAccess` · `EmployerVisibleCredential` · `EmployerCredentialSection` · `SeekerCredentialViewerPage` · 지원 시 `requiredCredentialIds` 스냅샷 · 필수 자격 미등록 시 지원 차단
+
+## 2026-06-28 — 지원하기 프로필 게이트·완료 안내
+
+- **원인** `isMatchingReady`가 `onboardingCompletedAt`만 검사 → 「여기까지 저장하기」만 한 경우 지원 불가(스낵바만 표시)
+- **수정** 필수 필드(이름·주민번호·실주소·지역·스케줄) 기준 검사 · 미입력 항목 다이얼로그 · 지원 성공 **「지원 완료」** 다이얼로그 · 부분 저장 시 필드 충족하면 자동 완료 처리
+
+## 2026-06-28 — 프로필 온보딩 부분 저장·취소
+
+- **문제** 「나중에 하기」가 저장 없이 pop → 입력 전부 소실
+- **수정** `SeekerProfileOnboardingFlow` — `initState` 기존 프로필 hydrate · **여기까지 저장하기** (`_saveProgress`, `onboardingCompletedAt` 미설정) · **취소하기** (저장 없이 닫기) · 하단 2열 그리드 타일
+
+## 2026-06-19 — 개인회원 2단계 가입
+
+- **1단계** `IndividualSignUpFlow` — 휴대폰 본인인증(SMS OTP, 추후 다날) → 이메일(아이디)·비밀번호·약관 → 가입 후 **지도 열람**
+- **2단계** `SeekerProfileOnboardingFlow` — 이름·주민번호·실주소·희망지역·스케줄·사진 → `onboardingCompletedAt` 후 **지원 가능**
+- **게이트** `seeker_profile_readiness` — 지원 시 미완성이면 SnackBar + 프로필 완성 유도; 더보기 탭 배너
+- **테스트** `PhoneVerificationService.localMock()` 주입 · `individual_sign_up_flow_test` · `individual_home_shell_test` UI 문구 정리
+
+## 2026-06-28 — 어드민 기업 등록증 승인 (라인헬스케어 fallback)
+
+- **원인** 실서버 `GET /v1/admin/ops/companies/{brn}/verification` **404 미배포** → 어드민이 브라우저 SharedPreferences만 조회. 아라컴퍼니만 로컬 기록 있음.
+- **수정** `AdminCompanyVerificationCard` — ops 실패 시 `business-records` → qc_members(`registeredOnServer`) → 승인은 ops 또는 **`PATCH /v1/admin/companies/{brn}/review`** fallback
+- **배포** admin 웹 + API (`deploy_prod_all.sh`) 필요
+
+## 2026-06-28 — 배포 health 502 오탐 수정
+
+- **원인** API 컨테이너 재시작 직후 nginx edge가 upstream 미준비 → 502. 배포 스크립트가 3초만 대기 후 1회 curl.
+- **현재** API는 정상(200). site/admin 웹도 200.
+- **수정** `iljari_remote_api_wait_block` + `iljari_verify_public_api_health`(90s retry) — `deploy_prod_all.sh`, `deploy_server_api.sh`
+
+## 2026-06-28 — 지원 전 공고 문의 채팅
+
+- **상태** `HiringApplicationStatus.inquiry` — 지원 전 문의 전용
+- **흐름** 공고 상세 「문의하기」→ 채팅방 생성·재진입 (로그인만 필요, 프로필 완성 불필요)
+- **지원** 문의 후 지원 시 inquiry → applied 승격 (중복 지원 아님)
+
+## 2026-06-28 — 개인 로그인 진단·폴백
+
+- **원인 후보** ① 서버 미가입(로컬만) ② 기업회원 이메일로 개인 로그인 ③ QC 레거시(비번 미설정)
+- **수정** `IndividualAuthRepository` — member_type 검사, 서버 401 시 로컬 계정 폴백, 안내 문구
+- **도구** `scripts/diagnose_member_login.sh <email>` · 어드민 members `has_password`
+
+## 2026-06-28 — 희망 근무지역 «실주소 지역 추가»
+
+- **원인** 주소 API가 `경기 용인시…` 약칭 반환 — 파서는 `경기도`만 인식 → GPS fallback → 실패
+- **수정** `SeekerRegionFromAddress` 약칭 시·도 지원 · GPS 버튼 제거 → **실주소 지역 추가**
+
+## 2026-06-19 — 실서비스 한방 배포
+
+- **`도구_실서비스한방배포.command`** → `scripts/deploy_prod_all.sh`
+- API + site + admin 순서, SSH 세션 1회 (비밀번호 1번)
+- 옵션: `--api-only` · `--web-only`
+
+## 2026-06-19 — 공고 본문 이미지·HTML
+
+- **본문 모델** `JobPostDescriptionBody` — text · images · html (제목·급여·일정과 분리)
+- **작성 UI** `JobPostDescriptionBodyEditor` — 글/이미지/HTML 탭 (WYSIWYG 없음)
+- **표시** `JobPostDescriptionBodyView` — 상세·미리보기 동일 스타일, 이미지 핀치 줌
+- **API** `POST /v1/job-media/upload` + `description_body_json` DB 컬럼 + sync
+- **콜아웃** 이미지/HTML-only 본문은 snippet 비움 — 제목·급여·일정 그리드는 기존 필드
+
+## 2026-06-19 — 계약직 고용형태 · 근무기간(시작·종료)
+
+- **플래그** `ENABLE_WORKER_CONTRACT` 기본값 `true` — 공고 작성 폼·위저드에 **계약직** 탭 노출
+- **근무기간** `WorkerCategory.usesWorkPeriodWithEndDate` — 계약직은 정규직과 달리 **시작일+종료일** 필수 (달력 2탭)
+- **검증** 공고 등록·수정·`SaveCorporateJobPostUseCase` — 미완료 기간 시 「근무 시작일과 종료일을 선택해 주세요.」
+- **테스트** `product_feature_flags_test` · `worker_category_test`
+
+## 2026-06-19 — 친구 테스트 DB 누적 (기업 인증·게스트 공고·채팅 동기화)
+
+- **서버** `POST /v1/auth/signup/corporate` — 기업 회원 DB 영속 (company_key·handler_code·비밀번호)
+- **Flutter** `CorporateAuthRepository` — 기업 가입/로그인 서버 연동 (다른 기기 재로그인 가능)
+- **게스트** `QcSyncBootstrap.pullPublicCatalogIfEnabled` — 비로그인도 서버 공고·고스트핀 pull (`main`·지도 탭)
+- **채팅** `ApplicationChatMessageRepository.loadSynced` — 서버 `/v1/chat-sync` ↔ 로컬 캐시 양방향
+- **DB** `qc_members.contact_person_name` 컬럼 + PostgreSQL idempotent migrate
+- **배포** `scripts/deploy_server_api.sh` — API tar + docker rebuild; `deploy_all_prod_web` site/corporate/admin 실서버 반영 (2026-06-26)
+
+## 2026-06-26 — 개인 가입 UX (희망업무 제거·스케줄·가입 오류)
+
+- **희망업무** 가입 단계 삭제 — `individual_sign_up_flow` 8단계
+- **근무 스케줄** 24h 시계(30분)·요일 중복·야간 익일 표시 `금 21:00–07:00 (토)`
+- **매칭 베이스** `SeekerAvailabilityMatcher` — 페이즈2 푸시 시간대 overlap
+- **가입 오류** 휴대폰 인증 토큰 TTL 10분→60분; `workAvailability` JSON 배열; 로컬 사진 경로 서버 미전송
+
+## 2026-06-19 — 사업자 정보 변경 (언리얼리)
+
+- **상호**: 아라컴퍼니 → **언리얼리**
+- **사업자등록번호**: 537-58-01045 · **대표**: 최영진
+- **주소**: 경기도 용인시 수지구 용구대로 66, 205-202
+- `BusinessDisclosure` SSOT · `assets/legal` · `store/legal` 9종 동기화
+- 약관·개인정보 버전 `2026-06-19` (재동의 게이트)
+
+## 2026-06-19 — 인재 검색 · 채용 제안 (런치 MVP)
+
+- **도메인**: `JobProposal` / `JobProposalRepository` (pending·accepted·declined)
+- **인재 풀**: `SeekerTalentDirectory` — DevTest·로컬 가입·현재 세션 집계, 이름 마스킹
+- **검색**: `TalentSearchService` — 자격·희망지역·출근 요일 필터, `proposalOffersAccepted` opt-in
+- **프로필**: `SeekerMemberProfile.proposalOffersAccepted` (기본 true), 더보기 탭 토글
+- **기업 UI**: 지원자 탭 → 인재 검색 카드, `CorporateTalentSearchPage`, `send_job_proposal_sheet` (활성 공고 필수)
+- **구직 UI**: 지원 현황 상단 「받은 채용 제안」, 수락 시 기존 지원·셔틀·이력서 공개 플로우 합류
+- **라우트**: `AppRoutes.corporateTalentSearch`
+- **QC 시드**: seeker-alpha/beta에 자격·요일 샘플 데이터
+
+## 2026-06-19 — 정규직 고용 형태 (웹·앱 공통)
+
+- **WorkerCategory.regular** — 고용 형태 칩·위저드에 「정규직」 추가 (기본 활성)
+- **근무 일정**: 요일고정/교대순환/날짜맞춤·근무요일 체크 유지, 근무기간은 **첫 근무 시작일**만
+- **협의가능**: 일정 시트 하단 체크 — 시작일 선택 여부와 독립적으로 교차 선택
+- **급여지급일**: 당월 1~31일 / 익월 1~31일 중 하나 (`_MonthlyPaymentDayField`)
+- **저장**: `workPeriodNegotiable` + `정규·` 접두 workSchedule 코덱
+- **테스트**: `work_schedule_codec_test`, `product_feature_flags_test` 통과
+- **버그픽스**: 정규직 일정 적용 후 폼 미리보기 `endDate!` null 크래시 → `work_schedule_field_preview.dart` 첫 근무 시작일 전용 표시
+
+## 2026-06-23 — 브랜드 광고 카피 배치 (앱·웹)
+
+- **카피**: 「내 근처에서 찾고, / 우리집 앞에서 타고. / 내 주변 일자리!」
+- **공통**: `lib/core/branding/iljari_ad_campaign.dart` (`IljariAdCampaignCopy`, `IljariAdCampaignBanner`, `IljariAppLoadingView`)
+- **로딩**: 홈 분기·구직 지도 초기 로딩, `web/index.html` Flutter 부트스트랩 스플래시
+- **로그인**: 게이트웨이·`AuthScaffold`(이메일 로그인 상단)
+- **더보기**: 구직자·기업 탭 상단 그라데이션 배너
+
 
 - **원인**: 공고에 주소 텍스트만 저장, 좌표 미저장 → 지도·셔틀·핀 기본값(강남) 사용
 - **수정**: `CorporateJobPost.workplaceLatitude/Longitude` 저장·지오코딩 fallback
@@ -512,7 +677,24 @@
 - **PDF**: `dart run tool/generate_legal_pdfs.dart` → `store/legal/pdf/*.pdf` (9개)
 - **주의**: 초안이며 변호사 검토 전 — REVIEW 구간 수정 필수
 
-## 2026-06-22 — 약관 사업자명·서비스명 확정
+## 2026-06-19 — 구직자 실주소 지도 중심 + 위치동의 재확인
+
+- `SeekerMemberProfile` — `homeRoadAddress`·좌표·`locationConsent` 필드
+- `SeekerHomeAddressResolver` — 실주소 지오코딩 → 구직자 지도 초기 중심
+- `LocationConsentService` — 가입·출근체크·지도에서 앱 동의 + 기기 GPS/권한 매번 재확인
+- 가입 플로우 `실주소` 단계, 더보기「실주소」, 출근체크·QR 출근 게이트
+
+## 2026-06-19 — QC 눈검증 (알파 + QC구직자 0001)
+
+- **시나리오 시드**: `seed_qc_visual_scenario` — `qc_post_real_001` + `seeker-0001` 지원·채팅
+- **클라이언트**: `QcVisualScenarioSeeder` — 로그인 후 지원(scheduled)·채팅·보관함·출근 탭 데이터
+- **실행**: `./run_dual_qc.sh` — 구직자 8082 + 기업 8081 동시 Chrome
+
+## 2026-06-19 — 자격증 UI 정리 + 고객센터 전화번호 임시 교체
+
+- **자격·면허 UI**: 사진 필수 항목에서 체크박스 제거 — 업로드 버튼만으로 보유 등록 (체크박스·업로드가 동일 동작이던 중복 해소)
+- **전화번호**: 앱/웹 전역 `+8210-9742-1214` → `1566-0000` (`BusinessDisclosure`, 약관 md, 고객센터)
+
 
 - **사업자명**: 아라컴퍼니 · **서비스명**: 일자리 — 9종 약관 전반 반영
 - **형광펜 유지**: 사업자등록번호·대표·주소·시행일·단가·관할법원 등 [[REVIEW]] 구간
@@ -526,7 +708,7 @@
 
 ## 2026-06-22 — 고객센터 연락처 확정
 
-- 이메일(우선) aracorp22@naver.com · 전화 +8210-9742-1214
+- 이메일(우선) iljariapp@gmail.com · 전화 1566-0000
 - 위치기반서비스 신고: 진행 중 문구 + 신고번호만 형광펜
 - 앱 고객센터 페이지 동기화
 
@@ -536,7 +718,7 @@
 - `store/listing/` Play·App Store 등록 텍스트
 - `scripts/store_preflight.sh` — 번들 ID·약관·AAB 점검
 - `fastlane/Appfile` + README
-- certbot 기본 이메일 aracorp22@naver.com
+- certbot 기본 이메일 iljariapp@gmail.com
 
 ## 2026-06-22 — 웹 우측 네비게이션 (메인 탭)
 
@@ -569,3 +751,228 @@
 - `MapConstants.scale100mZoom = 17` (Naver Maps 서울 기준 ~100m 축척)
 - `defaultZoom` / `warehouseAreaZoom` / `PushRadiusMapPicker.mapZoom` 기본값 통일
 - 내 위치 이동·mock·기업 홈 지도 초기 줌 동기화
+
+## 2026-06-19 — GitHub push 인증 (HTTPS → SSH)
+
+- 원인: GitHub는 계정 비밀번호로 `git push` 불가 (PAT 또는 SSH 필요)
+- `origin`을 `git@github.com:YjCh01/iljali-app.git`으로 변경
+- SSH 키(`~/.ssh/id_ed25519`)로 `main` push 완료: `e543da1..c601c02`
+
+## 2026-06-23 — 알림핀 설정 지도 근무지 중심 보정
+
+- 원인: 저장된 0번 거점 좌표가 강남 기본값인데 주소만 근무지(용인 등)로 바뀐 레거시 데이터
+- `_resolveWorkplaceCenterIfNeeded`가 `initialSettings` 있으면 지오코딩을 건너뜀
+- 이전 세션 뷰포트(강남)가 근무지 고정 모드에서 카메라를 덮어씀
+- 수정: 주소·좌표 불일치 시 지오코딩 후 0번 거점·카메라 갱신, stale viewport 무시
+- 서버: Kakao 주소 API로 전체 도로명 직접 지오코딩 fallback
+
+## 2026-06-23 — 근무지 지도 중심 (근본 수정)
+
+- **실제 원인**: `server/.env`에 Kakao/JUSO 키 없음 → 지오코딩 실패 → `WorkplaceAddressQc.sampleCoordinate`(강남)으로 저장
+- 주소 선택 시 강남 샘플 좌표 fallback **제거** (좌표 null 허용)
+- 웹: **NAVER Maps JS Geocoder** (`submodules=geocoder`) — 지도 Client ID로 좌표 변환
+- 서버: `GET /v1/addresses/geocode` 추가
+- 알림핀 설정: 주소 기준 항상 지오코딩 후 0번 거점·카메라 동기화
+
+## 2026-06-23 — 앱 지오코딩 (웹과 동일 동작)
+
+- `AddressGeocoder`: 서버 실패 시 **웹=Naver JS** · **앱=iOS/Android Geocoder** (`geocoding` 패키지)
+- `map_backed_address_geocoder_{web,io}` — Kakao/JUSO 키 없이도 근무지 좌표 확보
+- `./run_app.sh` — API 서버 + `COMPLIANCE_API_URL` + Naver dart-define 자동 주입
+
+## 2026-06-23 — 핀·PUSH 반경 1km → 700m
+
+- `PushPackageCatalog.freePushRadiusM` / `packagePushRadiusM` = 700
+- `pushRadiusLabel` = `700m` — 지도 원·PUSH 도달·안내 문구 전역 동기화
+
+## 2026-06-19 — 구직자 QC 점검 (웹/앱)
+
+### 자동 검증
+- `flutter test test/features/job_seeker` + hiring/chat 정책 테스트 통과
+- `flutter build web` 성공
+- 서버 pytest: 21 passed, 1 failed (`test_seed_seekers_and_sanction`)
+- hiring E2E·회원가입 테스트 4건 기대값 불일치 (수수료 플로우/UI 문구)
+
+### QC 전 수정 (웹 블로커)
+- `seeker_my_documents_page` — 웹 `dart:io` 제거, base64 data URL 저장
+- `chat_message_bubble` — 첨부 미리보기/뷰어 웹 호환
+- `application_chat_page` — 사진 전송 시 웹 persist
+
+### 수동 QC
+Finder **`개인회원 실행.command`** (8082, 개인회원 로그인 직행) 또는 `./run_seeker_web.sh` — `seeker-0001@qc.iljari.co.kr` / `QcTest1234!`
+
+### 알려진 MVP 한계
+- QR 스캔·소셜 로그인 "준비 중", PUSH 인박스 로컬만, 보관함 캘린더 스텁
+
+## 2026-06-19 — 개인회원 지도 우선·탭/더보기 정리
+
+- **최초 화면**: 비로그인도 `RoleBasedHomePage` → 구직 지도 셸 (가입 게이트웨이 강제 제거)
+- **하단 탭**: 지도 / 보관함 / **내일자리** / 채팅 / 더보기 — 비로그인 시 지도 외 회색 비활성 + 로그인 시트
+- **더보기**: `나의 보관함` 제거, **내 이력서** 추가 (`/seeker/my-resume`)
+- **지원·보관함 저장**: 비로그인 시 `SeekerLoginPromptSheet` 유도
+- **지도 검색 CTA 버그**: 하단 탭에 가려짐 → `MapFloatingInsets`로 버튼·현위치 올림; 이동 감지 과필터 제거
+- **지도 검색 UI**: 넓은 `MapSearchBar` 제거 → 우측 돋보기 → 전체 검색 화면(엔터/돋보기 시 지도 복귀)
+- **기업회원 게스트**: `CorporateHomeShellPage` 둘러보기 — 홈(채용 지도)·더보기 활성, `run_corporate_web.sh`/`CORPORATE_WEB_QC` 진입, 게이트웨이「둘러보기」버튼
+- **비로그인 UX**: 지도 우선 유지 + **더보기 탭 활성** + 상단·웹 레일 하단 `로그인`/`가입` 버튼, 제목 `둘러보기`
+
+## 2026-06-19 — 개인회원 인증 전체 (본인인증·가입·찾기·재설정)
+
+### 서버
+- password_service, signup/find-email/password/reset, phone_verified_token
+
+### 클라이언트
+- IndividualAuthRepository, find_account_page, reset_password_page, 가입·로그인 연동
+
+## 2026-06-19 — 이력서 5항목 양식 + 공고 필수 확인 항목
+
+### 개인회원 이력서
+- `SeekerResumeContent` — 학력·경력·면허·자격증·자기소개
+- `SeekerResumeEditHubPage` — 섹션 허브·항목 추가/수정 (`/seeker/resume/edit`)
+- 그리드·상세에 항목별 건수·본문 표시
+
+### 기업 공고
+- `CorporateJobPost.requiredResumeItems` — 5항목 FilterChip 선택
+- 공고 등록·수정 폼 `ResumeRequiredItemsField`
+
+### 지원 시 공개 동의
+- `showResumeDisclosureFlow` — 미작성 시 이력서 작성 유도, 동의 후 지원
+- `HiringApplication.disclosedResumeItems` — 기업은 동의 항목만 열람
+
+## 2026-06-19 — 표준 자격·면허 DB + 사진 등록 + 공고 필수 자격
+
+### 자격 DB (`CredentialCatalog` 14종, 4카테고리)
+- 건설·제조, 물류·운전, 시설·경비, 미화·돌봄
+- `CredentialSearchService` — 별칭 연관검색 (예: 지게차 → 조종사 면허 + 운전기능사)
+
+### 개인회원
+- `SeekerMyCredentialsPage` — 카테고리별 보유 체크 + 사진 업로드 필수
+- 더보기 / 신분증·통장 페이지 / 이력서 면허·자격증 섹션 연동
+- `SeekerMemberProfile.credentialHoldings` 저장
+
+### 기업 공고
+- `CorporateJobPost.requiredCredentialIds` — 검색·체크 선택
+- `RequiredCredentialsField` — 공고 등록·수정 폼
+
+### 지원
+- `showRequiredCredentialsApplyDialog` — 필수 자격 목록 + 예/아니오(지원취소)
+
+## 2026-06-19 — 길찾기(네이버 경로) + 지원 취소
+
+### 길찾기
+- `openNaverDirections()` — 네이버 지도 v5 **경로찾기** (`현위치 → 근무지`, 기본 `car`)
+- 공고 상세 「길찾기」: 근무지 좌표·주소 + `DeviceLocationService` 출발지, `LocationConsentService.mapBrowse` 동의 후 실행
+- 웹: `https://map.naver.com/v5/directions/-/{dest}/-/car` (출발 `-` = 현위치)
+
+### 지원 취소
+- `LocalHiringRepository.withdrawBySeeker` — applied/chatting/scheduled(출근 전) 취소
+- `SeekerApplicationWithdrawService.confirmAndWithdraw` — 확인 다이얼로그 + JobApplication·셔틀 예약 정리
+- UI: 공고 상세(닫기·**지원취소**·지원하기), 액션 그리드, 보관함(상세·메모 옆), 내 지원 탭
+
+## 2026-06-19 — 문서·약관: 채용 성공 수수료 메인 앱 없음 정렬
+
+- **사실**: `ENABLE_HIRING_COMMISSION` 기본 `false` — 출근 확인 후 수수료 결제·에스컬레이션 비활성
+- **갱신**: `PUSH_PACKAGE_PRICING.md`, `PRODUCT_REQUIREMENTS.md`, `PRODUCTION.md`, `docs/disabled_features.md`, `.cursor/rules/*`, `dart-define.example`
+- **약관 초안** `01_terms_of_service.md` 제9조 — 메인 서비스 채용 성공 수수료 미부과 명시
+- **코드 주석**: `premium_partnership_tier`, `app_strings`, `roi_metrics_service` — 제휴 채널 전용 표기
+
+## 2026-06-19 — Android APK 빌드 (1.0.0+2)
+
+- `scripts/build_apk.sh` (mac/Linux) · `scripts/build_apk_release.bat` (Windows)
+- 산출물: `releases/iljari-android-latest.apk`
+- Gradle: compileSdk 36, Kotlin 2.0 플러그인 호환, `evaluationDependsOn` 제거
+- 패키지 `kr.co.iljari.app` · 네이버 지도 키 포함 빌드
+
+## 2026-06-26 — iljari.app 환경 일원화 (server / local)
+
+- **server (기본)**: `api.iljari.app` · `app.iljari.app` — 포트·IP 제거
+- **local (opt-in)**: `ILJARI_ENV=local` — 맥 hot reload만
+- **nginx edge :80**: API 프록시 + Flutter web (`docker-compose` `edge` 서비스)
+- **SSOT**: `scripts/environments.env` · `docs/ENVIRONMENTS.md`
+
+- **원인**: `.command` / `run_*.sh`가 `flutter run` → `localhost:8082` 로컬 dev 서버 사용
+- **해결**: `scripts/build_web_ncp.sh` + `deploy_web_ncp.sh` + `run_remote_web.sh`
+- **nginx**: `server/docker-compose.yml` `web` 서비스 (:80), variant 경로 `/seeker/` `/corporate/` `/admin/` `/qc/` `/web/`
+- **`.command` 전면**: NCP 배포 후 `http://app.iljari.app/<variant>/` 브라우저 오픈
+- **DNS**: 가비아 `app` A → `211.188.56.77` · ACG TCP **80** 인바운드 필요
+
+- **SSOT**: `scripts/remote_api.env` — `ILJARI_API_MODE=remote`, `http://api.iljari.app:8000`, Admin `iljari-admin-dev-key`
+- **헬퍼**: `scripts/api_target.sh` — URL 해석, remote health check, local은 `ILJARI_API_MODE=local`일 때만 uvicorn
+- **시드**: `scripts/seed_ncp_server.sh` — SSH → Docker `seed_qc.py` (로컬 DB 시드 제거)
+- **run_*.sh** 전면: NCP health 대기, `COMPLIANCE_API_URL` remote 기본
+- **build_apk.sh**: NCP API·Admin 키 기본 주입
+- **문서**: `README.md`, `.cursor/rules/testing.mdc`, `SERVICE_READINESS.md`
+
+## 2026-06-19 — 사이트 루트 배포 완료
+
+- `finish_site_deploy.sh` + `도구_사이트완료.command` — 비밀번호 SSH로 site 빌드·업로드·nginx 루트 서빙
+- 서버 `docker-compose.override.yml` 제거 (포트 충돌), API `8000:8000` compose에 반영
+- 확인: `http://iljari.app/` HTTP 200, `base href="/"`, API health 200
+
+
+- **질문**: 왜 URL 끝에 `/seeker`, `/health`가 붙는지 / 사용자도 `iljari.app/seeker`로 가는지
+- **`/health`**: API 서버 살아있는지 확인용 (개발·모니터링). 사용자 URL 아님 → `api.iljari.app:8000/health`
+- **`/seeker`**: 한 nginx에 여러 Flutter 웹 빌드(seeker/corporate/admin/qc) 나눠 둔 **내부 개발 경로**. 사용자에게 안내할 주소 아님
+- **사용자 주소**: `http://iljari.app/` (루트). `site` variant + nginx `location /` 로 배포
+- **실서비스 런처**: `실서비스_웹_개인회원.command` → `launch.sh web site server`
+- **deploy_one_shot** 기본값 `site`로 변경, 루트 배포 경로 수정
+
+## 2026-06-19 — 맵 우선 진입 + .command 정렬
+
+- **진입 UX**: 비로그인 `iljari.app` → 구직 지도(`/home`) 먼저. 구석 로그인/가입 → `MemberLoginGatewayPage`(기업/개인 선택). `GuestAuthNavigation` 공통화.
+- **`.command` 이름**: `실서비스|개발` → `앱|웹` → 회원분류 → (플랫폼). 예: `실서비스_앱_개인회원_안드로이드.command`
+- **문서**: `docs/COMMAND_LAUNCHERS.md`, `README.md` 갱신
+
+## 2026-06-27 — 어드민 API 오류 (PostgreSQL 스키마)
+
+- **원인**: `ensure_qc_member_schema()` 가 SQLite만 처리 → NCP Postgres `qc_members`/`job_posts` 컬럼 누락 시 `/v1/admin/ops/stats` 등 500 → 어드민 빨간 `Failed to fetch`
+- **수정**: `server/app/database.py` — Postgres `ADD COLUMN IF NOT EXISTS` 전체 컬럼 마이그레이션
+- **어드민 UX**: `AdminApiErrors` 한국어 메시지, 공개 `/health`로 연결 판별 후 ops 오류 분리
+- **배포 필요**: `./scripts/deploy_server_api.sh` + `도구_웹전체배포.command` (admin 재빌드)
+
+## 2026-06-27 — 기업 담당자 코드 랜덤화
+
+- **변경**: `1001` 순번 4자리 → **6자리 영숫자 랜덤** (`CorporateHandlerCodeGenerator`, 0/O/1/I/L 제외)
+- **목적**: 가입 순서·「1001번째」 인상 제거 — 로그인용 아님, 사내 담당자 구분만
+
+## 2026-06-27 — 기업 가입 OCR 대표자명 오류 수정
+
+- **원인**: Mock/CLOVA OCR이 `대표자(OCR)` placeholder를 반환 → 실제 대표자명과 항상 불일치. 국세청 확인 통과 후에도 `validateStrict`가 가입을 차단.
+- **수정**:
+  - `ocr_business_cross_check` (Dart+Python): 한글 이름 정규화(공백·중점·괄호), 1~2자 fuzzy match, 대표자명만 불일치 시 관리자 검토로 완화
+  - `business_verification_service`: NTS 통과 시 대표자명 OCR 불일치는 차단 대신 `adminReviewRequired`
+  - `mock_business_certificate_ocr_service`: 대표자명 빈 문자열 (placeholder 제거)
+  - `compliance.py`: NTS 확인 후 대표자명 OCR 교차검증 — 차단/검토 분리
+- **테스트**: `ocr_business_cross_check_test`, `business_verification_service_test`, `test_ocr_cross_check.py` 통과
+- **배포**: 앱 재빌드 필수. `COMPLIANCE_API_URL` 사용 시 `./scripts/deploy_server_api.sh` 로 API도 배포
+
+## 2026-06-19 — 어드민 기업 등록증 승인 (서버 연동)
+
+- **문제**: 친구가 본사 주소만 넣고 가입 → 어드민 **회원·이용권 → 기업회원**에 보이지만 **「등록증 승인」 버튼 없음**
+- **원인**:
+  - 본사 주소(`corporateProfile.businessHeadOfficeAddress`) ≠ 사업자등록증 제출·검증 큐
+  - `AdminCompanyVerificationCard`가 **어드민 브라우저 SharedPreferences(로컬)** 만 조회 — 친구 기기 데이터 미반영
+  - `POST /v1/auth/signup/corporate`는 `qc_members`만 생성, `companies` row 없음 → 서버 승인 API 404
+- **수정**:
+  - `GET/POST /v1/admin/ops/companies/{brn}/verification|approve-verification` — qc_member만 있어도 `needs_admin_approval: true`
+  - `PATCH /v1/admin/companies/{key}/review` — Company 없으면 qc_member로 자동 생성 후 승인
+  - `AdminCompanyVerificationCard` — `AdminOpsApiClient` 서버 상태 우선, 승인 버튼 표시
+- **지금 당장 (배포 전)**: 같은 패널 **「이용권 부여」** 로 유료 크레딧은 줄 수 있음 (검증 승인과 별개)
+- **배포**: `도구_실서비스한방배포.command` (API + admin 웹)
+
+## 2026-06-19 — 공고 등록 «등록증·사업자 소재지 불러오기»
+
+- **검토**: 국세청 odcloud API(홈택스 연동)는 **주소 필드를 반환하지 않음** — BRN·상태·업종만. 사업장 주소는 **등록증 OCR** 또는 **내정보 본사 주소**로 제공 가능.
+- **추가** (기존 근무지 검색 유지):
+  - OCR `businessAddress` · `VerifiedBusinessRecord.registeredBusinessAddress` 저장
+  - `BusinessCertificateAddressExtractor` — 등록증 「사업장 소재지」 라인 파싱
+  - 공고 등록/수정 폼 **「등록증·사업자 소재지 불러오기」** → Juso/지오코딩 → 근무지 채움
+  - 본사 주소 미등록 시 불러온 주소를 **내정보 사업자 소재지**에도 자동 저장 (공고 검증 통과용)
+- **테스트**: `business_certificate_address_extractor_test`
+
+## 2026-06-19 — 개인회원 가입 2단계 분리
+
+- **1단계 가입** (`IndividualSignUpFlow`): 휴대폰 본인인증(SMS, 추후 다날) + 이메일(아이디)·비밀번호·약관 → 지도 열람
+- **2단계 프로필** (`SeekerProfileOnboardingFlow`): 이름·주민번호·실주소·근무지역·스케줄·사진 → `onboardingCompletedAt` 설정 후 지원 가능
+- **지원 게이트**: `SeekerProfileReadiness` — 미완성 시 SnackBar + 더보기 「2단계 프로필 입력」
+- **유지**: 비로그인 지도 우선 · 로그인/회원가입 선택 UX
+

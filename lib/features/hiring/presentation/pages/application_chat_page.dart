@@ -9,6 +9,7 @@ import 'package:map/core/compliance/presentation/partnership_upsell_dialog.dart'
 import 'package:map/core/compliance/services/abuse_detection_service.dart';
 import 'package:map/core/compliance/services/contact_entitlement_service.dart';
 import 'package:map/core/dev/dev_chat_test_support.dart';
+import 'package:map/core/hiring/chat_room_leave_service.dart';
 import 'package:map/core/hiring/application_chat_message.dart';
 import 'package:map/core/hiring/application_chat_message_repository.dart';
 import 'package:map/core/hiring/chat_message_kind.dart';
@@ -17,6 +18,7 @@ import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/member_type.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/chat/domain/services/chat_access_policy.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
@@ -29,9 +31,11 @@ import 'package:map/features/corporate/presentation/widgets/register_permanent_h
 import 'package:map/features/job_seeker/domain/utils/job_map_pin_factory.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_post_detail_sheet.dart';
 import 'package:map/features/hiring/presentation/widgets/chat/chat_attachment_picker_sheet.dart';
+import 'package:map/features/hiring/presentation/widgets/chat/chat_room_leave_menu.dart';
 import 'package:map/features/hiring/presentation/widgets/chat/chat_message_bubble.dart';
 import 'package:map/features/hiring/presentation/widgets/commission_payment_dialog.dart';
 import 'package:map/features/job_seeker/data/repositories/seeker_document_repository.dart';
+import 'package:map/features/job_seeker/presentation/utils/seeker_document_storage.dart';
 
 /// 지원자 ↔ 기업 채팅 (연락 제한·필터 적용)
 class ApplicationChatPage extends StatefulWidget {
@@ -145,7 +149,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     }
 
     final chatRepo = await ApplicationChatMessageRepository.create();
-    final stored = await chatRepo.ensureWelcomeMessages(
+    final stored = await chatRepo.loadSynced(
       applicationId: widget.applicationId,
       companyName: app.companyName,
       postTitle: app.postTitle,
@@ -161,6 +165,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     });
 
     if (_isEmployer &&
+        ProductFeatureFlags.isHiringCommissionEnabled &&
         app.status == HiringApplicationStatus.checkedIn &&
         app.needsCommissionPayment &&
         mounted) {
@@ -290,7 +295,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
   }
 
   Future<ImageSource?> _pickImageSource() {
-    return showModalBottomSheet<ImageSource>(
+    return showAdaptiveSheet<ImageSource>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
@@ -323,13 +328,16 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     );
     if (file == null || !mounted) return;
 
+    final storedPath =
+        await persistSeekerDocumentImage(file, 'chat_photo') ?? file.path;
+
     await _sendMessage(
       ApplicationChatMessage(
         fromEmployer: _isEmployer,
         text: '사진을 보냈습니다.',
         sentAt: DateTime.now(),
         kind: ChatMessageKind.photo,
-        attachmentPath: file.path,
+        attachmentPath: storedPath,
       ),
     );
   }
@@ -366,6 +374,34 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     final docs = await repo.load(email);
     final path = isIdCard ? docs.idCardImagePath : docs.bankAccountImagePath;
     final label = isIdCard ? '신분증' : '통장사본';
+
+    if (!docs.isDocumentConsentCurrent) {
+      if (!mounted) return;
+      final goConsent = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('서류 수집·이용 동의 필요'),
+          content: Text(
+            '$label을 보내려면 신분증·통장사본 수집·이용 및 '
+            '구인자 제공에 대한 동의가 필요합니다.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('닫기'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('동의하러 가기'),
+            ),
+          ],
+        ),
+      );
+      if (goConsent == true && mounted) {
+        await Navigator.of(context).pushNamed(AppRoutes.seekerMyDocuments);
+      }
+      return;
+    }
 
     if (path == null || path.trim().isEmpty) {
       if (!mounted) return;
@@ -524,10 +560,8 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     }
 
     final pin = jobMapPinFromPost(post);
-    await showModalBottomSheet<void>(
+    await showAdaptiveSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (sheetContext) => JobPostDetailSheet(
         pin: pin,
         onClose: () => Navigator.of(sheetContext).pop(),
@@ -551,14 +585,18 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${record.seekerName}님 상시직 등록 완료. 7일 이내 건강보험 인증이 필요합니다.',
+          '${record.seekerName}님 상시직 등록이 완료되었습니다.',
         ),
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
+  bool get _showsWorkAgreementUi =>
+      ProductFeatureFlags.isHiringCommissionEnabled;
+
   bool get _canConfirmAgreement {
+    if (!_showsWorkAgreementUi) return false;
     final app = _application;
     if (app == null || app.isWorkAgreementComplete) return false;
     if (_isEmployer) return app.employerWorkAgreedAt == null;
@@ -566,6 +604,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
   }
 
   bool get _awaitingPeerAgreement {
+    if (!_showsWorkAgreementUi) return false;
     final app = _application;
     if (app == null || app.isWorkAgreementComplete) return false;
     if (_isEmployer) {
@@ -574,6 +613,18 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     }
     return app.seekerWorkAgreedAt != null &&
         app.employerWorkAgreedAt == null;
+  }
+
+  Future<void> _leaveChat() async {
+    final app = _application;
+    if (app == null) return;
+    final left = await ChatRoomLeaveService.confirmAndLeave(
+      context,
+      applicationId: widget.applicationId,
+      roomTitle: _isEmployer ? app.seekerName : app.companyName,
+      roomSubtitle: '「${app.postTitle}」',
+    );
+    if (left && mounted) Navigator.of(context).pop(true);
   }
 
   @override
@@ -601,12 +652,12 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
         automaticallyImplyLeading: false,
         title: Text(_isEmployer ? app.seekerName : app.companyName),
         actions: [
-          if (_canConfirmAgreement && !app.isPermanentEmployment)
+          if (_showsWorkAgreementUi && _canConfirmAgreement && !app.isPermanentEmployment)
             TextButton(
               onPressed: _confirmWorkSchedule,
               child: const Text('근무예정 합의'),
             ),
-          if (_awaitingPeerAgreement)
+          if (_showsWorkAgreementUi && _awaitingPeerAgreement)
             TextButton(
               onPressed: null,
               child: const Text('합의 대기'),
@@ -618,6 +669,11 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
               onPressed: _registerPermanentHire,
               child: const Text('상시직 합격'),
             ),
+          ChatRoomLeaveMenu(
+            useHamburgerIcon: true,
+            iconColor: AppColors.textPrimary,
+            onLeave: _leaveChat,
+          ),
         ],
       ),
       body: Column(
@@ -675,7 +731,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
               ),
             ),
           ),
-          if (!app.isWorkAgreementComplete)
+          if (_showsWorkAgreementUi && !app.isWorkAgreementComplete)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -714,7 +770,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
                 ],
               ),
             )
-          else
+          else if (_showsWorkAgreementUi && app.isWorkAgreementComplete)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

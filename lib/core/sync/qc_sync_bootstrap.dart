@@ -1,6 +1,9 @@
 import 'package:map/core/api/iljari_api_client.dart';
+import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/sync/member_sanction_store.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/core/config/env_config.dart';
+import 'package:map/core/dev/qc_visual_scenario_seeder.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
@@ -12,12 +15,32 @@ import 'package:map/features/corporate/data/repositories/push_wallet_repository.
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
+import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
+import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
+import 'package:map/features/job_seeker/data/datasources/closed_ghost_pin_local_data_source.dart';
+import 'package:map/features/job_seeker/domain/entities/closed_ghost_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 /// 서버 QC DB → 로컬 in-memory·SharedPreferences 동기화
 abstract final class QcSyncBootstrap {
+  /// 비로그인(게스트) — 공고·고스트핀만 서버에서 pull
+  static Future<void> pullPublicCatalogIfEnabled() async {
+    if (!EnvConfig.isComplianceApiEnabled) return;
+
+    final client = IljariApiClient();
+    if (!client.isEnabled) return;
+
+    try {
+      final bootstrap = await client.syncBootstrap();
+      await _hydratePosts(bootstrap);
+      await _hydrateGhostPins(bootstrap);
+    } on Object {
+      // offline — 로컬 캐시 유지
+    }
+  }
+
   static Future<void> pullIfEnabled() async {
     if (!EnvConfig.isComplianceApiEnabled) return;
 
@@ -28,13 +51,17 @@ abstract final class QcSyncBootstrap {
     final bootstrap = await client.syncBootstrap(
       seekerEmail:
           user?.memberType == MemberType.individual ? user?.email : null,
+      memberEmail: user?.email,
       companyKey: user?.corporateProfile?.companyKey,
     );
 
     await _hydratePosts(bootstrap);
+    await _hydrateGhostPins(bootstrap);
     await _mergeApplications(bootstrap);
     await _mergeWallet(bootstrap, user);
+    await _persistMemberSanction(bootstrap, user);
     await _enforceMemberSanction(bootstrap, user);
+    await QcVisualScenarioSeeder.ensureAfterSync();
   }
 
   static Future<void> _hydratePosts(Map<String, dynamic> bootstrap) async {
@@ -59,6 +86,21 @@ abstract final class QcSyncBootstrap {
           DateTime.now();
       final companyKey = map['company_key'] as String? ?? '';
       final companyName = map['company_name'] as String? ?? '';
+      final lat = (map['workplace_latitude'] as num?)?.toDouble();
+      final lng = (map['workplace_longitude'] as num?)?.toDouble();
+      JobPostNotificationSettings? notificationSettings;
+      if (lat != null && lng != null) {
+        notificationSettings = JobPostNotificationSettings(
+          basePoints: [
+            PushNotificationBasePoint(
+              id: 'workplace_$id',
+              coordinate: GeoCoordinate(latitude: lat, longitude: lng),
+              addressLabel: map['warehouse_name'] as String? ?? '',
+              isPrimary: true,
+            ),
+          ],
+        );
+      }
 
       mapped.add(
         CorporateJobPost(
@@ -68,7 +110,12 @@ abstract final class QcSyncBootstrap {
           hourlyWage: map['hourly_wage'] as String? ?? '',
           workSchedule: map['work_schedule'] as String? ?? '',
           summary: map['summary'] as String? ?? '',
-          jobDescription: map['summary'] as String? ?? '',
+          jobDescription: (map['job_description'] as String?) ??
+              (map['summary'] as String? ?? ''),
+          descriptionBody: JobPostDescriptionBody.fromJson(
+            map['description_body_json'],
+          ),
+          notificationSettings: notificationSettings,
           status: (map['status'] as String? ?? 'recruiting') == 'closed'
               ? CorporateJobPostStatus.closed
               : CorporateJobPostStatus.recruiting,
@@ -88,6 +135,18 @@ abstract final class QcSyncBootstrap {
       );
     }
     CorporateJobPostLocalDataSourceImpl.replaceFromServer(mapped);
+  }
+
+  static Future<void> _hydrateGhostPins(Map<String, dynamic> bootstrap) async {
+    final raw = bootstrap['ghost_pins'] as List<dynamic>? ?? [];
+    final mapped = <ClosedGhostPin>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final pin = ClosedGhostPin.fromJson(Map<String, dynamic>.from(item));
+      if (pin.id.isEmpty) continue;
+      mapped.add(pin);
+    }
+    ClosedGhostPinLocalDataSourceImpl.replaceFromServer(mapped);
   }
 
   static CorporateMemberProfile _syncProfile({
@@ -116,7 +175,7 @@ abstract final class QcSyncBootstrap {
       final map = Map<String, dynamic>.from(raw);
       final id = map['id'] as String? ?? '';
       if (id.isEmpty) continue;
-      await repo.ensureSeedApplication(
+      await repo.mergeServerApplication(
         HiringApplication(
           id: id,
           postId: map['post_id'] as String? ?? '',
@@ -154,6 +213,7 @@ abstract final class QcSyncBootstrap {
     final map = Map<String, dynamic>.from(walletRaw);
     final wallet = EmployerPushWallet(
       packageCredits: map['package_credits'] as int? ?? 0,
+      cashBalanceKrw: map['cash_balance_krw'] as int? ?? 0,
       signupBonusRemaining: map['signup_bonus_remaining'] as int? ?? 0,
       locationSlotsFromPackages:
           map['location_slots_from_packages'] as int? ?? 0,
@@ -164,6 +224,19 @@ abstract final class QcSyncBootstrap {
     );
     final repo = await PushWalletRepository.create();
     await repo.save(companyKey, wallet);
+  }
+
+  static Future<void> _persistMemberSanction(
+    Map<String, dynamic> bootstrap,
+    AuthUser? user,
+  ) async {
+    final status = bootstrap['member_status'];
+    if (user == null || status is! Map) return;
+    final store = await MemberSanctionStore.create();
+    await store.saveFromBootstrap(
+      user.email,
+      Map<String, dynamic>.from(status),
+    );
   }
 
   static Future<void> _enforceMemberSanction(

@@ -2,6 +2,7 @@ import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/features/attendance/domain/entities/check_in_method.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
 
 /// 지원·채팅·예정자·출근·수수료까지 이어지는 채용 건
 class HiringApplication {
@@ -51,6 +52,8 @@ class HiringApplication {
     this.geofenceVerified = false,
     this.seekerGeofenceDistanceM,
     this.employerGeofenceDistanceM,
+    this.disclosedResumeItems = const [],
+    this.requiredCredentialIds = const [],
   });
 
   final String id;
@@ -113,6 +116,12 @@ class HiringApplication {
   final double? seekerGeofenceDistanceM;
   final double? employerGeofenceDistanceM;
 
+  /// 지원 시 구직자가 공개 동의한 이력서 항목
+  final List<ResumeItemKind> disclosedResumeItems;
+
+  /// 지원 당시 공고 필수 자격증 ID (스냅샷)
+  final List<String> requiredCredentialIds;
+
   bool get isWorkAgreementComplete =>
       seekerWorkAgreedAt != null && employerWorkAgreedAt != null;
 
@@ -172,7 +181,11 @@ class HiringApplication {
       employmentType == JobEmploymentType.permanent;
 
   HiringApplication copyWith({
+    String? postTitle,
+    String? companyName,
+    String? seekerName,
     String? seekerPhoneMasked,
+    String? workSchedule,
     HiringApplicationStatus? status,
     DateTime? workDate,
     JobEmploymentType? employmentType,
@@ -209,6 +222,8 @@ class HiringApplication {
     bool? geofenceVerified,
     double? seekerGeofenceDistanceM,
     double? employerGeofenceDistanceM,
+    List<ResumeItemKind>? disclosedResumeItems,
+    List<String>? requiredCredentialIds,
     bool clearSeekerWorkAgreedAt = false,
     bool clearEmployerWorkAgreedAt = false,
     bool clearNoShowMarkedAt = false,
@@ -218,14 +233,14 @@ class HiringApplication {
     return HiringApplication(
       id: id,
       postId: postId,
-      postTitle: postTitle,
-      companyName: companyName,
+      postTitle: postTitle ?? this.postTitle,
+      companyName: companyName ?? this.companyName,
       seekerEmail: seekerEmail,
-      seekerName: seekerName,
+      seekerName: seekerName ?? this.seekerName,
       seekerPhoneMasked: seekerPhoneMasked ?? this.seekerPhoneMasked,
       appliedAt: appliedAt,
       status: status ?? this.status,
-      workSchedule: workSchedule,
+      workSchedule: workSchedule ?? this.workSchedule,
       employmentType: employmentType ?? this.employmentType,
       workDate: workDate ?? this.workDate,
       companyKey: companyKey ?? this.companyKey,
@@ -276,6 +291,10 @@ class HiringApplication {
           seekerGeofenceDistanceM ?? this.seekerGeofenceDistanceM,
       employerGeofenceDistanceM:
           employerGeofenceDistanceM ?? this.employerGeofenceDistanceM,
+      disclosedResumeItems:
+          disclosedResumeItems ?? this.disclosedResumeItems,
+      requiredCredentialIds:
+          requiredCredentialIds ?? this.requiredCredentialIds,
     );
   }
 
@@ -326,6 +345,10 @@ class HiringApplication {
         'geofenceVerified': geofenceVerified,
         'seekerGeofenceDistanceM': seekerGeofenceDistanceM,
         'employerGeofenceDistanceM': employerGeofenceDistanceM,
+        'disclosedResumeItems':
+            ResumeItemKindX.encodeList(disclosedResumeItems),
+        if (requiredCredentialIds.isNotEmpty)
+          'requiredCredentialIds': requiredCredentialIds,
       };
 
   factory HiringApplication.fromJson(Map<String, dynamic> json) {
@@ -392,6 +415,13 @@ class HiringApplication {
           (json['seekerGeofenceDistanceM'] as num?)?.toDouble(),
       employerGeofenceDistanceM:
           (json['employerGeofenceDistanceM'] as num?)?.toDouble(),
+      disclosedResumeItems: ResumeItemKindX.parseList(
+        json['disclosedResumeItems'] as List<dynamic>?,
+      ),
+      requiredCredentialIds: (json['requiredCredentialIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 

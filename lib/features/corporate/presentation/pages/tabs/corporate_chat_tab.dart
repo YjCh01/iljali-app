@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:map/core/hiring/chat_room_leave_service.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/compliance/presentation/partnership_upsell_dialog.dart';
 import 'package:map/core/compliance/services/contact_entitlement_service.dart';
@@ -17,6 +18,7 @@ import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart'
 import 'package:map/features/corporate/domain/usecases/get_corporate_chat_rooms_usecase.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_chat_room_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
+import 'package:map/features/corporate/presentation/pages/official_notice_chat_page.dart';
 import 'package:map/features/hiring/presentation/pages/application_chat_page.dart';
 import 'package:map/features/hiring/presentation/widgets/commission_payment_dialog.dart';
 
@@ -126,6 +128,21 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
   }
 
   Future<void> _openRoom(CorporateChatRoom room) async {
+    if (room.isOfficialNotice) {
+      final renewed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => OfficialNoticeChatPage(room: room),
+        ),
+      );
+      if (mounted) await _load();
+      if (renewed == true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('노출이 연장되었습니다.')),
+        );
+      }
+      return;
+    }
+
     if (!_contactAllowed) {
       if (await DevChatTestSupport.ensureCorporateChatReady()) {
         if (mounted) setState(() => _contactAllowed = true);
@@ -158,6 +175,16 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
       ),
     );
     if (updated == true && mounted) await _load();
+  }
+
+  Future<void> _leaveRoom(CorporateChatRoom room) async {
+    final left = await ChatRoomLeaveService.confirmAndLeave(
+      context,
+      applicationId: room.id,
+      roomTitle: room.applicantName,
+      roomSubtitle: room.jobTitle,
+    );
+    if (left && mounted) await _load();
   }
 
   @override
@@ -213,6 +240,7 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
             return CorporateChatRoomCard(
               room: room,
               onTap: () => _openRoom(room),
+              onLeave: room.isOfficialNotice ? null : () => _leaveRoom(room),
             );
           },
         ),
