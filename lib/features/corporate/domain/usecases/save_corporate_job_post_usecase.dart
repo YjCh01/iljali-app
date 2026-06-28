@@ -6,6 +6,7 @@ import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/sync/job_post_sync_service.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/utils/corporate_job_post_scope.dart';
+import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
