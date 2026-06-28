@@ -5,7 +5,7 @@ import 'package:map/core/compliance/services/abuse_detection_service.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/sync/job_post_sync_service.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
-import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/domain/utils/corporate_job_post_scope.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
@@ -282,7 +282,12 @@ class ReactivateCorporateJobPostUseCase {
       status: CorporateJobPostStatus.recruiting,
     );
 
-    return _dataSource.updateJobPost(reactivated).then((_) async {
+    return _dataSource
+        .updateJobPost(
+          reactivated,
+          ownerCompanyKey: CorporateJobPostScope.currentOwnerCompanyKey(),
+        )
+        .then((_) async {
       await JobPostSyncService().pushPostUpdate(reactivated);
       return CorporateJobPostResult.success(reactivated);
     });
@@ -299,7 +304,12 @@ class CloseCorporateJobPostUseCase {
       return Future.value(CorporateJobPostResult.success(post));
     }
     final closed = post.copyWith(status: CorporateJobPostStatus.closed);
-    return _dataSource.updateJobPost(closed).then((_) async {
+    return _dataSource
+        .updateJobPost(
+          closed,
+          ownerCompanyKey: CorporateJobPostScope.currentOwnerCompanyKey(),
+        )
+        .then((_) async {
       await JobPostSyncService().pushPostUpdate(closed);
       return CorporateJobPostResult.success(closed);
     });
@@ -489,7 +499,12 @@ class UpdateCorporateJobPostUseCase {
       expiresAt: original.expiresAt,
     );
 
-    return _dataSource.updateJobPost(updated).then((_) async {
+    return _dataSource
+        .updateJobPost(
+          updated,
+          ownerCompanyKey: CorporateJobPostScope.currentOwnerCompanyKey(),
+        )
+        .then((_) async {
       await JobPostSyncService().pushPostUpdate(updated);
       return CorporateJobPostResult.success(updated);
     });

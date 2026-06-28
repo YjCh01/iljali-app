@@ -126,6 +126,7 @@ abstract final class QcSyncBootstrap {
           registeredBy: companyKey.isNotEmpty
               ? _syncProfile(companyKey: companyKey, companyName: companyName)
               : null,
+          recruiterEmail: (map['posted_by_email'] as String?)?.trim(),
           mapPinDisplayTier: pinActive
               ? (JobMapPinDisplayTierX.tryParseLegacy(tierRaw) ??
                   JobMapPinDisplayTier.packageActive)

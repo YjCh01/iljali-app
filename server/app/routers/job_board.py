@@ -1,12 +1,14 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.job_sync_models import JobPostRow
+from app.services.auth_token_service import verify_token
+from app.services.entitlement_service import normalize_brn
 
 router = APIRouter(prefix="/v1/job-board", tags=["job-board"])
 
@@ -71,6 +73,33 @@ def _row_to_dict(row: JobPostRow) -> dict:
     }
 
 
+def _resolve_bearer(authorization: str | None) -> dict:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="인증이 필요합니다.")
+    token = authorization.split(" ", 1)[1].strip()
+    payload = verify_token(token)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="세션이 만료되었습니다.")
+    return payload
+
+
+def _assert_employer_company(payload: dict, company_key: str) -> None:
+    member_type = str(payload.get("member_type", ""))
+    if member_type not in ("employer", "corporate"):
+        raise HTTPException(status_code=403, detail="기업회원만 공고를 관리할 수 있습니다.")
+    token_key = normalize_brn(str(payload.get("company_key", "")))
+    target_key = normalize_brn(company_key or "")
+    if not token_key or not target_key or token_key != target_key:
+        raise HTTPException(
+            status_code=403,
+            detail="다른 기업의 공고는 변경할 수 없습니다.",
+        )
+
+
+def _assert_can_mutate_row(payload: dict, row: JobPostRow) -> None:
+    _assert_employer_company(payload, row.company_key or "")
+
+
 @router.get("/posts")
 def list_posts(db: Session = Depends(get_db)):
     rows = db.query(JobPostRow).order_by(JobPostRow.created_at.desc()).all()
@@ -79,7 +108,13 @@ def list_posts(db: Session = Depends(get_db)):
 
 
 @router.post("/posts")
-def create_post(body: JobPostBody, db: Session = Depends(get_db)):
+def create_post(
+    body: JobPostBody,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, body.company_key)
     post_id = body.id or f"post_{uuid4().hex[:12]}"
     if db.get(JobPostRow, post_id) is not None:
         raise HTTPException(status_code=409, detail="이미 존재하는 공고 ID")
@@ -138,10 +173,17 @@ def record_map_impression(post_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/posts/{post_id}")
-def update_post(post_id: str, body: JobPostUpdate, db: Session = Depends(get_db)):
+def update_post(
+    post_id: str,
+    body: JobPostUpdate,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
     row = db.get(JobPostRow, post_id)
     if row is None:
         raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
+    payload = _resolve_bearer(authorization)
+    _assert_can_mutate_row(payload, row)
     data = body.model_dump(exclude_none=True)
     for key, value in data.items():
         setattr(row, key, value)
@@ -152,10 +194,16 @@ def update_post(post_id: str, body: JobPostUpdate, db: Session = Depends(get_db)
 
 
 @router.delete("/posts/{post_id}")
-def delete_post(post_id: str, db: Session = Depends(get_db)):
+def delete_post(
+    post_id: str,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
     row = db.get(JobPostRow, post_id)
     if row is None:
         raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
+    payload = _resolve_bearer(authorization)
+    _assert_can_mutate_row(payload, row)
     db.delete(row)
     db.commit()
     return {"deleted": True, "id": post_id}

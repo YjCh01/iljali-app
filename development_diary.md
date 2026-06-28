@@ -1,5 +1,10 @@
 - **고객센터 이메일**: iljariapp@gmail.com (`BusinessDisclosure` · 약관 · 스토어 listing)
 
+## 2026-06-28 — 기업 공고 목록 타사 노출 차단 (보안)
+
+- **원인** in-memory 공고 풀 전체를 `GetCorporateJobPostsUseCase`가 그대로 반환
+- **수정** `CorporateJobPostScope` · companyKey 필터 · 수정/삭제 소유권 검증 · API PUT/DELETE 인증
+
 ## 2026-06-28 — 대화방 나가기 (구직자·기업)
 
 - 채팅 목록 ⋮ 메뉴 + 채팅 화면 햄버거 메뉴 → `대화방 나가기`

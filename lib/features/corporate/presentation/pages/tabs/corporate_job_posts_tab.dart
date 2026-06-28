@@ -136,7 +136,10 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
             .toList(growable: false);
 
         for (final healed in postsToPersist) {
-          await _dataSource.updateJobPost(healed);
+          await _dataSource.updateJobPost(
+            healed,
+            ownerCompanyKey: profile.companyKey,
+          );
         }
         if (postsToPersist.isNotEmpty) {
           JobBoardRefresh.markUpdated();
@@ -173,7 +176,12 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
     if (!_notificationSettingsChanged(settings, healedSettings)) return post;
 
     final healed = post.copyWith(notificationSettings: healedSettings);
-    await _dataSource.updateJobPost(healed);
+    final ownerKey =
+        AuthSession.instance.currentUser?.corporateProfile?.companyKey;
+    await _dataSource.updateJobPost(
+      healed,
+      ownerCompanyKey: ownerKey,
+    );
     JobBoardRefresh.markUpdated();
     if (mounted) {
       setState(() {
@@ -379,7 +387,12 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
 
 
 
-    final deleted = await _dataSource.deleteJobPost(post.id);
+    final ownerKey =
+        AuthSession.instance.currentUser?.corporateProfile?.companyKey;
+    final deleted = await _dataSource.deleteJobPost(
+      post.id,
+      ownerCompanyKey: ownerKey,
+    );
 
     if (!mounted) return;
 

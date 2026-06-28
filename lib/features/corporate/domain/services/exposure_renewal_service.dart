@@ -4,6 +4,7 @@ import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/data/repositories/exposure_renewal_notice_repository.dart';
 import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
+import 'package:map/features/corporate/domain/utils/corporate_job_post_scope.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/corporate_payment_preference.dart';
@@ -219,7 +220,10 @@ class ExposureRenewalService {
           : CorporateJobPostStatus.recruiting,
     );
 
-    await _jobPostDataSource.updateJobPost(updatedPost);
+    await _jobPostDataSource.updateJobPost(
+      updatedPost,
+      ownerCompanyKey: profile.companyKey,
+    );
     await JobPostSyncService().pushPostUpdate(updatedPost);
 
     final noticeRepo = await ExposureRenewalNoticeRepository.create();
@@ -265,6 +269,7 @@ class ExposureRenewalNoticeService {
 
     final rooms = <CorporateChatRoom>[];
     for (final post in posts) {
+      if (!CorporateJobPostScope.belongsToCompany(post, companyKey)) continue;
       if (post.status == CorporateJobPostStatus.closed) continue;
       if (dismissed.contains(post.id)) continue;
 

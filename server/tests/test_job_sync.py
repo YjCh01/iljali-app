@@ -10,9 +10,25 @@ def setup_module():
     Base.metadata.create_all(bind=engine)
 
 
+from app.services.auth_token_service import issue_token
+
+
+def _corp_auth_headers(company_key: str = "1234567890") -> dict[str, str]:
+    token = issue_token(
+        {
+            "sub": "corp@test.iljari.co.kr",
+            "member_type": "corporate",
+            "company_key": company_key,
+        }
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_job_board_crud():
+    headers = _corp_auth_headers()
     created = client.post(
         "/v1/job-board/posts",
+        headers=headers,
         json={
             "title": "물류 보조",
             "company_name": "테스트물류",
@@ -29,10 +45,33 @@ def test_job_board_crud():
 
     updated = client.put(
         f"/v1/job-board/posts/{post_id}",
+        headers=headers,
         json={"status": "closed"},
     )
     assert updated.status_code == 200
     assert updated.json()["status"] == "closed"
+
+
+def test_job_board_rejects_cross_company_update():
+    owner_headers = _corp_auth_headers("1234567890")
+    other_headers = _corp_auth_headers("9876543210")
+    created = client.post(
+        "/v1/job-board/posts",
+        headers=owner_headers,
+        json={
+            "title": "타사 공고",
+            "company_key": "1234567890",
+        },
+    )
+    assert created.status_code == 200
+    post_id = created.json()["id"]
+
+    denied = client.put(
+        f"/v1/job-board/posts/{post_id}",
+        headers=other_headers,
+        json={"status": "closed"},
+    )
+    assert denied.status_code == 403
 
 
 def test_hiring_and_chat():

@@ -23,7 +23,7 @@ import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/chat/domain/services/chat_access_policy.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
-import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
+import 'package:map/features/corporate/domain/utils/corporate_job_post_scope.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_applicant_resume_page.dart';
 import 'package:map/features/corporate/presentation/widgets/chat/chat_reply_macro_picker_sheet.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_preview_sheet.dart';
@@ -55,7 +55,6 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
 
   HiringApplication? _application;
   CorporateJobPost? _jobPost;
-  final _getPosts = const GetCorporateJobPostsUseCase(_postsSource);
   final _messages = <ApplicationChatMessage>[];
   final _controller = TextEditingController();
   final _inputFocus = FocusNode();
@@ -136,15 +135,12 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
 
     CorporateJobPost? jobPost;
     if (_isEmployer) {
+      jobPost = await _postsSource.findById(app.postId);
       final companyKey = user.corporateProfile?.companyKey;
-      if (companyKey != null) {
-        final posts = await _getPosts();
-        for (final post in posts) {
-          if (post.id == app.postId) {
-            jobPost = post;
-            break;
-          }
-        }
+      if (jobPost != null &&
+          companyKey != null &&
+          !CorporateJobPostScope.belongsToCompany(jobPost, companyKey)) {
+        jobPost = null;
       }
     }
 

@@ -1,12 +1,20 @@
 import 'package:flutter/foundation.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/domain/utils/corporate_job_post_scope.dart';
 import 'package:map/features/corporate/domain/utils/job_post_limit_policy.dart';
 
 abstract class CorporateJobPostLocalDataSource {
   Future<List<CorporateJobPost>> fetchJobPosts();
+  Future<List<CorporateJobPost>> fetchJobPostsForCompany(String companyKey);
   Future<void> createJobPost(CorporateJobPost post);
-  Future<void> updateJobPost(CorporateJobPost post);
-  Future<bool> deleteJobPost(String id);
+  Future<void> updateJobPost(
+    CorporateJobPost post, {
+    String? ownerCompanyKey,
+  });
+  Future<bool> deleteJobPost(
+    String id, {
+    String? ownerCompanyKey,
+  });
   Future<CorporateJobPost?> findById(String id);
 
   /// companyKey당 활성 공고 상한 — 초과 시 가장 오래된 공고 마감
@@ -35,6 +43,19 @@ class CorporateJobPostLocalDataSourceImpl
       List.unmodifiable(_posts);
 
   @override
+  Future<List<CorporateJobPost>> fetchJobPostsForCompany(
+    String companyKey,
+  ) async =>
+      CorporateJobPostScope.filterForCompany(_posts, companyKey);
+
+  void _assertCanMutate(CorporateJobPost existing, String? ownerCompanyKey) {
+    if (ownerCompanyKey == null || ownerCompanyKey.isEmpty) return;
+    if (!CorporateJobPostScope.belongsToCompany(existing, ownerCompanyKey)) {
+      throw CorporateJobPostAccessDenied();
+    }
+  }
+
+  @override
   Future<void> createJobPost(CorporateJobPost post) async {
     final companyKey = post.registeredBy?.companyKey;
     if (companyKey != null && companyKey.isNotEmpty) {
@@ -60,16 +81,24 @@ class CorporateJobPostLocalDataSourceImpl
   }
 
   @override
-  Future<void> updateJobPost(CorporateJobPost post) async {
+  Future<void> updateJobPost(
+    CorporateJobPost post, {
+    String? ownerCompanyKey,
+  }) async {
     final index = _posts.indexWhere((item) => item.id == post.id);
     if (index == -1) return;
+    _assertCanMutate(_posts[index], ownerCompanyKey);
     _posts[index] = post;
   }
 
   @override
-  Future<bool> deleteJobPost(String id) async {
+  Future<bool> deleteJobPost(
+    String id, {
+    String? ownerCompanyKey,
+  }) async {
     final index = _posts.indexWhere((item) => item.id == id);
     if (index == -1) return false;
+    _assertCanMutate(_posts[index], ownerCompanyKey);
     _posts.removeAt(index);
     return true;
   }
