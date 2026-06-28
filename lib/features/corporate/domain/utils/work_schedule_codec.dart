@@ -14,28 +14,38 @@ abstract final class WorkScheduleCodec {
     final text = raw.trim();
     if (text.isEmpty) return null;
 
-    if (text.startsWith('일용 ·') || text.startsWith('일용·')) {
-      return _parseDailyPick(text);
+    final regular = text.startsWith('정규·') || text.startsWith('정규 ·');
+    final body = regular
+        ? text.replaceFirst(RegExp(r'^정규\s*·\s*'), '')
+        : text;
+
+    if (body.startsWith('일용 ·') || body.startsWith('일용·')) {
+      return _parseDailyPick(body);
     }
-    if (text.startsWith('교대:')) {
-      return _parseRotating(text);
+    if (body.startsWith('교대:')) {
+      return _parseRotating(body, firstStartDateOnly: regular);
     }
-    if (text.startsWith('맞춤 ·') || text.startsWith('맞춤·')) {
-      return _parseCustom(text);
+    if (body.startsWith('맞춤 ·') || body.startsWith('맞춤·')) {
+      return _parseCustom(body, firstStartDateOnly: regular);
     }
-    if (text.contains('주') && text.contains('일(')) {
-      return _parseFixedWeekdays(text);
+    if (body.contains('주') && body.contains('일(')) {
+      return _parseFixedWeekdays(body, firstStartDateOnly: regular);
     }
 
-    final legacy = _parseLegacyDateRange(text);
-    if (legacy != null) return legacy;
+    if (!regular) {
+      final legacy = _parseLegacyDateRange(body);
+      if (legacy != null) return legacy;
+    }
 
     return null;
   }
 
-  static String encode(WorkScheduleSpec spec) {
-    if (!spec.isComplete) return '';
+  static String encode(WorkScheduleSpec spec, {bool workPeriodNegotiable = false}) {
+    if (!spec.isCompleteFor(workPeriodNegotiable: workPeriodNegotiable)) {
+      return '';
+    }
     final dayTime = '${_padTime(spec.dayStart)}~${_padTime(spec.dayEnd)}';
+    final prefix = spec.firstStartDateOnly ? '정규·' : '';
 
     return switch (spec.mode) {
       WorkScheduleMode.dailyPick => () {
@@ -54,8 +64,6 @@ abstract final class WorkScheduleCodec {
           return '일용 · $dates · $dayTime · 근무${sorted.length}일';
         }(),
       WorkScheduleMode.fixedWeekdays => () {
-          final start = _fmtDate(spec.startDate!);
-          final end = _fmtDate(spec.endDate!);
           final days = WorkScheduleSpec.weekdayLabels
               .asMap()
               .entries
@@ -63,11 +71,16 @@ abstract final class WorkScheduleCodec {
               .map((e) => e.value)
               .join('');
           final count = spec.weekdays.length;
+          if (spec.firstStartDateOnly) {
+            final startPart =
+                spec.startDate != null ? '${_fmtDate(spec.startDate!)} · ' : '';
+            return '${prefix}주${count}일($days) · $startPart$dayTime';
+          }
+          final start = _fmtDate(spec.startDate!);
+          final end = _fmtDate(spec.endDate!);
           return '주${count}일($days) · $start~$end · $dayTime';
         }(),
       WorkScheduleMode.rotatingShift => () {
-          final start = _fmtDate(spec.startDate!);
-          final end = _fmtDate(spec.endDate!);
           final cycle = spec.rotatingCycle;
           final startSlot = cycle[spec.cycleStartIndex % cycle.length];
           final nightTime =
@@ -80,11 +93,30 @@ abstract final class WorkScheduleCodec {
                       RotatingShiftPreset.byId(spec.rotatingPresetId)!;
                   return '${preset.title}(${preset.patternLabel})';
                 }();
+          if (spec.firstStartDateOnly) {
+            final startPart =
+                spec.startDate != null ? '${_fmtDate(spec.startDate!)} · ' : '';
+            return '${prefix}교대:$label · $startPart'
+                '주$dayTime · 야$nightTime · '
+                '시작=${startSlot.shortLabel}';
+          }
+          final start = _fmtDate(spec.startDate!);
+          final end = _fmtDate(spec.endDate!);
           return '교대:$label · $start~$end · '
               '주$dayTime · 야$nightTime · '
               '시작=${startSlot.shortLabel}';
         }(),
       WorkScheduleMode.customDates => () {
+          if (spec.firstStartDateOnly) {
+            final startPart =
+                spec.startDate != null ? '${_fmtDate(spec.startDate!)} · ' : '';
+            final sorted = spec.customExcludedDates.toList()
+              ..sort((a, b) => a.compareTo(b));
+            final base = '${prefix}맞춤 · $startPart$dayTime';
+            if (sorted.isEmpty) return base;
+            final excluded = sorted.map(_fmtDate).join(',');
+            return '$base · 제외=$excluded';
+          }
           final start = _fmtDate(spec.startDate!);
           final end = _fmtDate(spec.endDate!);
           final sorted = spec.customExcludedDates.toList()
@@ -128,7 +160,48 @@ abstract final class WorkScheduleCodec {
     );
   }
 
-  static WorkScheduleSpec? _parseFixedWeekdays(String text) {
+  static WorkScheduleSpec? _parseFixedWeekdays(
+    String text, {
+    bool firstStartDateOnly = false,
+  }) {
+    if (firstStartDateOnly) {
+      final weekdays = <int>{};
+      final weekdaySection = RegExp(r'\(([월화수목금토일]+)\)').firstMatch(text);
+      if (weekdaySection != null) {
+        final chars = weekdaySection.group(1)!;
+        for (var i = 0; i < WorkScheduleSpec.weekdayLabels.length; i++) {
+          if (chars.contains(WorkScheduleSpec.weekdayLabels[i])) {
+            weekdays.add(i);
+          }
+        }
+      }
+      if (weekdays.isEmpty) weekdays.addAll([0, 1, 2, 3, 4]);
+
+      final single = _singleDatePattern.firstMatch(text);
+      final times = _timePattern.firstMatch(text);
+      var dayStart = const TimeOfDay(hour: 9, minute: 0);
+      var dayEnd = const TimeOfDay(hour: 18, minute: 0);
+      if (times != null) {
+        dayStart = _parseTime(times);
+        dayEnd = _parseTimeEnd(times);
+      }
+
+      return WorkScheduleSpec(
+        mode: WorkScheduleMode.fixedWeekdays,
+        firstStartDateOnly: true,
+        startDate: single != null
+            ? _parseDate(
+                single.group(1)!,
+                single.group(2)!,
+                single.group(3)!,
+              )
+            : null,
+        weekdays: weekdays,
+        dayStart: dayStart,
+        dayEnd: dayEnd,
+      );
+    }
+
     final range = _dateRangePattern.firstMatch(text);
     if (range == null) return null;
     final start =
@@ -240,7 +313,91 @@ abstract final class WorkScheduleCodec {
     );
   }
 
-  static WorkScheduleSpec? _parseRotating(String text) {
+  static final _singleDatePattern = RegExp(
+    r'(\d{4})[./-](\d{1,2})[./-](\d{1,2})',
+  );
+
+  static WorkScheduleSpec? _parseRotating(
+    String text, {
+    bool firstStartDateOnly = false,
+  }) {
+    if (firstStartDateOnly) {
+      final single = _singleDatePattern.firstMatch(text);
+      final start = single != null
+          ? _parseDate(
+              single.group(1)!,
+              single.group(2)!,
+              single.group(3)!,
+            )
+          : null;
+
+      var presetId = RotatingShiftPreset.threeTeamTwoShift.id;
+      var customCycle = const [
+        ShiftSlotKind.day,
+        ShiftSlotKind.night,
+        ShiftSlotKind.off,
+      ];
+
+      if (text.contains('직접선택')) {
+        presetId = RotatingShiftPreset.customDirect.id;
+        final patternMatch =
+            RegExp(r'직접선택\(([주야휴비]+)\)').firstMatch(text);
+        if (patternMatch != null) {
+          customCycle = _cycleFromLabel(patternMatch.group(1)!);
+        }
+      } else {
+        for (final p in RotatingShiftPreset.all) {
+          if (p.id == RotatingShiftPreset.customDirect.id) continue;
+          if (text.contains(p.title) || text.contains(p.patternLabel)) {
+            presetId = p.id;
+            break;
+          }
+        }
+      }
+
+      final cycle = presetId == RotatingShiftPreset.customDirect.id
+          ? customCycle
+          : RotatingShiftPreset.byId(presetId)!.cycle;
+
+      final dayMatch =
+          RegExp(r'주(\d{1,2}:\d{2})~(\d{1,2}:\d{2})').firstMatch(text);
+      final nightMatch =
+          RegExp(r'야(\d{1,2}:\d{2})~(\d{1,2}:\d{2})').firstMatch(text);
+      var dayStart = const TimeOfDay(hour: 9, minute: 0);
+      var dayEnd = const TimeOfDay(hour: 18, minute: 0);
+      var nightStart = const TimeOfDay(hour: 22, minute: 0);
+      var nightEnd = const TimeOfDay(hour: 6, minute: 0);
+      if (dayMatch != null) {
+        dayStart = _parseTimeParts(dayMatch.group(1)!);
+        dayEnd = _parseTimeParts(dayMatch.group(2)!);
+      }
+      if (nightMatch != null) {
+        nightStart = _parseTimeParts(nightMatch.group(1)!);
+        nightEnd = _parseTimeParts(nightMatch.group(2)!);
+      }
+
+      var cycleStart = 0;
+      final startMatch = RegExp(r'시작=(\S)').firstMatch(text);
+      if (startMatch != null) {
+        final ch = startMatch.group(1)!;
+        cycleStart = cycle.indexWhere((s) => s.shortLabel == ch);
+        if (cycleStart < 0) cycleStart = 0;
+      }
+
+      return WorkScheduleSpec(
+        mode: WorkScheduleMode.rotatingShift,
+        firstStartDateOnly: true,
+        startDate: start,
+        rotatingPresetId: presetId,
+        customCycle: customCycle,
+        cycleStartIndex: cycleStart,
+        dayStart: dayStart,
+        dayEnd: dayEnd,
+        nightStart: nightStart,
+        nightEnd: nightEnd,
+      );
+    }
+
     final range = _dateRangePattern.firstMatch(text);
     if (range == null) return null;
     final start =
@@ -315,7 +472,53 @@ abstract final class WorkScheduleCodec {
     );
   }
 
-  static WorkScheduleSpec? _parseCustom(String text) {
+  static WorkScheduleSpec? _parseCustom(
+    String text, {
+    bool firstStartDateOnly = false,
+  }) {
+    if (firstStartDateOnly) {
+      final single = _singleDatePattern.firstMatch(text);
+      final start = single != null
+          ? _parseDate(
+              single.group(1)!,
+              single.group(2)!,
+              single.group(3)!,
+            )
+          : null;
+
+      final times = _timePattern.firstMatch(text);
+      var dayStart = const TimeOfDay(hour: 9, minute: 0);
+      var dayEnd = const TimeOfDay(hour: 18, minute: 0);
+      if (times != null) {
+        dayStart = _parseTime(times);
+        dayEnd = _parseTimeEnd(times);
+      }
+
+      final excluded = <DateTime>{};
+      final excludeSection = RegExp(r'제외=([^·]+)').firstMatch(text);
+      if (excludeSection != null) {
+        for (final part in excludeSection.group(1)!.split(',')) {
+          final full = _singleDatePattern.firstMatch(part.trim());
+          if (full != null) {
+            excluded.add(_parseDate(
+              full.group(1)!,
+              full.group(2)!,
+              full.group(3)!,
+            ));
+          }
+        }
+      }
+
+      return WorkScheduleSpec(
+        mode: WorkScheduleMode.customDates,
+        firstStartDateOnly: true,
+        startDate: start,
+        customExcludedDates: excluded,
+        dayStart: dayStart,
+        dayEnd: dayEnd,
+      );
+    }
+
     final range = _dateRangePattern.firstMatch(text);
     if (range == null) return null;
     final start =

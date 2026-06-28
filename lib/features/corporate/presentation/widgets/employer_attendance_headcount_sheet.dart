@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/corporate_attendance_record.dart';
 
@@ -17,9 +18,8 @@ Future<void> showEmployerAttendanceHeadcountSheet(
   final dailyCount = onDuty.where((r) => r.isDailyWorker).length;
   final otherCount = onDuty.length - dailyCount;
 
-  return showModalBottomSheet<void>(
+  return showAdaptiveSheet<void>(
     context: context,
-    showDragHandle: true,
     builder: (ctx) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),

@@ -38,41 +38,18 @@ void main() {
       handlerCode: '1001',
     );
 
-    test('free employer cannot view competitor posts', () {
-      expect(
-        CorporateMapContentAccessPolicy.hasPaidIntelAccess(viewer),
-        isFalse,
-      );
+    test('all employers can view competitor posts', () {
       expect(
         CorporateMapContentAccessPolicy.canViewPostContent(
           viewerProfile: viewer,
           ownPostIds: const {},
           post: _post(ownerBrn: '999-88-77777'),
         ),
-        isFalse,
-      );
-    });
-
-    test('paid wallet unlocks competitor posts', () {
-      const paidViewer = CorporateMemberProfile(
-        companyName: 'A',
-        businessRegistrationNumber: '1112233333',
-        department: 'HR',
-        contactPersonName: 'Kim',
-        handlerCode: '1001',
-        pushWallet: EmployerPushWallet(packageCredits: 1),
-      );
-      expect(
-        CorporateMapContentAccessPolicy.canViewPostContent(
-          viewerProfile: paidViewer,
-          ownPostIds: const {},
-          post: _post(ownerBrn: '9998877777'),
-        ),
         isTrue,
       );
     });
 
-    test('free employer can always view own posts', () {
+    test('free employer can view own posts', () {
       final ownPost = _post(ownerBrn: '1112233333');
       expect(
         CorporateMapContentAccessPolicy.canViewPostContent(
@@ -84,7 +61,7 @@ void main() {
       );
     });
 
-    test('legacy subscription unlocks intel access', () {
+    test('legacy subscription still reports paid intel access', () {
       const legacy = CorporateMemberProfile(
         companyName: 'A',
         businessRegistrationNumber: '1112233333',
@@ -100,36 +77,27 @@ void main() {
       );
     });
 
-    test('free employer cannot view competitor shuttle routes', () {
-      const viewer = CorporateMemberProfile(
-        companyName: 'A',
-        businessRegistrationNumber: '1112233333',
-        department: 'HR',
-        contactPersonName: 'Kim',
-        handlerCode: '1001',
-      );
+    test('all employers can view competitor shuttle routes', () {
       expect(
         CorporateMapContentAccessPolicy.canViewShuttleContent(
           viewerProfile: viewer,
           routeCompanyKey: '9998877777',
         ),
-        isFalse,
+        isTrue,
       );
     });
 
-    test('own company shuttle routes remain viewable when free', () {
-      const viewer = CorporateMemberProfile(
+    test('wallet with credits reports paid intel access', () {
+      const paidViewer = CorporateMemberProfile(
         companyName: 'A',
         businessRegistrationNumber: '1112233333',
         department: 'HR',
         contactPersonName: 'Kim',
         handlerCode: '1001',
+        pushWallet: EmployerPushWallet(packageCredits: 1),
       );
       expect(
-        CorporateMapContentAccessPolicy.canViewShuttleContent(
-          viewerProfile: viewer,
-          routeCompanyKey: '1112233333',
-        ),
+        CorporateMapContentAccessPolicy.hasPaidIntelAccess(paidViewer),
         isTrue,
       );
     });

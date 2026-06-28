@@ -9,8 +9,12 @@ import 'package:map/features/job_seeker/domain/entities/job_bookmark.dart';
 import 'package:map/features/job_seeker/domain/entities/job_bookmark_folder.dart';
 import 'package:map/features/job_seeker/domain/entities/viewed_job_entry.dart';
 import 'package:map/features/job_seeker/domain/utils/job_bookmark_retention_policy.dart';
+import 'package:map/core/widgets/korean_calendar.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/features/job_seeker/domain/utils/job_bookmark_sort.dart';
 import 'package:map/features/job_seeker/domain/utils/job_map_pin_factory.dart';
+import 'package:map/core/hiring/local_hiring_repository.dart';
+import 'package:map/features/job_seeker/domain/services/seeker_application_withdraw_service.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_post_detail_sheet.dart';
 
 /// 구직자 — 나의 보관함 (폴더·메모·오늘 본 공고)
@@ -43,6 +47,7 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
   bool _loading = true;
   bool _compareMode = false;
   final Set<String> _selectedForCompare = {};
+  final Map<String, bool> _canWithdrawByPostId = {};
 
   @override
   void initState() {
@@ -80,12 +85,28 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
     );
     final viewed = await repo.loadViewedToday();
     final expiring = await repo.loadExpiringSoon();
+    final email = AuthSession.instance.currentUser?.email;
+    final withdrawable = <String, bool>{};
+    if (email != null && email.isNotEmpty) {
+      final hiringRepo = await LocalHiringRepository.create();
+      for (final bookmark in bookmarks) {
+        final active = await hiringRepo.findActiveForPost(
+          postId: bookmark.postId,
+          seekerEmail: email,
+        );
+        withdrawable[bookmark.postId] = active != null &&
+            LocalHiringRepository.canSeekerWithdraw(active);
+      }
+    }
     if (!mounted) return;
     setState(() {
       _folders = folders;
       _bookmarks = bookmarks;
       _viewedToday = viewed;
       _expiringSoon = expiring;
+      _canWithdrawByPostId
+        ..clear()
+        ..addAll(withdrawable);
       _loading = false;
     });
   }
@@ -178,6 +199,15 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
     );
   }
 
+  Future<void> _withdrawBookmark(JobBookmark bookmark) async {
+    final ok = await SeekerApplicationWithdrawService.confirmAndWithdraw(
+      context,
+      postId: bookmark.postId,
+      postTitle: bookmark.title,
+    );
+    if (ok) await _reload();
+  }
+
   Future<void> _openBookmark(JobBookmark bookmark) async {
     final post = await _postDataSource.findById(bookmark.postId);
     if (!mounted) return;
@@ -188,10 +218,8 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
       return;
     }
     final pin = jobMapPinFromPost(post);
-    await showModalBottomSheet<void>(
+    await showAdaptiveSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (context) => JobPostDetailSheet(
         pin: pin,
         vaultRepo: _repo,
@@ -205,6 +233,7 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
           if (applied && context.mounted) Navigator.of(context).pop();
         },
         onVaultChanged: _reload,
+        onApplicationStateChanged: _reload,
       ),
     );
     await _reload();
@@ -220,10 +249,8 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
       return;
     }
     final pin = jobMapPinFromPost(post);
-    await showModalBottomSheet<void>(
+    await showAdaptiveSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (context) => JobPostDetailSheet(
         pin: pin,
         vaultRepo: _repo,
@@ -237,6 +264,7 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
           if (applied && context.mounted) Navigator.of(context).pop();
         },
         onVaultChanged: _reload,
+        onApplicationStateChanged: _reload,
       ),
     );
     await _reload();
@@ -390,7 +418,7 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
 
   Future<void> _showFolderMenu(JobBookmarkFolder folder) async {
     if (folder.id == JobBookmarkFolder.defaultFolderId) return;
-    final action = await showModalBottomSheet<String>(
+    final action = await showAdaptiveSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
@@ -417,10 +445,21 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
     }
   }
 
-  void _showCalendarStub(String title) {
+  Future<void> _showCalendarStub(String title) async {
+    final now = DateTime.now();
+    final picked = await showKoreanDatePickerSheet(
+      context,
+      initialDate: now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+      title: '「$title」일정 기록',
+    );
+    if (!mounted || picked == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('캘린더 추가 준비중: $title'),
+        content: Text(
+          '「$title」${picked.year}.${picked.month}.${picked.day} 일정을 기록했습니다.',
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -704,6 +743,19 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
                         icon: const Icon(Icons.edit_note_outlined, size: 16),
                         label: const Text('메모'),
                       ),
+                      if (_canWithdrawByPostId[item.postId] == true)
+                        TextButton.icon(
+                          onPressed: () => _withdrawBookmark(item),
+                          icon: Icon(
+                            Icons.cancel_outlined,
+                            size: 16,
+                            color: Colors.red.shade700,
+                          ),
+                          label: Text(
+                            '지원취소',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
                       if (!_compareMode && _bookmarks.length >= 2)
                         TextButton.icon(
                           onPressed: () {

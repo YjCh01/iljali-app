@@ -1,0 +1,9 @@
+# HTTP-only edge (SSL 인증서 없을 때)
+services:
+  edge:
+    ports:
+      - "80:80"
+    volumes:
+      - ${ILJARI_WEB_HOST_DIR:-/opt/iljari/web}:/usr/share/nginx/html:ro
+      - ./nginx/bootstrap-http.conf:/etc/nginx/conf.d/99-bootstrap.conf:ro
+      - ./nginx/web-variants.conf:/etc/nginx/snippets/web-variants.conf:ro

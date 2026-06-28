@@ -1,7 +1,17 @@
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_ranking_context.dart';
+import 'package:map/features/job_seeker/domain/factories/closed_ghost_job_map_pin_factory.dart';
 import 'package:map/features/job_seeker/domain/utils/job_map_pin_ranking_service.dart';
+
+/// 지도 핀 종류
+enum JobMapPinKind {
+  /// 채용 중 공고
+  active,
+
+  /// 마감된 무료 공고 · 어드민 배치 마감유령핀
+  closedGhost,
+}
 
 /// 지도에 표시할 채용 공고 핀
 class JobMapPin {
@@ -11,6 +21,8 @@ class JobMapPin {
     required this.longitude,
     required this.companyName,
     required this.displayTier,
+    this.kind = JobMapPinKind.active,
+    this.ghostPinId,
   });
 
   final CorporateJobPost post;
@@ -18,6 +30,16 @@ class JobMapPin {
   final double longitude;
   final String companyName;
   final JobMapPinDisplayTier displayTier;
+  final JobMapPinKind kind;
+  final String? ghostPinId;
+
+  bool get isClosedGhost => kind == JobMapPinKind.closedGhost;
+
+  String get closedGhostMessage => ClosedGhostJobMapPinFactory.message;
+
+  /// 네이버·웹 마커 ID
+  String get mapMarkerId =>
+      isClosedGhost ? 'ghost_${ghostPinId ?? post.id}' : post.id;
 }
 
 /// 화면 좌표 기반 mock 클러스터

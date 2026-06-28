@@ -3,6 +3,7 @@ import 'dart:html' as html;
 import 'dart:js_util' as js_util;
 
 import 'package:flutter/material.dart';
+import 'package:map/core/constants/map_constants.dart';
 import 'package:map/core/geo/map_viewport_bounds.dart';
 
 Future<void>? _scriptLoadFuture;
@@ -122,7 +123,7 @@ Future<void> _loadScriptOnce(String clientId, String authParam) {
   final script = html.ScriptElement()
     ..type = 'text/javascript'
     ..src =
-        'https://oapi.map.naver.com/openapi/v3/maps.js?$authParam=$clientId&callback=$callbackName';
+        'https://oapi.map.naver.com/openapi/v3/maps.js?$authParam=$clientId&submodules=geocoder&callback=$callbackName';
   script.dataset['iljari-naver-map'] = '1';
   script.onError.listen((_) {
     if (!completer.isCompleted) {
@@ -365,15 +366,25 @@ class NaverMapWebController {
         lngSpan: 0.06,
       );
     }
-    final bounds = js_util.callMethod<Object>(_map, 'getBounds', []);
-    final sw = js_util.getProperty<Object>(bounds, 'min');
-    final ne = js_util.getProperty<Object>(bounds, 'max');
-    return MapViewportBounds(
-      south: js_util.callMethod<num>(sw, 'lat', []).toDouble(),
-      west: js_util.callMethod<num>(sw, 'lng', []).toDouble(),
-      north: js_util.callMethod<num>(ne, 'lat', []).toDouble(),
-      east: js_util.callMethod<num>(ne, 'lng', []).toDouble(),
-    );
+    try {
+      final bounds = js_util.callMethod<Object>(_map, 'getBounds', []);
+      final sw = js_util.getProperty<Object>(bounds, 'min');
+      final ne = js_util.getProperty<Object>(bounds, 'max');
+      return MapViewportBounds(
+        south: js_util.callMethod<num>(sw, 'lat', []).toDouble(),
+        west: js_util.callMethod<num>(sw, 'lng', []).toDouble(),
+        north: js_util.callMethod<num>(ne, 'lat', []).toDouble(),
+        east: js_util.callMethod<num>(ne, 'lng', []).toDouble(),
+      );
+    } catch (_) {
+      final camera = await getCameraPosition();
+      return MapViewportBounds.fromCenter(
+        centerLat: camera.latitude,
+        centerLng: camera.longitude,
+        latSpan: 0.06,
+        lngSpan: 0.06,
+      );
+    }
   }
 
   Future<void> moveCamera({
@@ -399,14 +410,14 @@ class NaverMapWebController {
       await moveCamera(
         latitude: position.coords!.latitude!.toDouble(),
         longitude: position.coords!.longitude!.toDouble(),
-        zoom: 15,
+        zoom: MapConstants.defaultZoom,
       );
     } catch (_) {}
   }
 
   Future<({double latitude, double longitude, double zoom})> getCameraPosition() async {
     if (_disposed) {
-      return (latitude: 37.5128, longitude: 127.0471, zoom: 13.0);
+      return (latitude: 37.5128, longitude: 127.0471, zoom: MapConstants.defaultZoom);
     }
     final center = js_util.callMethod<Object>(_map, 'getCenter', []);
     final zoom = js_util.callMethod<num>(_map, 'getZoom', []).toDouble();

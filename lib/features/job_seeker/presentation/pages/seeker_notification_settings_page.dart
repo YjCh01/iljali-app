@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
@@ -20,7 +20,6 @@ class _SeekerNotificationSettingsPageState
   bool _pushJobAlerts = true;
   bool _pushChatMessages = true;
   bool _pushApplicationUpdates = true;
-  bool _emailMarketing = false;
   bool _loading = true;
 
   @override
@@ -37,7 +36,6 @@ class _SeekerNotificationSettingsPageState
       _pushChatMessages = prefs.getBool('${_keyPrefix}chat') ?? true;
       _pushApplicationUpdates =
           prefs.getBool('${_keyPrefix}application') ?? true;
-      _emailMarketing = prefs.getBool('${_keyPrefix}email_marketing') ?? false;
       _loading = false;
     });
   }
@@ -99,26 +97,18 @@ class _SeekerNotificationSettingsPageState
                     _set('application', v);
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 Text(
-                  '이메일',
+                  '서비스 운영·이벤트 안내는 회원 이용에 포함되며, '
+                  '별도로 끌 수 없습니다. 위 설정은 채용·채팅 등 '
+                  '업무 알림만 조절합니다.',
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary.withValues(alpha: 0.95),
+                    fontSize: 11,
+                    height: 1.45,
+                    color: AppColors.textSecondary.withValues(alpha: 0.85),
                   ),
                 ),
                 const SizedBox(height: 8),
-                _ToggleTile(
-                  title: '마케팅·이벤트',
-                  subtitle: '선택 수신 (언제든 끌 수 있음)',
-                  value: _emailMarketing,
-                  onChanged: (v) {
-                    setState(() => _emailMarketing = v);
-                    _set('email_marketing', v);
-                  },
-                ),
-                const SizedBox(height: 20),
                 Text(
                   '설정은 이 기기에만 저장됩니다. 실서비스 연동 전 mock입니다.',
                   style: TextStyle(

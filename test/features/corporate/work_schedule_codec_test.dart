@@ -195,6 +195,46 @@ void main() {
       expect(spec.slotOn(DateTime(2026, 5, 8)), ShiftSlotKind.night);
       expect(spec.slotOn(DateTime(2026, 5, 10)), ShiftSlotKind.off);
     });
+
+    test('round-trips regular fixed weekdays with first start only', () {
+      final spec = WorkScheduleSpec(
+        mode: WorkScheduleMode.fixedWeekdays,
+        firstStartDateOnly: true,
+        startDate: DateTime(2026, 6, 1),
+        weekdays: {0, 1, 2, 3, 4},
+        dayStart: const TimeOfDay(hour: 9, minute: 0),
+        dayEnd: const TimeOfDay(hour: 18, minute: 0),
+      );
+      expect(spec.isComplete, isTrue);
+      expect(spec.isCompleteFor(workPeriodNegotiable: false), isTrue);
+
+      final encoded = WorkScheduleCodec.encode(spec);
+      expect(encoded, startsWith('정규·'));
+      expect(encoded, contains('2026-06-01'));
+      expect(encoded, isNot(contains('2026-06-01~')));
+
+      final parsed = WorkScheduleCodec.tryParse(encoded)!;
+      expect(parsed.firstStartDateOnly, isTrue);
+      expect(parsed.startDate, DateTime(2026, 6, 1));
+      expect(parsed.endDate, isNull);
+    });
+
+    test('regular schedule complete with negotiable only', () {
+      final spec = WorkScheduleSpec(
+        mode: WorkScheduleMode.fixedWeekdays,
+        firstStartDateOnly: true,
+        weekdays: {0, 1, 2, 3, 4},
+      );
+      expect(spec.isComplete, isFalse);
+      expect(spec.isCompleteFor(workPeriodNegotiable: true), isTrue);
+
+      final encoded = WorkScheduleCodec.encode(
+        spec,
+        workPeriodNegotiable: true,
+      );
+      expect(encoded, startsWith('정규·'));
+      expect(encoded, contains('주5일(월화수목금)'));
+    });
   });
 
   testWidgets('WorkScheduleSelectorField opens sheet with modes', (tester) async {

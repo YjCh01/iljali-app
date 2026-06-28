@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
@@ -155,6 +156,13 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
                     height: 1.45,
                     color: AppColors.textSecondary.withValues(alpha: 0.95),
                   ),
+                ),
+                const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context)
+                      .pushNamed(AppRoutes.corporateCashCharge),
+                  icon: const Icon(Icons.account_balance_wallet_outlined, size: 18),
+                  label: const Text('보유금 충전 · 결제 시 우선 차감'),
                 ),
                 const SizedBox(height: 20),
                 for (final section in PushPackageCatalog.shopSections) ...[

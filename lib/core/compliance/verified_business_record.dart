@@ -12,6 +12,7 @@ class VerifiedBusinessRecord {
     this.industryName,
     this.representativeName,
     this.certificateImageRef,
+    this.registeredBusinessAddress,
     this.ocrConfidence,
     this.ntsApiMatched = false,
     this.requiresAdminReview = false,
@@ -27,6 +28,8 @@ class VerifiedBusinessRecord {
   final String? industryName;
   final String? representativeName;
   final String? certificateImageRef;
+  /// 등록증·국세청 등록 사업장 소재지 (OCR 또는 내정보)
+  final String? registeredBusinessAddress;
   final double? ocrConfidence;
   final bool ntsApiMatched;
   final bool requiresAdminReview;
@@ -38,6 +41,8 @@ class VerifiedBusinessRecord {
     bool? requiresAdminReview,
     String? adminReviewReason,
     int? trustScore,
+    String? registeredBusinessAddress,
+    String? certificateImageRef,
   }) {
     return VerifiedBusinessRecord(
       businessRegistrationNumber: businessRegistrationNumber,
@@ -47,7 +52,9 @@ class VerifiedBusinessRecord {
       verifiedAt: verifiedAt,
       industryName: industryName,
       representativeName: representativeName,
-      certificateImageRef: certificateImageRef,
+      certificateImageRef: certificateImageRef ?? this.certificateImageRef,
+      registeredBusinessAddress:
+          registeredBusinessAddress ?? this.registeredBusinessAddress,
       ocrConfidence: ocrConfidence,
       ntsApiMatched: ntsApiMatched,
       requiresAdminReview: requiresAdminReview ?? this.requiresAdminReview,
@@ -65,6 +72,7 @@ class VerifiedBusinessRecord {
         'industryName': industryName,
         'representativeName': representativeName,
         'certificateImageRef': certificateImageRef,
+        'registeredBusinessAddress': registeredBusinessAddress,
         'ocrConfidence': ocrConfidence,
         'ntsApiMatched': ntsApiMatched,
         'requiresAdminReview': requiresAdminReview,
@@ -88,6 +96,7 @@ class VerifiedBusinessRecord {
       industryName: json['industryName'] as String?,
       representativeName: json['representativeName'] as String?,
       certificateImageRef: json['certificateImageRef'] as String?,
+      registeredBusinessAddress: json['registeredBusinessAddress'] as String?,
       ocrConfidence: (json['ocrConfidence'] as num?)?.toDouble(),
       ntsApiMatched: json['ntsApiMatched'] as bool? ?? false,
       requiresAdminReview: json['requiresAdminReview'] as bool? ?? false,

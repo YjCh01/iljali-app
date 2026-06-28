@@ -8,6 +8,7 @@ import 'package:map/features/corporate/domain/entities/push_notification_setting
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/services/job_pin_activation_service.dart';
 import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
+import 'package:map/core/widgets/map_form_split_layout.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 import 'package:map/features/corporate/presentation/widgets/select_all_toggle_bar.dart';
@@ -258,16 +259,8 @@ class _JobPinActivationPageState extends State<JobPinActivationPage> {
                     ),
                   ),
                 )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: PushRadiusMapPicker(
+              : MapStackSplitLayout(
+                  map: PushRadiusMapPicker(
                             key: ValueKey(
                               'job_pin_pay_${_points.map((p) => p.id).join('-')}_'
                               '${_selectedPinIds.join('-')}',
@@ -282,9 +275,9 @@ class _JobPinActivationPageState extends State<JobPinActivationPage> {
                             viewportSessionKey:
                                 MapViewportSessionKeys.jobPinActivation,
                           ),
-                        ),
-                      ),
-                    ),
+                  bottom: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     const SizedBox(height: 10),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -311,8 +304,7 @@ class _JobPinActivationPageState extends State<JobPinActivationPage> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    SizedBox(
-                      height: (recruitmentPins.length.clamp(1, 4)) * 52.0,
+                    Expanded(
                       child: ListView.separated(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: recruitmentPins.length,
@@ -509,6 +501,7 @@ class _JobPinActivationPageState extends State<JobPinActivationPage> {
                     ),
                   ],
                 ),
+              ),
     );
   }
 }

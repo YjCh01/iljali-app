@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/presentation/widgets/job_post_import_labels.dart';
 
@@ -8,12 +9,8 @@ enum CorporateCreateJobPostEntry { write, import }
 Future<CorporateCreateJobPostEntry?> showCorporateCreateJobPostEntrySheet(
   BuildContext context,
 ) {
-  return showModalBottomSheet<CorporateCreateJobPostEntry>(
+  return showAdaptiveSheet<CorporateCreateJobPostEntry>(
     context: context,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (context) => Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       child: CorporateCreateJobPostEntryPanel(

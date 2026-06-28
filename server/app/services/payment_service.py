@@ -24,15 +24,22 @@ def toss_checkout_url(
     order_id: str,
     order_name: str,
     amount_krw: int,
+    web_checkout: bool = False,
 ) -> str:
     client_key = settings.toss_client_key.strip()
     base = "https://pay.toss.im/web/payment"
+    if web_checkout or settings.payment_web_success_url:
+        success = settings.payment_web_success_url or "http://127.0.0.1:8081/payment-success"
+        fail = settings.payment_web_fail_url or "http://127.0.0.1:8081/payment-fail"
+    else:
+        success = "iljari://payment/success"
+        fail = "iljari://payment/fail"
     query = {
         "orderId": order_id,
         "amount": str(amount_krw),
         "orderName": order_name,
-        "successUrl": "iljari://payment/success",
-        "failUrl": "iljari://payment/fail",
+        "successUrl": success,
+        "failUrl": fail,
     }
     if client_key:
         query["clientKey"] = client_key

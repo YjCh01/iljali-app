@@ -22,9 +22,9 @@ class JobMapPinCalloutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final post = pin.post;
-    final summary = post.summary.trim().isNotEmpty
+    final snippet = post.summary.trim().isNotEmpty
         ? post.summary.trim()
-        : post.jobDescription.trim();
+        : post.effectiveDescriptionBody.calloutSnippet;
 
     return Material(
       color: Colors.transparent,
@@ -127,10 +127,10 @@ class JobMapPinCalloutCard extends StatelessWidget {
                           icon: Icons.payments_outlined,
                           text: CorporateJobPostDisplayValues.salary(post),
                         ),
-                        if (summary.isNotEmpty) ...[
+                        if (snippet.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Text(
-                            summary,
+                            snippet,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

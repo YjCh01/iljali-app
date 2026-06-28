@@ -1,40 +1,48 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_booking_sheet.dart';
 import 'package:map/features/corporate/domain/entities/work_schedule_spec.dart';
+import 'package:map/features/corporate/domain/entities/worker_category.dart';
+import 'package:map/features/corporate/domain/utils/work_schedule_calendar_utils.dart';
+import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
+import 'package:map/features/corporate/presentation/widgets/work_schedule_calendar_view.dart';
 
 /// 지원 플로우 결과
 class JobApplyFlowResult {
   const JobApplyFlowResult({
-    required this.shiftDate,
-    required this.shiftSlot,
+    required this.selectedDates,
     this.shuttleSelection,
   });
 
-  final DateTime shiftDate;
+  /// 선택한 근무일 (정렬됨). 단일·복수 모두 이 목록으로 전달.
+  final List<DateTime> selectedDates;
 
-  /// day | night | any
-  final String shiftSlot;
   final ShuttleBookingSelection? shuttleSelection;
+
+  DateTime get primaryDate => selectedDates.first;
+
+  /// 하위 호환 — 교대 선택 UI 제거, 항상 any
+  String get shiftSlot => 'any';
+
+  DateTime get shiftDate => primaryDate;
 }
 
 Future<JobApplyFlowResult?> showJobApplyFlowSheet(
   BuildContext context, {
   required String postTitle,
+  required String workSchedule,
+  required WorkerCategory workerCategory,
   required bool hasShuttle,
   CommuteRoute? shuttleRoute,
 }) {
-  return showModalBottomSheet<JobApplyFlowResult>(
+  return showAdaptiveSheet<JobApplyFlowResult>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => _JobApplyFlowBody(
       postTitle: postTitle,
+      workSchedule: workSchedule,
+      workerCategory: workerCategory,
       hasShuttle: hasShuttle,
       shuttleRoute: shuttleRoute,
     ),
@@ -44,11 +52,15 @@ Future<JobApplyFlowResult?> showJobApplyFlowSheet(
 class _JobApplyFlowBody extends StatefulWidget {
   const _JobApplyFlowBody({
     required this.postTitle,
+    required this.workSchedule,
+    required this.workerCategory,
     required this.hasShuttle,
     this.shuttleRoute,
   });
 
   final String postTitle;
+  final String workSchedule;
+  final WorkerCategory workerCategory;
   final bool hasShuttle;
   final CommuteRoute? shuttleRoute;
 
@@ -58,27 +70,68 @@ class _JobApplyFlowBody extends StatefulWidget {
 
 class _JobApplyFlowBodyState extends State<_JobApplyFlowBody> {
   int _step = 0;
-  late DateTime _selectedDate;
-  String _shiftSlot = 'any';
+  late WorkScheduleSpec _spec;
+  late bool _multiSelect;
+  final Set<DateTime> _selectedDates = {};
   ShuttleBookingSelection? _shuttleSelection;
   bool _skipShuttle = false;
 
-  static final _dateFormat = DateFormat('M/d');
-
-  List<DateTime> get _dates {
-    final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day);
-    return List.generate(14, (i) => start.add(Duration(days: i)));
-  }
+  bool get _hasSchedule =>
+      WorkScheduleCodec.tryParse(widget.workSchedule) != null;
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = _dates.first;
+    _multiSelect = widget.workerCategory == WorkerCategory.daily ||
+        widget.workerCategory == WorkerCategory.shortTerm;
+    _spec = WorkScheduleCodec.tryParse(widget.workSchedule) ??
+        WorkScheduleSpec(mode: WorkScheduleMode.dailyPick);
   }
+
+  (DateTime?, DateTime?) get _periodBounds => _spec.periodBounds();
+
+  List<DateTime> get _months => _spec.monthsToShow();
+
+  List<DateTime> get _allSelectableDays => _spec.seekerSelectableWorkDays();
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  bool _isSelected(DateTime date) =>
+      _selectedDates.any((d) => _isSameDay(d, date));
+
+  void _toggleDate(DateTime date) {
+    final normalized = WorkScheduleCalendarX.dateOnly(date);
+    if (!_spec.isSeekerSelectableDay(normalized)) return;
+
+    setState(() {
+      if (_multiSelect) {
+        if (_isSelected(normalized)) {
+          _selectedDates.removeWhere((d) => _isSameDay(d, normalized));
+        } else {
+          _selectedDates.add(normalized);
+        }
+      } else {
+        _selectedDates
+          ..clear()
+          ..add(normalized);
+      }
+    });
+  }
+
+  void _selectAllDates() {
+    setState(() {
+      _selectedDates
+        ..clear()
+        ..addAll(_allSelectableDays);
+    });
+  }
+
+  bool get _canProceed => _selectedDates.isNotEmpty;
 
   void _next() {
     if (_step == 0) {
+      if (!_canProceed) return;
       if (widget.hasShuttle && widget.shuttleRoute != null) {
         setState(() => _step = 1);
       } else {
@@ -90,10 +143,10 @@ class _JobApplyFlowBodyState extends State<_JobApplyFlowBody> {
   }
 
   void _finish() {
+    final sorted = _selectedDates.toList()..sort();
     Navigator.of(context).pop(
       JobApplyFlowResult(
-        shiftDate: _selectedDate,
-        shiftSlot: _shiftSlot,
+        selectedDates: sorted,
         shuttleSelection: _skipShuttle ? null : _shuttleSelection,
       ),
     );
@@ -110,8 +163,17 @@ class _JobApplyFlowBodyState extends State<_JobApplyFlowBody> {
     });
   }
 
+  String get _dateSectionTitle {
+    if (_multiSelect) return '근무일자 선택(중복가능)';
+    return '근무 시작 희망일';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final (periodStart, periodEnd) = _periodBounds;
+    final maxCalendarHeight =
+        (MediaQuery.of(context).size.height * 0.42).clamp(280.0, 440.0);
+
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -149,51 +211,81 @@ class _JobApplyFlowBodyState extends State<_JobApplyFlowBody> {
             ),
             const SizedBox(height: 16),
             if (_step == 0) ...[
-              const Text(
-                '희망 근무일',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 52,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _dates.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final d = _dates[index];
-                    final selected = d.year == _selectedDate.year &&
-                        d.month == _selectedDate.month &&
-                        d.day == _selectedDate.day;
-                    return ChoiceChip(
-                      label: Text(
-                        _dateFormat.format(d),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _dateSectionTitle,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (_multiSelect && _allSelectableDays.isNotEmpty)
+                    TextButton(
+                      onPressed: _selectAllDates,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: AppColors.primary,
+                      ),
+                      child: const Text(
+                        '모든날짜 선택하기',
                         style: TextStyle(
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          fontSize: 14,
                         ),
                       ),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _selectedDate = d),
-                      selectedColor: AppColors.primaryLight.withValues(alpha: 0.4),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '교대',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                children: [
-                  _slotChip('day', ShiftSlotKind.day.label),
-                  _slotChip('night', ShiftSlotKind.night.label),
-                  _slotChip('any', '상관없음'),
+                    ),
                 ],
               ),
+              if (_multiSelect && _selectedDates.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '선택 ${_selectedDates.length}일',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary.withValues(alpha: 0.9),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              if (!_hasSchedule || _allSelectableDays.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _hasSchedule
+                        ? '선택 가능한 근무일이 없습니다.\n기업에 문의해 주세요.'
+                        : '등록된 근무 일정이 없습니다.\n기업에 문의해 주세요.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                      color: AppColors.textSecondary.withValues(alpha: 0.95),
+                    ),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: maxCalendarHeight,
+                  child: WorkScheduleCalendarView(
+                    spec: _spec,
+                    months: _months,
+                    periodStart: periodStart,
+                    periodEnd: periodEnd,
+                    seekerSelectedDates: _selectedDates,
+                    singleSelect: !_multiSelect,
+                    isDaySelectable: _spec.isSeekerSelectableDay,
+                    onDayTap: _toggleDate,
+                  ),
+                ),
             ] else ...[
               if (_shuttleSelection != null)
                 Container(
@@ -257,29 +349,22 @@ class _JobApplyFlowBodyState extends State<_JobApplyFlowBody> {
             const SizedBox(height: 16),
             if (_step == 0 || (_step == 1 && _shuttleSelection != null))
               FilledButton(
-                onPressed: _next,
+                onPressed: _canProceed ? _next : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   minimumSize: const Size.fromHeight(52),
                 ),
                 child: Text(
                   _step == 0 ? '다음' : '지원 완료',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
                 ),
               ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _slotChip(String value, String label) {
-    final selected = _shiftSlot == value;
-    return ChoiceChip(
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-      selected: selected,
-      onSelected: (_) => setState(() => _shiftSlot = value),
-      selectedColor: AppColors.primaryLight.withValues(alpha: 0.4),
     );
   }
 }

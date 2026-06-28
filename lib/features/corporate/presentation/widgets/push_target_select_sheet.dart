@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/push_dispatch_target.dart';
@@ -24,10 +25,8 @@ Future<PushTargetSelectResult?> showPushTargetSelectSheet(
   required int pushTicketCredits,
   required CorporateJobPost post,
 }) {
-  return showModalBottomSheet<PushTargetSelectResult>(
+  return showAdaptiveSheet<PushTargetSelectResult>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (context) => _PushTargetSelectSheet(
       targets: targets,
       pushTicketCredits: pushTicketCredits,

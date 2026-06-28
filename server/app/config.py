@@ -18,11 +18,17 @@ class Settings(BaseSettings):
     clova_ocr_secret: str = ""
     toss_webhook_secret: str = ""
 
+    payment_web_success_url: str = "http://127.0.0.1:8081/payment-success"
+    payment_web_fail_url: str = "http://127.0.0.1:8081/payment-fail"
+
     # 외부 공고 스크래핑
     job_scrape_timeout_sec: float = 15.0
     job_scrape_min_interval_sec: float = 1.0
     job_scrape_blocklist: str = "localhost,127.0.0.1"
-    cors_origins: str = "*"
+    cors_origins: str = (
+        "http://localhost:8080,http://localhost:8081,"
+        "http://127.0.0.1:8080,http://127.0.0.1:8081"
+    )
     database_url: str = "sqlite:///./iljari_compliance.db"
 
     # 건강보험 자격득실 — 1순위 CODEF / Hyphen
@@ -60,6 +66,19 @@ class Settings(BaseSettings):
     # QC·Admin Ops (로컬/QC 전용 — production 에서 반드시 교체)
     admin_api_key: str = "qc-admin-dev-key"
     qc_payment_mode: str = "wallet_only"
+
+    # Auth / SMS (staging — mock when empty)
+    auth_token_secret: str = ""
+    sms_provider: str = "mock"
+    sms_api_key: str = ""
+    sms_mock_code: str = "123456"
+    sms_aligo_user_id: str = ""
+    sms_sender_id: str = ""
+    require_nts_api_key: bool = False
+
+    # 공고 본문 이미지 — FastAPI StaticFiles `/media/job-posts`
+    job_media_dir: str = "./uploads/job-media"
+    api_public_base_url: str = "http://127.0.0.1:8000"
 
 
 settings = Settings()

@@ -6,7 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-/// ROI 대시보드 PDF — 출근 확인 수수료 대비 절감 포함
+/// ROI 대시보드 PDF — PUSH·채용 비용 (제휴 채널 수수료 절감은 플래그 활성 시만)
 class RoiPdfService {
   const RoiPdfService();
 
@@ -81,7 +81,7 @@ class RoiPdfService {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    '출근 확인(10,000원/건) 대비 수수료 절감',
+                    '제휴 채널 수수료 기준 대비 절감 (메인 앱은 채용 성공 수수료 없음)',
                     style: pw.TextStyle(font: fontBold, fontSize: 12),
                   ),
                   pw.SizedBox(height: 4),
@@ -143,7 +143,7 @@ class RoiPdfService {
           pw.SizedBox(height: 16),
           pw.Text(
             '본 문서는 일자리 앱 ROI 대시보드에서 자동 생성되었습니다. '
-            '일자리 알림핀 비용과 출근 확인 수수료(10,000원/건 기준) 절감 효과를 내부 보고용으로 활용하세요.',
+            '알림핀·노출 비용과 채용 성과를 내부 보고용으로 활용하세요.',
             style: pw.TextStyle(font: font, fontSize: 9, color: PdfColors.grey600),
           ),
         ],

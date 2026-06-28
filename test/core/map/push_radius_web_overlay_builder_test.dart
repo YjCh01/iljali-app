@@ -10,7 +10,7 @@ void main() {
     const center = GeoCoordinate(latitude: 37.5, longitude: 127.0);
     final built = PushRadiusWebOverlayBuilder.build(
       center: center,
-      radiusMeters: 1000,
+      radiusMeters: 700,
       existingPoints: const [],
       activeTheme: PushCreditVisualTheme.basic,
       routePolylines: const [
@@ -25,7 +25,7 @@ void main() {
     );
 
     expect(built.circles, hasLength(1));
-    expect(built.circles.first.radiusMeters, 1000);
+    expect(built.circles.first.radiusMeters, 700);
     expect(built.polylines, hasLength(1));
     expect(built.markers.any((m) => m.id == 'push_active_center'), isTrue);
   });

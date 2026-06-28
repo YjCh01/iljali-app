@@ -34,9 +34,9 @@ abstract final class PasswordValidator {
         .where((included) => included)
         .length;
 
-    if (typeCount < 1) {
+    if (typeCount < 2) {
       return const ValidationResult.invalid(
-        '비밀번호에 숫자, 영문 대·소문자, 특수문자 중 1가지 이상 포함해 주세요.',
+        '비밀번호에 숫자·영문·특수문자 중 2가지 이상 포함해 주세요.',
       );
     }
 

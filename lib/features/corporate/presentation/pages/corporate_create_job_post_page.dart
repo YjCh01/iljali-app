@@ -3,6 +3,7 @@ import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/job_post_write_draft.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/presentation/navigation/corporate_job_post_flow_result.dart';
@@ -53,7 +54,7 @@ class CorporateCreateJobPostPage extends StatelessWidget {
           const WizardInfoBanner(
             message:
                 '공고 등록은 무료입니다.\n'
-                '등록한 공고는 근무지 주변 1km에 지도 핀으로 무료 노출됩니다.\n\n'
+                '등록한 공고는 근무지 주변 ${PushPackageCatalog.pushRadiusLabel}에 지도 핀으로 무료 노출됩니다.\n\n'
                 '다른 지역·셔틀 정류장 노출은 등록 후 일자리 알림핀으로 추가할 수 있습니다.',
             icon: Icons.place_outlined,
           ),

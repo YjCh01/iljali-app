@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/geo/location_consent_service.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/hiring/attendance_geofence_service.dart';
 import 'package:map/core/hiring/hiring_application.dart';
@@ -34,6 +35,12 @@ class _QrCheckInPageState extends State<QrCheckInPage> {
   }
 
   Future<void> _submit() async {
+    final granted = await LocationConsentService.ensureGranted(
+      context,
+      trigger: LocationConsentTrigger.checkIn,
+    );
+    if (!granted || !mounted) return;
+
     final code = _codeController.text.trim();
     if (code.length != 6) {
       setState(() => _error = '6자리 코드를 입력해 주세요.');

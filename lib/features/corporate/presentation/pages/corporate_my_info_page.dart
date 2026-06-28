@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
+import 'package:map/core/compliance/corporate_verification_access_policy.dart';
+import 'package:map/core/compliance/domain/business_verification_request.dart';
+import 'package:map/core/compliance/services/business_verification_service.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/session/auth_session.dart';
@@ -20,6 +24,7 @@ class CorporateMyInfoPage extends StatefulWidget {
 
 class _CorporateMyInfoPageState extends State<CorporateMyInfoPage> {
   CorporateMemberProfile? _profile;
+  bool _submittingCertificate = false;
 
   @override
   void initState() {
@@ -79,6 +84,64 @@ class _CorporateMyInfoPageState extends State<CorporateMyInfoPage> {
     );
   }
 
+  Future<void> _submitBusinessCertificate() async {
+    final profile = _profile;
+    if (profile == null || _submittingCertificate) return;
+
+    final picker = ImagePicker();
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (file == null || !mounted) return;
+
+    setState(() => _submittingCertificate = true);
+    try {
+      final service = BusinessVerificationService();
+      final record = await service.submitCertificateForReview(
+        request: BusinessVerificationRequest(
+          businessRegistrationNumber: profile.businessRegistrationNumber,
+          companyName: profile.companyName,
+          representativeName: profile.contactPersonName,
+          openingDate: '',
+        ),
+        entityType: profile.entityType,
+        certificateImageRef: file.path,
+      );
+      final updated = profile.copyWith(
+        verificationStatus: record.status,
+        requiresAdminReview: record.requiresAdminReview,
+        adminReviewReason: record.adminReviewReason,
+        certificateImageRef: record.certificateImageRef,
+      );
+      await AuthSession.instance.updateCorporateProfile(updated);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '사업자등록증이 접수되었습니다. 검토 후 유료 서비스를 이용할 수 있습니다.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on BusinessVerificationException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating),
+      );
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('등록증 제출에 실패했습니다.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submittingCertificate = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
@@ -100,6 +163,90 @@ class _CorporateMyInfoPageState extends State<CorporateMyInfoPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
+          if (profile != null &&
+              CorporateVerificationAccessPolicy.isProvisionalMember(profile)) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3F2FD),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF90CAF9)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: Colors.blue.shade800,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '미인증 회원입니다. 무료 공고는 등록할 수 있으나, '
+                          '알림핀·유료 노출은 사업자등록증 승인 후 이용할 수 있습니다.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.45,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed:
+                          _submittingCertificate ? null : _submitBusinessCertificate,
+                      icon: _submittingCertificate
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.upload_file_outlined),
+                      label: Text(
+                        _submittingCertificate
+                            ? '제출 중...'
+                            : '사업자등록증 제출 · 유료 서비스 승격',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ] else if (profile != null &&
+              CorporateVerificationAccessPolicy.isAwaitingCertificateReview(
+                profile,
+              )) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3E0),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFFCC80)),
+              ),
+              child: Text(
+                '사업자등록증 검토 중입니다. 승인되면 알림핀·유료 노출을 이용할 수 있습니다.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.orange.shade900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           if (!_hasHeadOffice) ...[
             Container(
               width: double.infinity,

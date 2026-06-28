@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_display_labels.dart';
+import 'package:map/features/corporate/presentation/widgets/job_post_description_body_view.dart';
 
 /// 공고 미리보기 본문 — 모달·지도 하단 패널 공용
 class CorporateJobPostPreviewPanel extends StatelessWidget {
@@ -153,12 +154,17 @@ class _PreviewContent extends StatelessWidget {
               ),
             ),
         const SizedBox(height: 14),
-        Text(
-          post.fullDescriptionText,
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.55,
-            color: AppColors.textPrimary.withValues(alpha: 0.95),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.primaryLight.withValues(alpha: 0.35),
+            ),
+          ),
+          child: JobPostDescriptionBodyView(
+            body: post.effectiveDescriptionBody,
           ),
         ),
       ],

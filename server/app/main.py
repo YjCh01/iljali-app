@@ -1,10 +1,14 @@
+from pathlib import Path
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, ensure_qc_member_schema
 from app.insurance_auth_models import (  # noqa: F401
     InsuranceAuthSession,
     MonthlyReemployment,
@@ -21,7 +25,10 @@ from app.job_sync_models import (  # noqa: F401
 )
 from app.qc_models import (  # noqa: F401
     AdminAuditLogRow,
+    ClosedGhostPinRow,
+    CompanySanctionRow,
     JobPostEntitlementRow,
+    MemberSanctionHistoryRow,
     QcMemberRow,
 )
 from app.permanent_commission_models import (  # noqa: F401
@@ -34,12 +41,14 @@ from app.routers import (
     addresses,
     admin,
     admin_ops,
+    auth,
     chat_sync,
     compliance,
     hiring,
     insurance_auth,
     job_board,
     job_import,
+    job_media,
     metrics,
     ocr,
     notifications,
@@ -51,6 +60,7 @@ from app.routers import (
 )
 
 Base.metadata.create_all(bind=engine)
+ensure_qc_member_schema()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -66,16 +76,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+origins = [
+    o.strip()
+    for o in settings.cors_origins.split(",")
+    if o.strip() and o.strip() != "*"
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if origins != ["*"] else ["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 app.include_router(compliance.router)
+app.include_router(auth.router)
 app.include_router(addresses.router)
 app.include_router(admin.router)
 app.include_router(admin.sub_router)
@@ -90,9 +108,31 @@ app.include_router(push_wallet.router)
 app.include_router(notifications.router)
 app.include_router(job_board.router)
 app.include_router(job_import.router)
+app.include_router(job_media.router)
 app.include_router(hiring.router)
 app.include_router(chat_sync.router)
 app.include_router(sync.router)
+
+_media_dir = Path(settings.job_media_dir)
+_media_dir.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/media/job-posts",
+    StaticFiles(directory=str(_media_dir)),
+    name="job-post-media",
+)
+
+
+@app.get("/")
+def api_root():
+    return {
+        "service": "iljari-api",
+        "status": "ok",
+        "app": "https://iljari.app/",
+        "corporate": "https://iljari.app/corporate/",
+        "admin": "https://iljari.app/admin/",
+        "health": "/health",
+        "note": "브라우저 앱은 iljari.app — 이 주소는 API 전용",
+    }
 
 
 @app.get("/health")
@@ -123,4 +163,6 @@ def health():
         "reverify_batch_interval_hours": settings.reverify_batch_interval_hours,
         "admin_ops_configured": bool(settings.admin_api_key),
         "qc_payment_mode": settings.qc_payment_mode,
+        "auth_configured": bool(settings.auth_token_secret or settings.admin_api_key),
+        "sms_provider": settings.sms_provider,
     }

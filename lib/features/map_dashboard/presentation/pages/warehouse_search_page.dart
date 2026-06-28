@@ -49,6 +49,12 @@ class _WarehouseSearchPageState extends State<WarehouseSearchPage> {
     Navigator.of(context).pop(warehouse);
   }
 
+  void _submitQuery() {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+    Navigator.of(context).pop(query);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,7 +63,7 @@ class _WarehouseSearchPageState extends State<WarehouseSearchPage> {
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        title: const Text('근무지 검색'),
+        title: const Text('일자리 검색'),
       ),
       body: Column(
         children: [
@@ -67,9 +73,15 @@ class _WarehouseSearchPageState extends State<WarehouseSearchPage> {
               controller: _searchController,
               autofocus: true,
               textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _submitQuery(),
               decoration: InputDecoration(
-                hintText: '센터 이름, 일자리 키워드 검색',
+                hintText: '지역, 일자리, 근무지 검색',
                 prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                  tooltip: '검색',
+                  icon: const Icon(Icons.search_rounded),
+                  onPressed: _submitQuery,
+                ),
                 filled: true,
                 fillColor: AppColors.surface,
                 border: OutlineInputBorder(

@@ -5,18 +5,17 @@ from fastapi import APIRouter
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 _BASIC_COMMISSION = 10_000
-_TIER_COMMISSION = {"starter": 8500, "growth": 7000, "enterprise": 6000}
+_PACKAGE_PUSH_UNIT = 5_000
 
 
 @router.get("/company/{company_key}/roi-summary")
-def roi_summary(company_key: str, tier: str = "starter"):
-    """MVP ROI 집계 — 프로덕션 DB 연동 전 스텁."""
-    fee = _TIER_COMMISSION.get(tier, 8500)
+def roi_summary(company_key: str):
+    """MVP ROI 집계 — 패키지·출근 수수료 기준 (레거시 tier 제거)."""
     check_ins = 3
-    commission = check_ins * fee
+    commission = check_ins * _BASIC_COMMISSION
     baseline = check_ins * _BASIC_COMMISSION
-    push_spend = 15_000
-    subscription = 39_000 if tier != "basic" else 0
+    push_spend = 3 * _PACKAGE_PUSH_UNIT
+    subscription = 0
     total = push_spend + subscription + commission
     labor_value = check_ins * 120_000
     roi_percent = ((labor_value - total) / total * 100) if total else 0.0
@@ -34,7 +33,7 @@ def roi_summary(company_key: str, tier: str = "starter"):
         "baseline_commission_per_check_in_krw": _BASIC_COMMISSION,
         "baseline_commission_total_krw": baseline,
         "commission_savings_vs_basic_krw": max(0, baseline - commission),
-        "tier_commission_per_check_in_krw": fee,
+        "package_push_unit_krw": _PACKAGE_PUSH_UNIT,
     }
 
 
@@ -50,8 +49,8 @@ def company_rating_summary(company_key: str):
 
 
 @router.get("/company/{company_key}/branches/roi")
-def branch_roi(company_key: str, tier: str = "starter"):
-    fee = _TIER_COMMISSION.get(tier, 8500)
+def branch_roi(company_key: str):
+    fee = _BASIC_COMMISSION
     rows = [
         ("강남센터", "매장", 2, 1),
         ("역삼허브", "매장", 1, 1),

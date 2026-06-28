@@ -18,6 +18,7 @@ import 'package:map/features/corporate/domain/services/push_wallet_service.dart'
 import 'package:map/features/corporate/domain/utils/exposure_slot_policy.dart';
 import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
+import 'package:map/core/widgets/map_form_split_layout.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
@@ -715,16 +716,44 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
                     ),
                   ),
                 )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 4,
-                      child: Padding(
+              : MapStackSplitLayout(
+                  topBanner: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: PushRadiusMapPicker(
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF8E1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Text(
+                            '노출 상태가 종료된 알림핀/표시핀에는 PUSH 알림을 발송할 수 없습니다. '
+                            '아래에서 노출 중인 위치만 선택할 수 있습니다.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.45,
+                              color: Colors.orange.shade900,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: Text(
+                          'PUSH를 보낼 위치를 체크하세요. 선택한 개수만큼 이용권이 차감됩니다.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.4,
+                            color: AppColors.textSecondary.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  map: PushRadiusMapPicker(
                             key: ValueKey(
                               'push_use_${_selectedJobPinIds.join('-')}_'
                               '${_selectedShuttleStopIds.join('-')}',
@@ -738,43 +767,11 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
                             viewportSessionKey:
                                 MapViewportSessionKeys.pushTicketUse,
                           ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF8E1),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: Text(
-                          '노출 상태가 종료된 알림핀/표시핀에는 PUSH 알림을 발송할 수 없습니다. '
-                          '아래에서 노출 중인 위치만 선택할 수 있습니다.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            height: 1.45,
-                            color: Colors.orange.shade900,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Text(
-                        'PUSH를 보낼 위치를 체크하세요. 선택한 개수만큼 이용권이 차감됩니다.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          height: 1.4,
-                          color: AppColors.textSecondary.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ),
+                  bottom: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     const SizedBox(height: 8),
                     Expanded(
-                      flex: 5,
                       child: ListView(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
@@ -934,6 +931,7 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
                     ),
                   ],
                 ),
+              ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/constants/map_constants.dart';
 import 'package:map/core/geo/map_viewport_bounds.dart';
 
 /// Non-web stub — real implementation in [naver_map_web_layer_web.dart].
@@ -23,7 +24,7 @@ class NaverMapWebController {
 
   Future<({double latitude, double longitude, double zoom})>
       getCameraPosition() async =>
-          (latitude: 37.5128, longitude: 127.0471, zoom: 13.0);
+          (latitude: 37.5128, longitude: 127.0471, zoom: MapConstants.defaultZoom);
 
   void dispose() {}
 }

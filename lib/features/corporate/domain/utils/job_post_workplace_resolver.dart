@@ -19,7 +19,15 @@ abstract final class JobPostWorkplaceResolver {
   static GeoCoordinate? storedCoordinate(CorporateJobPost post) {
     final fromPost = post.workplaceCoordinate;
     if (fromPost != null) return fromPost;
-    return coordinateFromSettings(post.notificationSettings);
+    final fromSettings = coordinateFromSettings(post.notificationSettings);
+    if (fromSettings == null) return null;
+    final warehouse = post.warehouseName.trim();
+    if (warehouse.isNotEmpty &&
+        isLikelyDefaultPushMapCenter(fromSettings) &&
+        !isDefaultPushMapAddressLabel(warehouse)) {
+      return null;
+    }
+    return fromSettings;
   }
 
   /// 근무지 좌표 — 저장 좌표 → 알림 0번 → hint → (비동기) 지오코딩 → 기본 중심
@@ -57,7 +65,7 @@ abstract final class JobPostWorkplaceResolver {
     CorporateJobPost post, {
     WorkplaceAddress? hint,
   }) {
-    final coordinate = resolveCoordinate(post, hint: hint);
+    final coordinate = _trustedCoordinate(post, hint: hint);
     final road = post.warehouseName.trim().isNotEmpty
         ? post.warehouseName.trim()
         : (hint?.roadAddress ?? '근무지');
@@ -68,6 +76,26 @@ abstract final class JobPostWorkplaceResolver {
       jibunAddress: hint?.jibunAddress,
       dongName: hint?.dongName,
     );
+  }
+
+  static GeoCoordinate? _trustedCoordinate(
+    CorporateJobPost post, {
+    WorkplaceAddress? hint,
+  }) {
+    final fromPost = post.workplaceCoordinate;
+    if (fromPost != null && !isLikelyDefaultPushMapCenter(fromPost)) {
+      return fromPost;
+    }
+    final fromSettings = coordinateFromSettings(post.notificationSettings);
+    if (fromSettings != null &&
+        !isLikelyDefaultPushMapCenter(fromSettings)) {
+      return fromSettings;
+    }
+    final hintCoord = hint?.coordinate;
+    if (hintCoord != null && !isLikelyDefaultPushMapCenter(hintCoord)) {
+      return hintCoord;
+    }
+    return null;
   }
 
   /// 셔틀 노선 근무지(마지막 정류장) — 알림핀·노선 연결 시 폴백

@@ -7,8 +7,10 @@ import 'package:map/core/session/member_type.dart';
 import 'package:map/core/theme/app_theme.dart';
 import 'package:map/features/admin/presentation/pages/admin_compliance_dashboard_page.dart';
 import 'package:map/features/admin/presentation/pages/admin_web_shell_page.dart';
+import 'package:map/features/auth/presentation/pages/auth/find_account_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/login_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/member_login_gateway_page.dart';
+import 'package:map/features/auth/presentation/pages/auth/reset_password_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/signup_page.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/job_post_write_draft.dart';
@@ -33,6 +35,7 @@ import 'package:map/features/corporate/presentation/pages/corporate_notification
 import 'package:map/features/corporate/presentation/pages/corporate_branch_management_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_roi_dashboard_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_permanent_workers_page.dart';
+import 'package:map/features/corporate/presentation/pages/corporate_talent_search_page.dart';
 import 'package:map/features/corporate/presentation/pages/chat_reply_macro_settings_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_my_info_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_payment_management_page.dart';
@@ -60,11 +63,15 @@ import 'package:map/features/commute/presentation/pages/shuttle_stop_map_picker_
 import 'package:map/features/corporate/presentation/pages/workplace_address_search_page.dart';
 import 'package:map/features/home/presentation/pages/role_based_home_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/tabs/individual_my_jobs_tab.dart';
-import 'package:map/features/job_seeker/presentation/pages/health_insurance_verification_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_notification_settings_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_my_documents_page.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_my_resume_page.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_profile_onboarding_args.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_profile_onboarding_flow.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_home_address_page.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_my_credentials_page.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_resume_section_pages.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_push_inbox_page.dart';
-import 'package:map/features/work_category/presentation/pages/seeker_work_achievement_page.dart';
 import 'package:map/features/support/presentation/pages/customer_support_page.dart';
 import 'package:map/features/support/presentation/pages/legal_documents_page.dart';
 import 'package:map/features/listings/presentation/pages/create_listing_page.dart';
@@ -96,6 +103,13 @@ class MapApp extends StatelessWidget {
           settings: settings,
           builder: (_) => const MemberLoginGatewayPage(),
         );
+      case AppRoutes.individualLogin:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const LoginPage(
+            memberType: MemberType.individual,
+          ),
+        );
       case AppRoutes.login:
         final memberType = settings.arguments as MemberType?;
         return MaterialPageRoute<void>(
@@ -111,6 +125,16 @@ class MapApp extends StatelessWidget {
           builder: (_) => SignUpPage(
             memberType: memberType ?? MemberType.individual,
           ),
+        );
+      case AppRoutes.findAccount:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const FindAccountPage(),
+        );
+      case AppRoutes.resetPassword:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const ResetPasswordPage(),
         );
       case AppRoutes.home:
         final args = settings.arguments;
@@ -456,10 +480,10 @@ class MapApp extends StatelessWidget {
           settings: settings,
           builder: (_) => const CorporatePermanentWorkersPage(),
         );
-      case AppRoutes.seekerHealthInsurance:
+      case AppRoutes.corporateTalentSearch:
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => const HealthInsuranceVerificationPage(),
+          builder: (_) => const CorporateTalentSearchPage(),
         );
       case AppRoutes.seekerPushInbox:
         return MaterialPageRoute<void>(
@@ -471,15 +495,39 @@ class MapApp extends StatelessWidget {
           settings: settings,
           builder: (_) => const SeekerNotificationSettingsPage(),
         );
-      case AppRoutes.seekerWorkAchievements:
-        return MaterialPageRoute<void>(
-          settings: settings,
-          builder: (_) => const SeekerWorkAchievementPage(),
-        );
       case AppRoutes.seekerMyDocuments:
         return MaterialPageRoute<void>(
           settings: settings,
           builder: (_) => const SeekerMyDocumentsPage(),
+        );
+      case AppRoutes.seekerMyResume:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const SeekerMyResumePage(),
+        );
+      case AppRoutes.seekerResumeEdit:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const SeekerResumeEditHubPage(),
+        );
+      case AppRoutes.seekerProfileOnboarding:
+        final onboardingArgs =
+            SeekerProfileOnboardingArgs.from(settings.arguments);
+        return MaterialPageRoute<bool>(
+          settings: settings,
+          builder: (_) => SeekerProfileOnboardingFlow(
+            forJobApply: onboardingArgs.forJobApply,
+          ),
+        );
+      case AppRoutes.seekerMyCredentials:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const SeekerMyCredentialsPage(),
+        );
+      case AppRoutes.seekerHomeAddress:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const SeekerHomeAddressPage(),
         );
       case AppRoutes.customerSupport:
         return MaterialPageRoute<void>(
@@ -487,9 +535,15 @@ class MapApp extends StatelessWidget {
           builder: (_) => const CustomerSupportPage(),
         );
       case AppRoutes.legalDocuments:
+        final legalArgs = settings.arguments;
+        final initialDocumentId = legalArgs is Map
+            ? legalArgs['initialDocumentId'] as String?
+            : null;
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => const LegalDocumentsPage(),
+          builder: (_) => LegalDocumentsPage(
+            initialDocumentId: initialDocumentId,
+          ),
         );
       case AppRoutes.corporatePushDispatch:
         final raw = settings.arguments;

@@ -11,6 +11,10 @@ class VerifyBusinessRequest(BaseModel):
     opening_date: str = Field(default="", max_length=8)
     entity_type: Literal["sole_proprietor", "corporation"] = "corporation"
     certificate_image_ref: str = ""
+    ocr_brn: str = ""
+    ocr_company_name: str = ""
+    ocr_representative_name: str = ""
+    ocr_confidence: float | None = None
 
 
 class VerifyBusinessResponse(BaseModel):

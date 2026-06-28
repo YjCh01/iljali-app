@@ -30,6 +30,12 @@ class AdminOpsApiClient {
         headers: _headers,
       ));
 
+  /// 인증 없이 API 생존 확인 (CORS·네트워크)
+  Future<Map<String, dynamic>> pingPublicHealth() async =>
+      _decode(await _client.get(
+        Uri.parse('$_baseUrl/health'),
+      ));
+
   Future<Map<String, dynamic>> grantWallet({
     required String companyKey,
     required int packageCredits,
@@ -46,6 +52,23 @@ class AdminOpsApiClient {
         Uri.parse('$_baseUrl/v1/admin/ops/wallet/$companyKey'),
         headers: _headers,
       ));
+
+  Future<Map<String, dynamic>> getCompanyVerification(String companyKey) async =>
+      _decode(await _client.get(
+        Uri.parse(
+          '$_baseUrl/v1/admin/ops/companies/${Uri.encodeComponent(companyKey)}/verification',
+        ),
+        headers: _headers,
+      ));
+
+  Future<Map<String, dynamic>> approveCompanyVerification(
+    String companyKey, {
+    String? reason,
+  }) async =>
+      _post(
+        '/v1/admin/ops/companies/${Uri.encodeComponent(companyKey)}/approve-verification',
+        {if (reason != null && reason.isNotEmpty) 'reason': reason},
+      );
 
   Future<Map<String, dynamic>> sanctionMember({
     required String email,
@@ -132,6 +155,151 @@ class AdminOpsApiClient {
         Uri.parse('$_baseUrl/v1/admin/ops/stats'),
         headers: _headers,
       ));
+
+  Future<List<Map<String, dynamic>>> listMapJobs() async {
+    final body = _decode(await _client.get(
+      Uri.parse('$_baseUrl/v1/admin/ops/jobs/map'),
+      headers: _headers,
+    ));
+    final list = body['jobs'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> getJobMapDetail(String postId) async =>
+      _decode(await _client.get(
+        Uri.parse('$_baseUrl/v1/admin/ops/jobs/map/$postId'),
+        headers: _headers,
+      ));
+
+  Future<List<Map<String, dynamic>>> listGhostPins() async {
+    final body = _decode(await _client.get(
+      Uri.parse('$_baseUrl/v1/admin/ops/ghost-pins'),
+      headers: _headers,
+    ));
+    final list = body['ghost_pins'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> createGhostPin({
+    required double latitude,
+    required double longitude,
+    String label = '',
+    String sourcePostId = '',
+  }) async =>
+      _post('/v1/admin/ops/ghost-pins', {
+        'latitude': latitude,
+        'longitude': longitude,
+        'label': label,
+        'source_post_id': sourcePostId,
+      });
+
+  Future<void> deleteGhostPin(String pinId) async {
+    final response = await _client.delete(
+      Uri.parse('$_baseUrl/v1/admin/ops/ghost-pins/$pinId'),
+      headers: _headers,
+    );
+    _decode(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listApplications({
+    String? seekerEmail,
+    String? companyKey,
+    String? query,
+    int limit = 100,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/v1/admin/ops/applications').replace(
+      queryParameters: {
+        if (seekerEmail != null && seekerEmail.isNotEmpty)
+          'seeker_email': seekerEmail,
+        if (companyKey != null && companyKey.isNotEmpty) 'company_key': companyKey,
+        if (query != null && query.isNotEmpty) 'q': query,
+        'limit': '$limit',
+      },
+    );
+    final body = _decode(await _client.get(uri, headers: _headers));
+    final list = body['applications'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> getApplicationChat(String applicationId) async =>
+      _decode(await _client.get(
+        Uri.parse('$_baseUrl/v1/admin/ops/applications/$applicationId/chat'),
+        headers: _headers,
+      ));
+
+  Future<Map<String, dynamic>> getCorporateDirectory({
+    String? query,
+    String sort = 'brn',
+  }) async {
+    final uri =
+        Uri.parse('$_baseUrl/v1/admin/ops/members/directory/corporate').replace(
+      queryParameters: {
+        if (query != null && query.isNotEmpty) 'q': query,
+        'sort': sort,
+      },
+    );
+    return _decode(await _client.get(uri, headers: _headers));
+  }
+
+  Future<Map<String, dynamic>> getEmployerDirectory({
+    String? query,
+    String sort = 'joined',
+    int limit = 500,
+  }) async {
+    final uri =
+        Uri.parse('$_baseUrl/v1/admin/ops/members/directory/employers').replace(
+      queryParameters: {
+        if (query != null && query.isNotEmpty) 'q': query,
+        'sort': sort,
+        'limit': '$limit',
+      },
+    );
+    return _decode(await _client.get(uri, headers: _headers));
+  }
+
+  Future<Map<String, dynamic>> seedEmployers() async =>
+      _post('/v1/admin/ops/seed/employers', {});
+
+  Future<Map<String, dynamic>> getSanctionPolicy() async =>
+      _decode(await _client.get(
+        Uri.parse('$_baseUrl/v1/admin/ops/sanction/policy'),
+        headers: _headers,
+      ));
+
+  Future<Map<String, dynamic>> getMemberSanctionStatus(String email) async =>
+      _decode(await _client.get(
+        Uri.parse('$_baseUrl/v1/admin/ops/members/${Uri.encodeComponent(email)}/sanction'),
+        headers: _headers,
+      ));
+
+  Future<Map<String, dynamic>> applyPolicySanction({
+    required String email,
+    required String memberKind,
+    required String violationCode,
+    String reason = '',
+    int? days,
+    bool permanent = false,
+    String? companyKey,
+  }) async =>
+      _post('/v1/admin/ops/sanction/apply', {
+        'email': email,
+        'member_kind': memberKind,
+        'violation_code': violationCode,
+        'reason': reason,
+        if (days != null) 'days': days,
+        'permanent': permanent,
+        if (companyKey != null && companyKey.isNotEmpty) 'company_key': companyKey,
+      });
+
+  Future<Map<String, dynamic>> liftSanction({
+    required String email,
+    String reason = '',
+  }) async =>
+      _post('/v1/admin/ops/sanction/lift', {
+        'email': email,
+        'reason': reason,
+        'action': 'lift',
+      });
 
   Future<Map<String, dynamic>> _post(
     String path,

@@ -123,8 +123,11 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
     super.initState();
     final saved = _peekSavedViewport();
     _center = widget.center;
-    _viewCenter = saved?.center ?? widget.center;
-    _mapZoom = saved?.zoom ?? widget.mapZoom;
+    final useSavedViewport = saved != null &&
+        (widget.centerEditable ||
+            !coordinatesDifferMeaningfully(saved.center, widget.center));
+    _viewCenter = useSavedViewport ? saved.center : widget.center;
+    _mapZoom = useSavedViewport ? saved.zoom : widget.mapZoom;
     if (widget.enableMyLocation) {
       MapUserLocationService.prepareForMap();
     }
@@ -860,6 +863,25 @@ class _MapGridPainter extends CustomPainter {
 GeoCoordinate defaultPushMapCenter() =>
     const GeoCoordinate(latitude: 37.5128, longitude: 127.0471);
 
+const _defaultPushMapCenterLabel = '강남·역삼 일대';
+
+bool isLikelyDefaultPushMapCenter(GeoCoordinate coordinate) {
+  const fallback = GeoCoordinate(latitude: 37.5128, longitude: 127.0471);
+  return (coordinate.latitude - fallback.latitude).abs() < 0.002 &&
+      (coordinate.longitude - fallback.longitude).abs() < 0.002;
+}
+
+bool isDefaultPushMapAddressLabel(String label) {
+  final trimmed = label.trim();
+  return trimmed.isEmpty || trimmed == _defaultPushMapCenterLabel;
+}
+
+bool coordinatesDifferMeaningfully(GeoCoordinate a, GeoCoordinate b) {
+  final dLat = a.latitude - b.latitude;
+  final dLng = a.longitude - b.longitude;
+  return (dLat * dLat + dLng * dLng) > 0.00001;
+}
+
 class _CenterPinBadge extends StatelessWidget {
   const _CenterPinBadge({
     required this.accent,
@@ -1022,6 +1044,12 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
   Future<bool> _restoreSavedViewportIfAny() async {
     final saved = _peekSavedViewport();
     if (saved == null) return false;
+    final key = widget.viewportSessionKey;
+    if (!widget.centerEditable &&
+        coordinatesDifferMeaningfully(saved.center, widget.center)) {
+      if (key != null) MapViewportSessionStore.instance.forget(key);
+      return false;
+    }
     await _moveCameraTo(saved.center, zoom: saved.zoom, animate: false);
     _lastReportedCenter = saved.center;
     return true;
@@ -1378,9 +1406,14 @@ class _PushRadiusWebMapPickerState extends State<_PushRadiusWebMapPicker> {
   @override
   Widget build(BuildContext context) {
     final saved = _peekSavedViewport();
-    final initialLat = saved?.latitude ?? widget.center.latitude;
-    final initialLng = saved?.longitude ?? widget.center.longitude;
-    final initialZoom = saved?.zoom ?? widget.mapZoom;
+    final useSavedViewport = saved != null &&
+        (widget.centerEditable ||
+            !coordinatesDifferMeaningfully(saved.center, widget.center));
+    final initialLat =
+        useSavedViewport ? saved.latitude : widget.center.latitude;
+    final initialLng =
+        useSavedViewport ? saved.longitude : widget.center.longitude;
+    final initialZoom = useSavedViewport ? saved.zoom : widget.mapZoom;
     final activeTheme = _activeTheme;
     final chromeTheme = _chromeTheme;
 

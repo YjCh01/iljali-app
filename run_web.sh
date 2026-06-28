@@ -10,13 +10,13 @@ source "scripts/server_dev.sh"
 
 WEB_PORT=8080
 API_PORT=8000
-API_URL="http://localhost:${API_PORT}"
+API_URL="$(iljari_resolve_compliance_api_url "${API_PORT}")"
 
 echo
 echo "========================================"
 echo "  iljari 웹 실행 (Chrome)"
 echo "  App : http://localhost:${WEB_PORT}"
-echo "  API : ${API_URL} (주소 검색·동기화)"
+iljari_print_api_banner "${API_URL}"
 echo "========================================"
 echo
 
@@ -35,16 +35,15 @@ read_naver_id() { _naver_read_id; }
 validate_naver_id() { _naver_valid_id; }
 
 free_port "${WEB_PORT}"
-free_port "${API_PORT}"
-
-if [[ ! -f server/.env ]]; then
-  cp -f server/.env.example server/.env
+if iljari_use_local_api; then
+  free_port "${API_PORT}"
+  if [[ ! -f server/.env ]]; then
+    cp -f server/.env.example server/.env
+  fi
 fi
 
-echo "[API] 주소 검색용 서버 시작..."
-iljari_ensure_server_env
-iljari_start_api_server "${API_PORT}"
-sleep 2
+echo "[API] 준비..."
+iljari_ensure_api_ready "${API_URL}" "${API_PORT}"
 
 NAVER_DEFINE=""
 WEB_DEFINE="--web-define=NAVER_MAP_NCP_KEY=unset"
@@ -86,6 +85,7 @@ echo "2. Chrome 실행..."
 # shellcheck disable=SC2086
 flutter run -d chrome --web-hostname=localhost --web-port="${WEB_PORT}" \
   --dart-define=COMPLIANCE_API_URL="${API_URL}" \
+  --dart-define=ADMIN_API_KEY="$(iljari_resolve_admin_api_key)" \
   ${WEB_DEFINE} ${NAVER_DEFINE}
 RUN_EXIT=$?
 

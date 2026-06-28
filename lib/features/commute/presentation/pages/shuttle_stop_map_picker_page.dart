@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/map_constants.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
@@ -11,14 +12,8 @@ Future<GeoCoordinate?> showShuttleStopCoordinatePicker(
   required GeoCoordinate initial,
   List<CommuteRouteStop> existingStops = const [],
 }) {
-  return showModalBottomSheet<GeoCoordinate>(
+  return showAdaptiveSheet<GeoCoordinate>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => _ShuttleStopCoordinatePickerSheet(
       initial: initial,
       existingStops: existingStops,

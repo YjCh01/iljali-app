@@ -16,6 +16,7 @@ class EmployerPushWalletRow(Base):
     __tablename__ = "employer_push_wallets"
 
     company_key: Mapped[str] = mapped_column(String(10), primary_key=True)
+    cash_balance_krw: Mapped[int] = mapped_column(Integer, default=0)
     package_credits: Mapped[int] = mapped_column(Integer, default=0)
     signup_bonus_remaining: Mapped[int] = mapped_column(Integer, default=0)
     location_slots_from_packages: Mapped[int] = mapped_column(Integer, default=0)

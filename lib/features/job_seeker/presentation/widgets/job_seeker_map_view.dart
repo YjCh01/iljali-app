@@ -1,14 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
+import 'package:map/core/branding/iljari_app_loading_view.dart';
 import 'package:map/core/constants/map_constants.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 
 import 'package:map/core/geo/map_viewport_bounds.dart';
 
 import 'package:map/core/geo/map_user_location_service.dart';
-import 'package:map/core/config/env_config.dart';
 import 'package:map/core/map/web/job_map_web_marker_factory.dart';
 import 'package:map/core/map/web/naver_map_web_layer.dart';
 import 'package:map/core/utils/naver_map_platform.dart';
@@ -34,11 +36,14 @@ import 'package:map/features/commute/presentation/map/shuttle_route_overlay_fact
 import 'package:map/features/job_seeker/presentation/map/job_recruitment_map_pin.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_seeker_mock_map.dart';
 
+import 'package:map/features/job_seeker/domain/utils/seeker_home_address_resolver.dart';
+import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
 import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
 
 import 'package:map/features/map_dashboard/presentation/map/warehouse_cluster_options_factory.dart';
 
 import 'package:map/features/map_dashboard/presentation/widgets/map_current_location_button.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_floating_insets.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_search_area_button.dart';
 
 
@@ -153,7 +158,12 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
   bool _cameraPromptReady = false;
 
+  /// 지도 최초 idle(로드 직후)에는 검색 CTA를 띄우지 않음 — 웹·네이티브만
+  bool _skipNextAreaSearchPrompt = false;
+
   NaverMapController? _naverController;
+
+  GeoCoordinate? _resolvedHomeCenter;
 
 
 
@@ -163,8 +173,50 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
     super.initState();
 
+    unawaited(_loadHomeCenter());
+
     _loadCatalog(applyInitialViewport: true);
 
+  }
+
+  Future<void> _loadHomeCenter() async {
+    final center = await SeekerHomeAddressResolver.resolveMapCenter();
+    if (!mounted) return;
+    setState(() => _resolvedHomeCenter = center);
+  }
+
+  Future<void> _centerOnHomeIfNeeded() async {
+    final saved = MapViewportSessionStore.instance
+        .peek(MapViewportSessionKeys.seekerHomeMap);
+    if (saved != null) {
+      await MapCameraHolder.instance.focusPin(
+        latitude: saved.latitude,
+        longitude: saved.longitude,
+        zoom: saved.zoom,
+      );
+      return;
+    }
+    final center = _resolvedHomeCenter ??
+        await SeekerHomeAddressResolver.resolveMapCenter();
+    await MapCameraHolder.instance.focusPin(
+      latitude: center.latitude,
+      longitude: center.longitude,
+      zoom: MapConstants.defaultZoom,
+    );
+    MapViewportSessionStore.instance.rememberCoordinate(
+      MapViewportSessionKeys.seekerHomeMap,
+      center: center,
+      zoom: MapConstants.defaultZoom,
+    );
+  }
+
+  GeoCoordinate get _fallbackMapCenter {
+    final saved = MapViewportSessionStore.instance
+        .peek(MapViewportSessionKeys.seekerHomeMap);
+    if (saved != null) return saved.center;
+    if (_resolvedHomeCenter != null) return _resolvedHomeCenter!;
+    const c = MapConstants.warehouseAreaCenter;
+    return GeoCoordinate(latitude: c.latitude, longitude: c.longitude);
   }
 
 
@@ -313,38 +365,47 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
 
   Future<void> _searchThisArea() async {
-
-    setState(() => _areaSearchLoading = true);
-
-    final viewport = await _resolveViewport();
-
-    if (!mounted) return;
+    if (_areaSearchLoading) return;
 
     setState(() {
-
-      _activeViewport = viewport;
-
+      _areaSearchLoading = true;
       _areaSearchPending = false;
-
-      _areaSearchLoading = false;
-
     });
 
-    _applyFilters(viewport);
+    try {
+      MapViewportBounds viewport;
+      try {
+        viewport = await _resolveViewport().timeout(
+          const Duration(seconds: 4),
+          onTimeout: () => _activeViewport ?? MockMapViewport.initial(),
+        );
+      } catch (_) {
+        viewport = _activeViewport ?? MockMapViewport.initial();
+      }
+      if (!mounted) return;
 
+      setState(() => _activeViewport = viewport);
+      _applyFilters(viewport);
+    } finally {
+      if (mounted) setState(() => _areaSearchLoading = false);
+    }
   }
 
-
-
   void _markAreaSearchPending() {
-
     if (!_cameraPromptReady || _loading || _areaSearchLoading) return;
+
+    if (_skipNextAreaSearchPrompt) {
+      _skipNextAreaSearchPrompt = false;
+      return;
+    }
 
     if (_areaSearchPending) return;
 
     setState(() => _areaSearchPending = true);
-
   }
+
+  double _areaSearchButtonBottom(BuildContext context) =>
+      MapFloatingInsets.searchAreaButtonBottom(context);
 
 
 
@@ -473,9 +534,7 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
   Widget _buildMapContent(BuildContext context) {
 
     if (_loading) {
-
-      return const Center(child: CircularProgressIndicator());
-
+      return const IljariAppLoadingView();
     }
 
 
@@ -533,9 +592,12 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
             contentPadding: safeAreaPadding,
 
-            initialCameraPosition: const NCameraPosition(
+            initialCameraPosition: NCameraPosition(
 
-              target: MapConstants.warehouseAreaCenter,
+              target: NLatLng(
+                _fallbackMapCenter.latitude,
+                _fallbackMapCenter.longitude,
+              ),
 
               zoom: MapConstants.warehouseAreaZoom,
 
@@ -560,30 +622,21 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
         ),
 
         if (_areaSearchPending)
-
           Positioned(
-
-            left: 16,
-
-            right: 16,
-
-            bottom: 16,
-
+            left: 0,
+            right: 0,
+            bottom: _areaSearchButtonBottom(context),
             child: Center(
-
               child: MapSearchAreaButton(
-
                 loading: _areaSearchLoading,
-
                 onPressed: _searchThisArea,
-
               ),
-
             ),
-
           ),
 
-        const MapCurrentLocationButton(),
+        MapCurrentLocationButton(
+          bottom: _areaSearchButtonBottom(context) + 56,
+        ),
 
       ],
 
@@ -611,13 +664,15 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
       _cameraPromptReady = true;
 
+      _skipNextAreaSearchPrompt = true;
+
     });
 
     _applyFilters(viewport);
 
+    await _centerOnHomeIfNeeded();
+
   }
-
-
 
   Widget _buildWebMap(BuildContext context) {
     final jobMarkers = JobMapWebMarkerFactory.fromPins(_visiblePins);
@@ -665,8 +720,8 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
       children: [
         NaverMapWebWidget(
           clientId: NaverMapPlatform.webClientId,
-          initialLatitude: MapConstants.warehouseAreaCenter.latitude,
-          initialLongitude: MapConstants.warehouseAreaCenter.longitude,
+          initialLatitude: _fallbackMapCenter.latitude,
+          initialLongitude: _fallbackMapCenter.longitude,
           initialZoom: MapConstants.warehouseAreaZoom,
           markers: [
             ...jobMarkers,
@@ -700,30 +755,21 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
         ),
 
         if (_areaSearchPending)
-
           Positioned(
-
-            left: 16,
-
-            right: 16,
-
-            bottom: 16,
-
+            left: 0,
+            right: 0,
+            bottom: _areaSearchButtonBottom(context),
             child: Center(
-
               child: MapSearchAreaButton(
-
                 loading: _areaSearchLoading,
-
                 onPressed: _searchThisArea,
-
               ),
-
             ),
-
           ),
 
-        const MapCurrentLocationButton(),
+        MapCurrentLocationButton(
+          bottom: _areaSearchButtonBottom(context) + 56,
+        ),
 
       ],
 
@@ -747,9 +793,13 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
       _cameraPromptReady = true;
 
+      _skipNextAreaSearchPrompt = true;
+
     });
 
     _applyFilters(viewport);
+
+    await _centerOnHomeIfNeeded();
 
   }
 

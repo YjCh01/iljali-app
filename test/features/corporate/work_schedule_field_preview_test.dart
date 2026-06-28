@@ -35,5 +35,23 @@ void main() {
       expect(model.chips.first, contains('09:00~18:00'));
       expect(model.chips.last, contains('09:00~17:00'));
     });
+
+    test('regular fixed weekdays preview without end date', () {
+      final model = WorkSchedulePreviewFormatter.fromRaw(
+        '정규·주5일(월화수목금) · 2026-06-01 · 09:00~18:00',
+      );
+      expect(model, isNotNull);
+      expect(model!.headline, contains('정규'));
+      expect(model.lines.first, contains('첫 근무'));
+      expect(model.lines.first, isNot(contains('~')));
+    });
+
+    test('regular negotiable-only preview without start date', () {
+      final model = WorkSchedulePreviewFormatter.fromRaw(
+        '정규·주5일(월화수목금) · 09:00~18:00',
+      );
+      expect(model, isNotNull);
+      expect(model!.lines.first, contains('협의'));
+    });
   });
 }

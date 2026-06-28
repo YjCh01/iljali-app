@@ -71,6 +71,13 @@ class ShuttleBookingRepository {
     await save(booking);
   }
 
+  Future<void> removeById(String id) async {
+    final all = await fetchAll();
+    final next = all.where((b) => b.id != id).toList();
+    if (next.length == all.length) return;
+    await _persist(next);
+  }
+
   Future<void> _persist(List<ShuttleBooking> items) async {
     await _prefs.setString(
       _key,

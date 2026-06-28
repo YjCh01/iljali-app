@@ -47,7 +47,7 @@ class CorporateExposureMiniMap extends StatefulWidget {
 
     this.onShuttleStopTap,
 
-    this.initialZoom = 12.0,
+    this.initialZoom = MapConstants.defaultZoom,
 
     this.selectedPostId,
 

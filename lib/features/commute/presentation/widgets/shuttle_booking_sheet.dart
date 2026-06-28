@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
@@ -19,13 +20,8 @@ Future<ShuttleBookingSelection?> showShuttleBookingSheet(
   required CommuteRoute route,
   CommuteRouteStop? initialStop,
 }) {
-  return showModalBottomSheet<ShuttleBookingSelection>(
+  return showAdaptiveSheet<ShuttleBookingSelection>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => _ShuttleBookingSheetBody(
       route: route,
       initialStop: initialStop,

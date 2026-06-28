@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_strings.dart';
 
-/// 당근마켓 스타일 상단 검색바
+/// 당근마켓 스타일 상단 검색바 (레거시 대시보드용)
 class MapSearchBar extends StatelessWidget {
   const MapSearchBar({
     super.key,
@@ -50,6 +50,36 @@ class MapSearchBar extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 구직 지도 — 우측 상단 검색 진입 (아이콘만)
+class MapSearchIconButton extends StatelessWidget {
+  const MapSearchIconButton({super.key, this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 3,
+      shadowColor: Colors.black26,
+      shape: const CircleBorder(),
+      color: AppColors.surface,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            Icons.search_rounded,
+            size: 22,
+            color: AppColors.textSecondary.withValues(alpha: 0.9),
           ),
         ),
       ),

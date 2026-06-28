@@ -1,8 +1,8 @@
 services:
   api:
     build: .
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     env_file:
       - .env
     environment:
@@ -16,6 +16,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  edge:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${ILJARI_WEB_HOST_DIR:-/opt/iljari/web}:/usr/share/nginx/html:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./nginx/production.conf:/etc/nginx/conf.d/10-web.conf:ro
+      - ./nginx/production-ssl.conf:/etc/nginx/conf.d/11-web-ssl.conf:ro
+      - ./nginx/api-proxy.conf:/etc/nginx/conf.d/20-api.conf:ro
+      - ./nginx/api-proxy-ssl.conf:/etc/nginx/conf.d/21-api-ssl.conf:ro
+      - ./nginx/web-variants.conf:/etc/nginx/snippets/web-variants.conf:ro
+    depends_on:
+      - api
+    restart: unless-stopped
 
   db:
     image: postgres:16-alpine

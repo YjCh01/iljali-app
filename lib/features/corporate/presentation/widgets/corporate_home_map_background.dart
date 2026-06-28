@@ -18,11 +18,7 @@ import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_ove
 
 import 'package:map/features/corporate/domain/services/corporate_shuttle_density_loader.dart';
 
-import 'package:map/features/corporate/domain/utils/corporate_map_content_access_policy.dart';
-
 import 'package:map/features/corporate/presentation/widgets/corporate_home_naver_map.dart';
-
-import 'package:map/features/corporate/presentation/widgets/corporate_map_intel_paywall.dart';
 
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
 
@@ -202,7 +198,7 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
     JobBoardRefresh.consumeIfDirty();
 
-    final pins = await _getPins();
+    final pins = await _getPins(includeClosedGhosts: false);
 
     final posts = await _getPosts();
 
@@ -271,77 +267,18 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
 
   void _onPinTap(JobMapPin pin) {
-
-    final isOwn = _ownPostIds.contains(pin.post.id);
-
-    if (isOwn) {
-
-      setState(() => _centerOnPin = pin);
-
-      widget.onSelectedPinChanged?.call(pin);
-
-      return;
-
-    }
-
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-
-    if (CorporateMapContentAccessPolicy.canViewPostContent(
-
-      viewerProfile: profile,
-
-      ownPostIds: _ownPostIds,
-
-      post: pin.post,
-
-    )) {
-
-      setState(() => _centerOnPin = pin);
-
-      widget.onSelectedPinChanged?.call(pin);
-
-      return;
-
-    }
-
-    showCorporateMapIntelPaywall(context);
-
+    setState(() => _centerOnPin = pin);
+    widget.onSelectedPinChanged?.call(pin);
   }
 
-
-
   void _onShuttleStopTap(CorporateShuttleMapOverlay overlay) {
-
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-
-    if (CorporateMapContentAccessPolicy.canViewShuttleContent(
-
-      viewerProfile: profile,
-
-      routeCompanyKey: overlay.companyKey,
-
-    )) {
-
-      ScaffoldMessenger.of(context).showSnackBar(
-
-        SnackBar(
-
-          content: Text('셔틀 노선 · ${overlay.route.routeName}'),
-
-          behavior: SnackBarBehavior.floating,
-
-          duration: const Duration(seconds: 2),
-
-        ),
-
-      );
-
-      return;
-
-    }
-
-    showCorporateMapIntelPaywall(context);
-
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('셔틀 노선 · ${overlay.route.routeName}'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
 

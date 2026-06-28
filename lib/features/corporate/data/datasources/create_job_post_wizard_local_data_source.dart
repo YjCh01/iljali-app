@@ -62,6 +62,11 @@ class CreateJobPostWizardLocalDataSourceImpl
       icon: Icons.event_repeat_outlined,
     ),
     JobRoleOption(
+      id: 'worker_regular',
+      label: '정규직',
+      icon: Icons.badge_outlined,
+    ),
+    JobRoleOption(
       id: 'worker_contract',
       label: '계약직',
       icon: Icons.assignment_outlined,

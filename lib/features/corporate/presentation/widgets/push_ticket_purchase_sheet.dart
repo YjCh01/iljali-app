@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/transient_snack_bar.dart';
@@ -21,13 +22,8 @@ Future<bool?> showPushTicketPurchaseSheet(
     eligibleLocations: eligibleLocations,
     fallback: initialQuantity,
   );
-  return showModalBottomSheet<bool>(
+  return showAdaptiveSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (context) => _PushTicketPurchaseSheet(
       initialQuantity: suggestedQuantity,
       pushCredits: pushCredits,

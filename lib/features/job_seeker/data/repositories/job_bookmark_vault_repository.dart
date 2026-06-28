@@ -5,6 +5,7 @@ import 'package:map/features/job_seeker/domain/entities/job_bookmark_folder.dart
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/viewed_job_entry.dart';
 import 'package:map/features/job_seeker/domain/utils/job_bookmark_retention_policy.dart';
+import 'package:map/core/sync/member_sanction_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 구직자 공고 보관함 — 폴더·메모·오늘 본 공고 (사용자별)
@@ -137,6 +138,12 @@ class JobBookmarkVaultRepository {
     JobMapPin pin, {
     String? folderId,
   }) async {
+    final store = await MemberSanctionStore.create();
+    if (store.isVaultRestricted(_userEmail)) {
+      throw StateError(
+        store.vaultRestrictionMessage(_userEmail) ?? '보관함 이용이 제한됩니다.',
+      );
+    }
     final folders = await loadFolders();
     final targetFolderId = folderId ?? JobBookmarkFolder.defaultFolderId;
     if (!folders.any((f) => f.id == targetFolderId)) {

@@ -54,7 +54,7 @@ void main() {
             width: 320,
             child: PushRadiusMapPicker(
               center: center,
-              radiusMeters: 1000,
+              radiusMeters: 700,
               existingPoints: const [
                 PushRadiusMapOverlayPoint(
                   coordinate: GeoCoordinate(

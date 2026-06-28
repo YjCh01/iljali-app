@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/trust/local_company_rating_repository.dart';
@@ -11,6 +12,7 @@ abstract final class CompanyRatingPromptService {
     required List<HiringApplication> shifts,
     required bool isActive,
   }) async {
+    if (!ProductFeatureFlags.isSeekerEmployerRatingEnabled) return;
     if (!isActive || !context.mounted) return;
 
     final repo = await LocalCompanyRatingRepository.create();

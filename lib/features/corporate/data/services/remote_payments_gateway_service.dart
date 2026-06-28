@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:map/core/config/env_config.dart';
 import 'package:map/features/corporate/data/services/mock_payment_gateway_service.dart';
@@ -37,6 +39,7 @@ class RemotePaymentsGatewayService implements PaymentGatewayService {
           'buyer_email': request.buyerEmail,
           'buyer_name': request.buyerName,
           'company_key': request.companyKey,
+          if (kIsWeb) 'web_checkout': true,
           if (request.billingKey != null) 'billing_key': request.billingKey,
           if (request.savedPaymentMethodId != null)
             'saved_method_id': request.savedPaymentMethodId,

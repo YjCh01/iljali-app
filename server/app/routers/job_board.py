@@ -20,7 +20,13 @@ class JobPostBody(BaseModel):
     hourly_wage: str = ""
     work_schedule: str = ""
     summary: str = ""
+    job_description: str = ""
+    description_body_json: str = "{}"
+    workplace_latitude: float | None = None
+    workplace_longitude: float | None = None
     status: str = "recruiting"
+    posted_by_email: str = ""
+    posted_by_name: str = ""
 
 
 class JobPostUpdate(BaseModel):
@@ -30,6 +36,10 @@ class JobPostUpdate(BaseModel):
     hourly_wage: str | None = None
     work_schedule: str | None = None
     summary: str | None = None
+    job_description: str | None = None
+    description_body_json: str | None = None
+    workplace_latitude: float | None = None
+    workplace_longitude: float | None = None
     status: str | None = None
 
 
@@ -43,7 +53,15 @@ def _row_to_dict(row: JobPostRow) -> dict:
         "hourly_wage": row.hourly_wage,
         "work_schedule": row.work_schedule,
         "summary": row.summary,
+        "job_description": row.job_description or "",
+        "description_body_json": row.description_body_json or "{}",
+        "workplace_latitude": row.workplace_latitude,
+        "workplace_longitude": row.workplace_longitude,
         "status": row.status,
+        "posted_by_email": row.posted_by_email,
+        "posted_by_name": row.posted_by_name,
+        "view_count": row.view_count,
+        "map_impression_count": row.map_impression_count,
         "created_at": row.created_at.replace(tzinfo=timezone.utc).isoformat()
         if row.created_at
         else None,
@@ -74,7 +92,13 @@ def create_post(body: JobPostBody, db: Session = Depends(get_db)):
         hourly_wage=body.hourly_wage,
         work_schedule=body.work_schedule,
         summary=body.summary,
+        job_description=body.job_description or body.summary,
+        description_body_json=body.description_body_json or "{}",
+        workplace_latitude=body.workplace_latitude,
+        workplace_longitude=body.workplace_longitude,
         status=body.status,
+        posted_by_email=body.posted_by_email.strip().lower(),
+        posted_by_name=body.posted_by_name,
         created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(row)
@@ -89,6 +113,28 @@ def get_post(post_id: str, db: Session = Depends(get_db)):
     if row is None:
         raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
     return _row_to_dict(row)
+
+
+@router.post("/posts/{post_id}/view")
+def record_post_view(post_id: str, db: Session = Depends(get_db)):
+    row = db.get(JobPostRow, post_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
+    row.view_count = (row.view_count or 0) + 1
+    db.commit()
+    db.refresh(row)
+    return {"post_id": post_id, "view_count": row.view_count}
+
+
+@router.post("/posts/{post_id}/map-impression")
+def record_map_impression(post_id: str, db: Session = Depends(get_db)):
+    row = db.get(JobPostRow, post_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
+    row.map_impression_count = (row.map_impression_count or 0) + 1
+    db.commit()
+    db.refresh(row)
+    return {"post_id": post_id, "map_impression_count": row.map_impression_count}
 
 
 @router.put("/posts/{post_id}")

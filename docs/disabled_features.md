@@ -25,13 +25,18 @@ void main() {
 | 플래그 | 기본값 | 의미 |
 |--------|--------|------|
 | `ENABLE_WORKER_GENERAL` | **false** | 일반직 공고 비활성 |
-| `ENABLE_WORKER_CONTRACT` | **false** | 계약직 공고 비활성 |
+| `ENABLE_WORKER_CONTRACT` | **true** | 계약직 공고 (기본 활성) |
 | `ENABLE_PERMANENT_HIRE` | **false** | 상시직 채용·합격·동기화 비활성 |
 | `ENABLE_PREMIUM_PARTNER_WIZARD` | **true** | 제휴사(쿠팡·다이소 등) 위저드 유지 |
 | `ENABLE_ENTERPRISE_OUTSOURCING` | **true** | 아웃소싱·도급 플로우 유지 |
+| `ENABLE_HIRING_COMMISSION` | **false** | 일용직 채용 성공 수수료·결제·에스컬레이션 비활성 (제휴 채널만 `true`) |
+| `ENABLE_EMPLOYER_TRUST_DISPLAY` | **false** | 고용주 평점·신뢰100·배지 (페이즈 2) |
+| `ENABLE_SEEKER_EMPLOYER_RATING` | **false** | 구직자 고용주 평가 UI (페이즈 2) |
 
 허용 고용 유형: **일용직 · 단기알바** (`WorkerCategory.daily`, `WorkerCategory.shortTerm`).  
 단기알바는 주5일·교대 등 유연 일정, 일용직은 달력 날짜 지정.
+
+**메인 앱 과금**: 공고·지원·출근 확인 **무료**. 유료는 **알림핀 패키지** 등 선택 구매만 (`PUSH_PACKAGE_PRICING.md`).
 
 ## 현재 비활성 기능 (MVP 기본)
 
@@ -40,6 +45,9 @@ void main() {
 | `worker_general` | 일반직 공고 | `ENABLE_WORKER_GENERAL` |
 | `worker_contract` | 계약직 공고 | `ENABLE_WORKER_CONTRACT` |
 | `permanent_hire` | 상시직 채용 | `ENABLE_PERMANENT_HIRE` |
+| `hiring_commission` | 일용직 채용 성공 수수료 | `ENABLE_HIRING_COMMISSION` |
+| `employer_trust_display` | 고용주 평점·신뢰 배지 | `ENABLE_EMPLOYER_TRUST_DISPLAY` |
+| `seeker_employer_rating` | 구직자 고용주 평가 | `ENABLE_SEEKER_EMPLOYER_RATING` |
 
 ## 재활성 워크플로
 

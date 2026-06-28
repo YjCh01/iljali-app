@@ -7,6 +7,7 @@ import 'package:map/features/corporate/data/repositories/corporate_account_regis
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/services/corporate_org_join_service.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.dart';
+import 'package:map/features/job_seeker/domain/services/seeker_profile_sync_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 앱 내 mock 인증 세션 (로컬 저장)
@@ -21,8 +22,13 @@ class AuthSession {
   static const _keyMemberType = 'auth_member_type';
   static const _keyCorporateProfile = 'auth_corporate_profile';
   static const _keySeekerProfile = 'auth_seeker_profile';
+  static const _keyAccessToken = 'auth_access_token';
 
   AuthUser? _user;
+  String? _accessToken;
+
+  /// Bearer token — 서버 `/v1/auth/login` 연동
+  String? get accessToken => _accessToken;
 
   /// 기업 프로필 변경 시 UI 갱신용 (구독·플랜 전환 등)
   final ValueNotifier<int> corporateProfileRevision = ValueNotifier(0);
@@ -58,6 +64,17 @@ class AuthSession {
         prefs.getString(_keySeekerProfile),
       ),
     );
+    _accessToken = prefs.getString(_keyAccessToken);
+  }
+
+  Future<void> setAccessToken(String? token) async {
+    _accessToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    if (token == null || token.isEmpty) {
+      await prefs.remove(_keyAccessToken);
+    } else {
+      await prefs.setString(_keyAccessToken, token);
+    }
   }
 
   SeekerMemberProfile? _decodeSeekerProfile(String? raw) {
@@ -126,6 +143,32 @@ class AuthSession {
     await prefs.remove(_keyMemberType);
     await prefs.remove(_keyCorporateProfile);
     await prefs.remove(_keySeekerProfile);
+    await prefs.remove(_keyAccessToken);
+    _accessToken = null;
+  }
+
+  Future<({String? name, SeekerMemberProfile? profile})> readCachedSeekerSession(
+    String email,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedEmail = prefs.getString(_keyEmail)?.trim().toLowerCase();
+    final normalized = email.trim().toLowerCase();
+    if (cachedEmail != normalized) {
+      return (name: null, profile: null);
+    }
+    return (
+      name: prefs.getString(_keyName),
+      profile: _decodeSeekerProfile(prefs.getString(_keySeekerProfile)),
+    );
+  }
+
+  Future<void> updateSeekerProfile(SeekerMemberProfile profile) async {
+    final user = _user;
+    if (user == null || !user.isIndividual) return;
+    await SeekerProfileSyncService.persist(
+      email: user.email,
+      profile: profile,
+    );
   }
 
   Future<void> updateCorporateProfile(CorporateMemberProfile profile) async {

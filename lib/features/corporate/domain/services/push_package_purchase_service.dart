@@ -41,6 +41,11 @@ class PushPackagePurchaseService {
     required PaymentMethod method,
     int quantity = 1,
   }) async {
+    final blocked = profile.paidServicesBlockedReason;
+    if (blocked != null) {
+      return PushPackagePurchaseResult(success: false, message: blocked);
+    }
+
     final qty = offer.supportsQuantitySelector ? quantity.clamp(1, 99) : 1;
     final totalKrw = offer.priceKrw * qty;
     final totalCredits = offer.packageCount * qty;

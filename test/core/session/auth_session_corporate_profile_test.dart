@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
+import 'package:map/features/corporate/domain/utils/corporate_handler_code_generator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -29,7 +30,7 @@ void main() {
 
     expect(profile, isNotNull);
     expect(profile!.companyName, '강남물류');
-    expect(profile.handlerCode.length, 4);
+    expect(profile.handlerCode.length, CorporateHandlerCodeGenerator.codeLength);
     expect(AuthSession.instance.currentUser?.corporateProfile, isNotNull);
   });
 

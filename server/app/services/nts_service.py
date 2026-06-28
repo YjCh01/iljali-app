@@ -54,6 +54,17 @@ class NtsService:
                 return await self._call_status(brn, company_name)
             except Exception:
                 pass
+        elif settings.require_nts_api_key:
+            return NtsLookupResult(
+                valid=False,
+                company_name=company_name,
+                industry_name="",
+                business_status="unavailable",
+                business_status_code="",
+                entity_type_label="",
+                api_source="local",
+                failure_message="국세청 API 키가 설정되지 않았습니다. 운영 환경에서는 NTS_API_KEY가 필요합니다.",
+            )
 
         return self._mock(
             brn,

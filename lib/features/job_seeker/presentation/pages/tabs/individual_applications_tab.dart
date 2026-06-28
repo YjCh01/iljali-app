@@ -18,6 +18,11 @@ import 'package:map/features/hiring/presentation/pages/qr_check_in_page.dart';
 import 'package:map/features/hiring/presentation/pages/shift_check_in_page.dart';
 import 'package:map/features/job_seeker/data/repositories/job_application_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/job_application.dart';
+import 'package:map/features/job_seeker/domain/services/seeker_application_withdraw_service.dart';
+import 'package:map/features/hiring/data/repositories/job_proposal_repository.dart';
+import 'package:map/features/hiring/domain/entities/job_proposal.dart';
+import 'package:map/features/hiring/domain/services/job_proposal_accept_service.dart';
+import 'package:map/features/job_seeker/presentation/widgets/job_proposal_card.dart';
 
 /// 구직자 3번 탭 — 내 지원 (Coupang Flex 스타일)
 class IndividualApplicationsTab extends StatefulWidget {
@@ -37,6 +42,7 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
   Map<String, CorporateJobPost> _postsById = {};
   Map<String, ShuttleBooking> _bookingsById = {};
   List<ShuttleReminder> _reminders = [];
+  List<JobProposal> _pendingProposals = [];
   bool _pastExpanded = false;
   bool _loading = true;
 
@@ -70,6 +76,10 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
     final reminders = email == null
         ? <ShuttleReminder>[]
         : await reminderService.fetchActiveForSeeker(email);
+    final proposalRepo = await JobProposalRepository.create();
+    final pendingProposals = email == null
+        ? <JobProposal>[]
+        : await proposalRepo.fetchPendingForSeeker(email);
 
     if (!mounted) return;
     setState(() {
@@ -78,6 +88,7 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
       _postsById = {for (final p in posts) p.id: p};
       _bookingsById = {for (final b in bookings) b.id: b};
       _reminders = reminders;
+      _pendingProposals = pendingProposals;
       _loading = false;
     });
   }
@@ -139,12 +150,49 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
     if (mounted) await _load();
   }
 
+  Future<void> _withdrawPost(String postId, {String? postTitle}) async {
+    final ok = await SeekerApplicationWithdrawService.confirmAndWithdraw(
+      context,
+      postId: postId,
+      postTitle: postTitle,
+    );
+    if (ok && mounted) await _load();
+  }
+
+  Future<void> _withdrawApplication(HiringApplication app) async {
+    await _withdrawPost(app.postId, postTitle: app.postTitle);
+  }
+
+  Future<void> _withdrawLocalApplication(JobApplication app) async {
+    await _withdrawPost(app.postId, postTitle: app.title);
+  }
+
   String _shiftLabel(HiringApplication app) {
     return switch (app.shiftSlot) {
       'day' => '주간',
       'night' => '야간',
       _ => app.workSchedule,
     };
+  }
+
+  Future<void> _declineProposal(JobProposal proposal) async {
+    await JobProposalAcceptService.decline(proposal);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('채용 제안을 거절했습니다.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    await _load();
+  }
+
+  Future<void> _acceptProposal(JobProposal proposal) async {
+    final ok = await JobProposalAcceptService.accept(
+      context: context,
+      proposal: proposal,
+    );
+    if (ok && mounted) await _load();
   }
 
   @override
@@ -156,7 +204,9 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
       );
     }
 
-    if (_hiringItems.isEmpty && _localApps.isEmpty) {
+    if (_hiringItems.isEmpty &&
+        _localApps.isEmpty &&
+        _pendingProposals.isEmpty) {
       return ColoredBox(
         color: AppColors.background,
         child: RefreshIndicator(
@@ -194,6 +244,86 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
                 await _load();
               },
             ),
+            if (_pendingProposals.isNotEmpty) ...[
+              const _SectionHeader(
+                icon: Icons.mail_outline_rounded,
+                title: '받은 채용 제안',
+              ),
+              const SizedBox(height: 10),
+              ..._pendingProposals.map(
+                (proposal) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: JobProposalCard(
+                    proposal: proposal,
+                    onAccept: () => _acceptProposal(proposal),
+                    onDecline: () => _declineProposal(proposal),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (_localApps.isNotEmpty &&
+                _localApps.any((a) => !_hiringItems
+                    .any((h) => h.postId == a.postId))) ...[
+              _SectionHeader(
+                icon: Icons.hourglass_top_outlined,
+                title: '접수 중',
+              ),
+              const SizedBox(height: 10),
+              ..._localApps
+                  .where((a) =>
+                      !_hiringItems.any((h) => h.postId == a.postId))
+                  .map(
+                    (app) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: CorporateSurfaceCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              app.title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              '${app.company} · ${app.status}',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            Text(
+                              '지원 ${_dateFormat.format(app.appliedAt)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary
+                                    .withValues(alpha: 0.9),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () => _withdrawLocalApplication(app),
+                                  icon: Icon(
+                                    Icons.cancel_outlined,
+                                    size: 16,
+                                    color: Colors.red.shade700,
+                                  ),
+                                  label: Text(
+                                    '지원취소',
+                                    style: TextStyle(color: Colors.red.shade700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              const SizedBox(height: 20),
+            ],
             _SectionHeader(
               icon: Icons.event_available,
               title: '오늘·다가오는 근무',
@@ -217,6 +347,9 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
                     onCheckIn: () => _openCheckIn(app),
                     onQrCheckIn: () => _openQrCheckIn(app),
                     onChat: () => _openChat(app),
+                    onWithdraw: LocalHiringRepository.canSeekerWithdraw(app)
+                        ? () => _withdrawApplication(app)
+                        : null,
                   )),
             const SizedBox(height: 20),
             _SectionHeader(
@@ -264,6 +397,21 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
                             color: AppColors.textSecondary.withValues(alpha: 0.9),
                           ),
                         ),
+                        if (LocalHiringRepository.canSeekerWithdraw(app)) ...[
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: () => _withdrawApplication(app),
+                            icon: Icon(
+                              Icons.cancel_outlined,
+                              size: 16,
+                              color: Colors.red.shade700,
+                            ),
+                            label: Text(
+                              '지원취소',
+                              style: TextStyle(color: Colors.red.shade700),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -390,6 +538,7 @@ class _UpcomingShiftCard extends StatelessWidget {
     required this.onCheckIn,
     required this.onQrCheckIn,
     required this.onChat,
+    this.onWithdraw,
   });
 
   final HiringApplication app;
@@ -400,6 +549,7 @@ class _UpcomingShiftCard extends StatelessWidget {
   final VoidCallback onCheckIn;
   final VoidCallback onQrCheckIn;
   final VoidCallback onChat;
+  final VoidCallback? onWithdraw;
 
   @override
   Widget build(BuildContext context) {
@@ -501,6 +651,21 @@ class _UpcomingShiftCard extends StatelessWidget {
               onPressed: onChat,
               child: const Text('채팅하기'),
             ),
+            if (onWithdraw != null) ...[
+              const SizedBox(height: 4),
+              TextButton.icon(
+                onPressed: onWithdraw,
+                icon: Icon(
+                  Icons.cancel_outlined,
+                  size: 16,
+                  color: Colors.red.shade700,
+                ),
+                label: Text(
+                  '지원취소',
+                  style: TextStyle(color: Colors.red.shade700),
+                ),
+              ),
+            ],
           ],
         ),
       ),

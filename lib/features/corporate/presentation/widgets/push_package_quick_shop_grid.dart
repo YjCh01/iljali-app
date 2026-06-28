@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
@@ -190,7 +190,9 @@ class _OfferTile extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                isSingle ? '반경 1km · 1회' : '${offer.packageCount}회 · 반경 1km',
+                isSingle
+                    ? '반경 ${PushPackageCatalog.pushRadiusLabel} · 1회'
+                    : '${offer.packageCount}회 · 반경 ${PushPackageCatalog.pushRadiusLabel}',
                 style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textSecondary.withValues(alpha: 0.9),

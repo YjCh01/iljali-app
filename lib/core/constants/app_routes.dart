@@ -1,8 +1,11 @@
 /// 앱 라우트 경로 상수
 abstract final class AppRoutes {
   static const String memberGateway = '/';
+  static const String individualLogin = '/login-individual';
   static const String login = '/login';
   static const String signUp = '/signup';
+  static const String findAccount = '/auth/find-account';
+  static const String resetPassword = '/auth/reset-password';
   static const String home = '/home';
   static const String search = '/search';
   static const String createListing = '/create-listing';
@@ -41,6 +44,8 @@ abstract final class AppRoutes {
       '/corporate/shuttle-route/stop-payment';
   static const String corporateJobPinActivation = '/corporate/job-pin/activation';
   static const String corporatePushTicketUse = '/corporate/push-ticket/use';
+  static const String corporateExposureRenewal = '/corporate/exposure-renewal';
+  static const String corporateCashCharge = '/corporate/cash-charge';
   static const String corporatePushTicketPurchase =
       '/corporate/push-ticket/purchase';
   static const String corporateShuttleStopMapPick =
@@ -50,11 +55,17 @@ abstract final class AppRoutes {
   static const String corporateAttendanceHub = '/corporate/attendance-hub';
   static const String corporateRoiDashboard = '/corporate/roi-dashboard';
   static const String corporatePermanentWorkers = '/corporate/permanent-workers';
-  static const String seekerHealthInsurance = '/seeker/health-insurance';
+  static const String corporateTalentSearch = '/corporate/talent-search';
   static const String seekerPushInbox = '/seeker/push-inbox';
   static const String seekerNotificationSettings = '/seeker/notification-settings';
-  static const String seekerWorkAchievements = '/seeker/work-achievements';
   static const String seekerMyDocuments = '/seeker/my-documents';
+  static const String seekerMyResume = '/seeker/my-resume';
+  static const String seekerResumeEdit = '/seeker/resume/edit';
+  static const String seekerProfileOnboarding = '/seeker/profile/onboarding';
+  static const String seekerMyCredentials = '/seeker/my-credentials';
+  static const String seekerHomeAddress = '/seeker/home-address';
   static const String customerSupport = '/support/customer';
   static const String legalDocuments = '/support/legal';
+  static const String paymentWebSuccess = '/payment-success';
+  static const String paymentWebFail = '/payment-fail';
 }

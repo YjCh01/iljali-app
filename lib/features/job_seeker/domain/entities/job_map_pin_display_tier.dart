@@ -14,6 +14,9 @@ enum JobMapPinDisplayTier {
 
   /// 일자리 알림핀 구매·보유 — 보라 핀
   packageActive,
+
+  /// 마감유령핀 — 만료·마감된 무료 공고 / 어드민 배치
+  closedGhost,
 }
 
 extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
@@ -40,39 +43,48 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
         JobMapPinDisplayTier.standard => '일반',
         JobMapPinDisplayTier.premiumWage => '고시급',
         JobMapPinDisplayTier.packageActive => '유료',
+        JobMapPinDisplayTier.closedGhost => '마감유령',
       };
 
   Color get pinColor => switch (this) {
         JobMapPinDisplayTier.standard => AppColors.textSecondary,
         JobMapPinDisplayTier.premiumWage => const Color(0xFF29B6F6),
         JobMapPinDisplayTier.packageActive => const Color(0xFF9B86F0),
+        JobMapPinDisplayTier.closedGhost => const Color(0xFF9E9E9E),
       };
 
   Color get pinLightColor => switch (this) {
         JobMapPinDisplayTier.standard => const Color(0xFFBDBDBD),
         JobMapPinDisplayTier.premiumWage => const Color(0xFFB3E5FC),
         JobMapPinDisplayTier.packageActive => const Color(0xFFD4CBFB),
+        JobMapPinDisplayTier.closedGhost => const Color(0xFFE0E0E0),
       };
 
   Color get pinBorderColor => switch (this) {
         JobMapPinDisplayTier.standard => Colors.white,
         JobMapPinDisplayTier.premiumWage => const Color(0xFFE1F5FE),
         JobMapPinDisplayTier.packageActive => const Color(0xFFF3EEFF),
+        JobMapPinDisplayTier.closedGhost => const Color(0xFFEEEEEE),
       };
 
   double get markerSize => switch (this) {
         JobMapPinDisplayTier.standard => 36,
         JobMapPinDisplayTier.premiumWage => 38,
         JobMapPinDisplayTier.packageActive => 42,
+        JobMapPinDisplayTier.closedGhost => 34,
       };
 
   double get borderWidth => switch (this) {
         JobMapPinDisplayTier.standard => 2,
         JobMapPinDisplayTier.premiumWage => 2,
         JobMapPinDisplayTier.packageActive => 2.5,
+        JobMapPinDisplayTier.closedGhost => 2,
       };
 
-  String get shapeGlyph => '●';
+  String get shapeGlyph => switch (this) {
+        JobMapPinDisplayTier.closedGhost => '×',
+        _ => '●',
+      };
 }
 
 /// 공고·기업 정보로 지도 핀 등급 결정

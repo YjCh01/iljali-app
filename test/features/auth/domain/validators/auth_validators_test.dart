@@ -42,7 +42,9 @@ void main() {
 
     test('validate enforces complexity', () {
       expect(PasswordValidator.validate('short1').isValid, isFalse);
+      expect(PasswordValidator.validate('password').isValid, isFalse);
       expect(PasswordValidator.validate('password1').isValid, isTrue);
+      expect(PasswordValidator.validate('Passw0rd').isValid, isTrue);
     });
   });
 

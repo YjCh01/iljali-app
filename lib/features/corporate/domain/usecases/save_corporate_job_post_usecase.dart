@@ -7,13 +7,16 @@ import 'package:map/core/sync/job_post_sync_service.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
+import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 import 'package:map/features/corporate/domain/entities/salary_pay_type.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
+import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
 import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
+import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 import 'package:map/features/work_category/domain/services/work_category_classifier_service.dart';
 
@@ -81,6 +84,47 @@ Future<({double? latitude, double? longitude})> _workplaceCoordinateFields(
   return (latitude: coordinate.latitude, longitude: coordinate.longitude);
 }
 
+CorporateJobPostResult? _validateWorkSchedule({
+  required String workSchedule,
+  required WorkerCategory workerCategory,
+  bool workPeriodNegotiable = false,
+}) {
+  if (workSchedule.trim().isEmpty) {
+    return const CorporateJobPostResult.failure('근무 일·시간을 선택해 주세요.');
+  }
+  if (workerCategory.usesFirstStartDateOnly) {
+    final spec = WorkScheduleCodec.tryParse(workSchedule);
+    if (spec == null ||
+        !spec.isCompleteFor(workPeriodNegotiable: workPeriodNegotiable)) {
+      return const CorporateJobPostResult.failure('근무 일·시간을 선택해 주세요.');
+    }
+  } else if (workerCategory.usesWorkPeriodWithEndDate) {
+    final spec = WorkScheduleCodec.tryParse(workSchedule);
+    if (spec == null || !spec.isCompleteFor()) {
+      return const CorporateJobPostResult.failure(
+        '근무 시작일과 종료일을 선택해 주세요.',
+      );
+    }
+  }
+  return null;
+}
+
+({String jobDescription, String summary}) _resolvedDescriptionFields(
+  JobPostDescriptionBody body,
+) {
+  return (
+    jobDescription: body.legacyPlainText,
+    summary: body.calloutSnippet,
+  );
+}
+
+CorporateJobPostResult? _validateDescriptionBody(JobPostDescriptionBody body) {
+  if (!body.hasContent) {
+    return const CorporateJobPostResult.failure('업무 내용을 입력해 주세요.');
+  }
+  return null;
+}
+
 class CreateCorporateJobPostUseCase {
   const CreateCorporateJobPostUseCase(this._dataSource);
 
@@ -91,8 +135,7 @@ class CreateCorporateJobPostUseCase {
     required WorkplaceAddress workplace,
     required String hourlyWage,
     required String workSchedule,
-    required String summary,
-    String jobDescription = '',
+    required JobPostDescriptionBody descriptionBody,
     required SalaryPaymentSchedule paymentSchedule,
     required WorkerCategory workerCategory,
     JobEmploymentType? employmentType,
@@ -106,6 +149,9 @@ class CreateCorporateJobPostUseCase {
     List<String> linkedCommuteRouteIds = const [],
     bool hasShuttleRouteOverlay = false,
     String? workCategoryId,
+    bool workPeriodNegotiable = false,
+    List<ResumeItemKind> requiredResumeItems = const [],
+    List<String> requiredCredentialIds = const [],
   }) async {
     if (title.trim().isEmpty) {
       return const CorporateJobPostResult.failure('공고 제목을 입력해 주세요.');
@@ -142,14 +188,19 @@ class CreateCorporateJobPostUseCase {
         const CorporateJobPostResult.failure('근무 일·시간을 선택해 주세요.'),
       );
     }
-    final jobDesc = jobDescription.trim();
-    if (jobDesc.isEmpty) {
-      return Future.value(
-        const CorporateJobPostResult.failure('업무 내용을 입력해 주세요.'),
-      );
+    final scheduleError = _validateWorkSchedule(
+      workSchedule: workSchedule,
+      workerCategory: workerCategory,
+      workPeriodNegotiable: workPeriodNegotiable,
+    );
+    if (scheduleError != null) {
+      return Future.value(scheduleError);
     }
-    final resolvedSummary =
-        summary.trim().isEmpty ? jobDesc : summary.trim();
+    final descriptionError = _validateDescriptionBody(descriptionBody);
+    if (descriptionError != null) {
+      return Future.value(descriptionError);
+    }
+    final descFields = _resolvedDescriptionFields(descriptionBody);
     if (!paymentSchedule.isComplete) {
       return Future.value(
         const CorporateJobPostResult.failure('급여지급일을 선택해 주세요.'),
@@ -166,8 +217,8 @@ class CreateCorporateJobPostUseCase {
     final resolvedWorkCategoryId = WorkCategoryClassifierService.resolveCategoryId(
       selectedId: workCategoryId,
       title: title.trim(),
-      jobDescription: jobDesc,
-      summary: resolvedSummary,
+      jobDescription: descFields.jobDescription,
+      summary: descFields.summary,
     );
 
     final workplaceCoord = await _workplaceCoordinateFields(workplace);
@@ -184,12 +235,14 @@ class CreateCorporateJobPostUseCase {
       hourlyWage: formatCorporateHourlyWage(hourlyWage),
       dailyWage: dailyWage,
       workSchedule: workSchedule.trim(),
-      jobDescription: jobDesc,
-      summary: resolvedSummary,
+      jobDescription: descFields.jobDescription,
+      descriptionBody: descriptionBody,
+      summary: descFields.summary,
       paymentDate: paymentFields.paymentDate,
       paymentMonthOffset: paymentFields.paymentMonthOffset,
       paymentDayOfMonth: paymentFields.paymentDayOfMonth,
       paymentDateNegotiable: paymentFields.paymentDateNegotiable,
+      workPeriodNegotiable: workPeriodNegotiable,
       notificationSettings: notificationSettings,
       registeredBy: registeredBy,
       recruiterEmail: AuthSession.instance.currentUser?.email,
@@ -201,6 +254,8 @@ class CreateCorporateJobPostUseCase {
       linkedCommuteRouteIds: linkedCommuteRouteIds,
       hasShuttleRouteOverlay: hasShuttleRouteOverlay,
       workCategoryId: resolvedWorkCategoryId,
+      requiredResumeItems: requiredResumeItems,
+      requiredCredentialIds: requiredCredentialIds,
       status: CorporateJobPostStatus.recruiting,
       applicantCount: 0,
       postedAt: postedAt,
@@ -271,9 +326,12 @@ class DuplicateCorporateJobPostUseCase {
       workSchedule: original.workSchedule,
       summary: original.summary,
       jobDescription: original.jobDescription,
+      descriptionBody: original.descriptionBody,
       paymentDate: original.paymentDate,
       paymentMonthOffset: original.paymentMonthOffset,
       paymentDayOfMonth: original.paymentDayOfMonth,
+      paymentDateNegotiable: original.paymentDateNegotiable,
+      workPeriodNegotiable: original.workPeriodNegotiable,
       notificationSettings: original.notificationSettings,
       registeredBy: original.registeredBy,
       recruiterEmail: AuthSession.instance.currentUser?.email ??
@@ -285,6 +343,8 @@ class DuplicateCorporateJobPostUseCase {
       linkedCommuteRouteIds: original.linkedCommuteRouteIds,
       hasShuttleRouteOverlay: original.hasShuttleRouteOverlay,
       workCategoryId: original.workCategoryId,
+      requiredResumeItems: original.requiredResumeItems,
+      requiredCredentialIds: original.requiredCredentialIds,
       status: CorporateJobPostStatus.recruiting,
       applicantCount: 0,
       postedAt: postedAt,
@@ -309,8 +369,7 @@ class UpdateCorporateJobPostUseCase {
     required WorkplaceAddress workplace,
     required String hourlyWage,
     required String workSchedule,
-    required String summary,
-    String jobDescription = '',
+    required JobPostDescriptionBody descriptionBody,
     required SalaryPaymentSchedule paymentSchedule,
     required WorkerCategory workerCategory,
     required CorporateJobPostStatus status,
@@ -324,12 +383,23 @@ class UpdateCorporateJobPostUseCase {
     List<String>? linkedCommuteRouteIds,
     bool? hasShuttleRouteOverlay,
     String? workCategoryId,
+    bool workPeriodNegotiable = false,
+    List<ResumeItemKind>? requiredResumeItems,
+    List<String>? requiredCredentialIds,
   }) async {
     if (title.trim().isEmpty) {
       return const CorporateJobPostResult.failure('공고 제목을 입력해 주세요.');
     }
     if (!paymentSchedule.isComplete) {
       return const CorporateJobPostResult.failure('급여지급일을 선택해 주세요.');
+    }
+    final scheduleError = _validateWorkSchedule(
+      workSchedule: workSchedule,
+      workerCategory: workerCategory,
+      workPeriodNegotiable: workPeriodNegotiable,
+    );
+    if (scheduleError != null) {
+      return scheduleError;
     }
     final mismatch = WorkplaceAddressMismatchService.evaluate(
       workplace: workplace,
@@ -359,20 +429,17 @@ class UpdateCorporateJobPostUseCase {
       hourlyWage: hourlyWage,
       workSchedule: workSchedule.trim(),
     );
-    final jobDesc = jobDescription.trim();
-    if (jobDesc.isEmpty) {
-      return Future.value(
-        const CorporateJobPostResult.failure('업무 내용을 입력해 주세요.'),
-      );
+    final descriptionError = _validateDescriptionBody(descriptionBody);
+    if (descriptionError != null) {
+      return Future.value(descriptionError);
     }
-    final resolvedSummary =
-        summary.trim().isEmpty ? jobDesc : summary.trim();
+    final descFields = _resolvedDescriptionFields(descriptionBody);
 
     final resolvedWorkCategoryId = WorkCategoryClassifierService.resolveCategoryId(
       selectedId: workCategoryId ?? original.workCategoryId,
       title: title.trim(),
-      jobDescription: jobDesc,
-      summary: resolvedSummary,
+      jobDescription: descFields.jobDescription,
+      summary: descFields.summary,
     );
 
     final workplaceCoord = await _workplaceCoordinateFields(workplace);
@@ -388,12 +455,14 @@ class UpdateCorporateJobPostUseCase {
       hourlyWage: formatCorporateHourlyWage(hourlyWage),
       dailyWage: dailyWage ?? original.dailyWage,
       workSchedule: workSchedule.trim(),
-      jobDescription: jobDesc,
-      summary: resolvedSummary,
+      jobDescription: descFields.jobDescription,
+      descriptionBody: descriptionBody,
+      summary: descFields.summary,
       paymentDate: paymentFields.paymentDate,
       paymentMonthOffset: paymentFields.paymentMonthOffset,
       paymentDayOfMonth: paymentFields.paymentDayOfMonth,
       paymentDateNegotiable: paymentFields.paymentDateNegotiable,
+      workPeriodNegotiable: workPeriodNegotiable,
       notificationSettings: notificationSettings,
       registeredBy: original.registeredBy,
       recruiterEmail: original.recruiterEmail,
@@ -410,6 +479,10 @@ class UpdateCorporateJobPostUseCase {
       hasShuttleRouteOverlay:
           hasShuttleRouteOverlay ?? original.hasShuttleRouteOverlay,
       workCategoryId: resolvedWorkCategoryId,
+      requiredResumeItems:
+          requiredResumeItems ?? original.requiredResumeItems,
+      requiredCredentialIds:
+          requiredCredentialIds ?? original.requiredCredentialIds,
       status: status,
       applicantCount: original.applicantCount,
       postedAt: original.postedAt,

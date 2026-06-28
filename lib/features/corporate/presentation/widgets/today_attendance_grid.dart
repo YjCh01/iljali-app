@@ -120,7 +120,7 @@ class _GridHeaderRow extends StatelessWidget {
             children: [
               Expanded(flex: 26, child: _HeaderCell('이름')),
               Expanded(flex: 14, child: _HeaderCell('성별')),
-              Expanded(flex: 24, child: _HeaderCell('생년월일')),
+              Expanded(flex: 24, child: _HeaderCell('나이')),
               Expanded(flex: 16, child: _HeaderCell('출근', align: TextAlign.center)),
             ],
           ),
@@ -197,7 +197,7 @@ class _GridDataRow extends StatelessWidget {
               Expanded(
                 flex: 24,
                 child: Text(
-                  record.birthDateLabel,
+                  record.ageLabel,
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,

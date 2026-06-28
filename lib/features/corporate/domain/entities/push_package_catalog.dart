@@ -1,4 +1,4 @@
-﻿import 'package:map/features/corporate/domain/entities/recruitment_product_kind.dart';
+import 'package:map/features/corporate/domain/entities/recruitment_product_kind.dart';
 
 /// 일자리·정류장 표시핀·PUSH 이용권 요금 카탈로그
 abstract final class PushPackageCatalog {
@@ -15,8 +15,8 @@ abstract final class PushPackageCatalog {
 
   // ── 공고 등록 (무료) ──
   static const defaultPlanLabel = '기본 플랜';
-  static const freePushRadiusM = 1000;
-  static const packagePushRadiusM = 1000;
+  static const freePushRadiusM = 700;
+  static const packagePushRadiusM = 700;
   static const signupBonusPushes = 2;
   static const verificationBonusPushes = 5;
   static const signupBonusValidDays = 90;
@@ -64,9 +64,9 @@ abstract final class PushPackageCatalog {
   static const shuttlePinDescription =
       '운영 중인 통근버스의 정류장과 노선도를 지도 상에 직접 표시하고 연결하여 모집 효과를 높일 수 있습니다.';
   static const comboDescription =
-      '핀 설치와 PUSH, 모두 한 번에 · 반경 1km · $exposureEndsLabel';
+      '핀 설치와 PUSH, 모두 한 번에 · 반경 700m · $exposureEndsLabel';
   static const pushOnlyDescription =
-      '일자리 알림핀·정류장 표시핀을 노출한 지역 1km 반경 이용자에게 모집 공고 PUSH를 보낼 수 있습니다.';
+      '일자리 알림핀·정류장 표시핀을 노출한 지역 700m 반경 이용자에게 모집 공고 PUSH를 보낼 수 있습니다.';
 
   /// @deprecated — [jobPinDescription]
   static const exposureDescription = jobPinDescription;
@@ -278,7 +278,7 @@ abstract final class PushPackageCatalog {
         (m) => '${m[1]},',
       );
 
-  static String get pushRadiusLabel => '1km';
+  static const pushRadiusLabel = '700m';
 
   static const detailSeparator = ' · ';
 

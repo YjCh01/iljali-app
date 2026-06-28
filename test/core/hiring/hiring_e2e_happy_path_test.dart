@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/dev/dev_test_accounts.dart';
 import 'package:map/core/hiring/commission_calculator.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
@@ -11,6 +12,7 @@ import 'package:map/features/chat/domain/services/chat_access_policy.dart';
 import 'package:map/features/corporate/data/datasources/corporate_attendance_local_data_source.dart';
 import 'package:map/features/corporate/data/datasources/corporate_chat_local_data_source.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
+import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
@@ -53,8 +55,9 @@ void main() {
       workplace: workplace,
       hourlyWage: '12000',
       workSchedule: '09:00-18:00',
-      summary: 'E2E 통합 테스트용 공고',
-      jobDescription: '피킹·포장 보조',
+      descriptionBody: const JobPostDescriptionBody(
+        text: 'E2E 통합 테스트용 공고\n피킹·포장 보조',
+      ),
       paymentSchedule: SalaryPaymentAbsoluteDate(
         DateTime.now().add(const Duration(days: 7)),
       ),
@@ -124,6 +127,20 @@ void main() {
       corpChatRooms.any((room) => room.id == application.id),
       isTrue,
     );
+
+    // ── 7+. 근무합의·출근·수수료 — 제휴 채널(ENABLE_HIRING_COMMISSION) 전용 ──
+    expect(
+      () => hiringRepo.confirmWorkScheduleAgreement(
+        applicationId: application.id,
+        asEmployer: false,
+      ),
+      throwsA(isA<StateError>()),
+      reason: 'main app must not run work-agreement flow',
+    );
+
+    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
+      return;
+    }
 
     // ── 7. 근무예정 쌍방 합의 ──
     await AuthSession.instance.signIn(seeker.toAuthUser());

@@ -1,151 +1,92 @@
 import 'package:flutter/material.dart';
-
+import 'package:map/core/branding/iljari_ad_campaign.dart';
 import 'package:map/core/branding/iljari_icon_painter.dart';
-
 import 'package:map/core/constants/app_colors.dart';
-import 'package:map/core/constants/app_strings.dart';
-
 import 'package:map/core/constants/app_routes.dart';
-
 import 'package:map/core/session/member_type.dart';
-
 import 'package:map/features/auth/presentation/widgets/dev_test_login_panel.dart';
 import 'package:map/features/auth/presentation/widgets/member_type_login_button.dart';
 
-
-
-/// 앱 최초 진입 — 기업회원 / 개인회원 로그인 선택
-
+/// 로그인·가입 진입 — 지도에서 로그인/가입 탭 시 (맵 우선 UX)
 class MemberLoginGatewayPage extends StatelessWidget {
-
   const MemberLoginGatewayPage({super.key});
 
-
-
   void _goToLogin(BuildContext context, MemberType memberType) {
-
     Navigator.of(context).pushNamed(
-
       AppRoutes.login,
-
       arguments: memberType,
-
     );
-
   }
-
-
 
   void _goToSignUp(BuildContext context, MemberType memberType) {
-
     Navigator.of(context).pushNamed(
-
       AppRoutes.signUp,
-
       arguments: memberType,
-
     );
-
   }
 
-
-
   @override
-
   Widget build(BuildContext context) {
+    final canPop = Navigator.canPop(context);
 
     return Scaffold(
-
       backgroundColor: AppColors.authBackground,
-
+      appBar: canPop
+          ? AppBar(
+              backgroundColor: Colors.transparent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 48),
+              SizedBox(height: canPop ? 8 : 40),
               Center(
                 child: IljariAppIcon(
-                  size: 112,
-                  borderRadius: BorderRadius.circular(26),
+                  size: 100,
+                  borderRadius: BorderRadius.circular(24),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               const Text(
                 '일자리',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 42,
+                  fontSize: 38,
                   fontWeight: FontWeight.w800,
                   color: Colors.white,
                   letterSpacing: -0.5,
                 ),
               ),
               const SizedBox(height: 10),
-              Text(
-                AppStrings.platformTagline,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  height: 1.4,
-                  color: Colors.white.withValues(alpha: 0.78),
-                ),
-              ),
-              const SizedBox(height: 40),
-              MemberTypeLoginButton(
+              const IljariAdCampaignCopy(),
+              const SizedBox(height: 32),
+              MemberAuthSection(
                 memberType: MemberType.corporate,
-                onTap: () => _goToLogin(context, MemberType.corporate),
+                onLogin: () => _goToLogin(context, MemberType.corporate),
+                onSignUp: () => _goToSignUp(context, MemberType.corporate),
               ),
-              const SizedBox(height: 6),
-              TextButton(
-                onPressed: () => _goToSignUp(context, MemberType.corporate),
-                child: Text(
-                  '기업회원 회원가입',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              MemberTypeLoginButton(
+              const SizedBox(height: 16),
+              MemberAuthSection(
                 memberType: MemberType.individual,
-                onTap: () => _goToLogin(context, MemberType.individual),
+                onLogin: () => _goToLogin(context, MemberType.individual),
+                onSignUp: () => _goToSignUp(context, MemberType.individual),
               ),
-              const SizedBox(height: 6),
-              TextButton(
-                onPressed: () => _goToSignUp(context, MemberType.individual),
-                child: Text(
-                  '개인회원 회원가입',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Text(
-                '개발 빌드: 하단 「개발 테스트 로그인」으로\n'
-                '기업·구직 테스트 계정에 바로 접속할 수 있습니다.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  height: 1.4,
-                  color: Colors.white.withValues(alpha: 0.65),
-                ),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 20),
               const DevTestLoginPanel(),
               const SizedBox(height: 24),
             ],
           ),
         ),
       ),
-
     );
-
   }
-
 }
-
-

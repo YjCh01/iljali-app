@@ -1,4 +1,4 @@
-﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/presentation/widgets/job_post_import_labels.dart';
@@ -23,19 +23,6 @@ class _CorporateServiceGuideSectionState
 
   static List<_ShortClipData> get _clips {
     return [
-      _ShortClipData(
-        hook: '기존의 끝없는 비용 출혈',
-        bodyLines: const [
-          '배너만 수십 개..',
-          '끝없는 스크롤..',
-          '비용 구조 역시 중복적, 반복적..',
-          '맨 아래 소액 게시판형 공고마저',
-          '\'상단 끌어올림\' 비용 경쟁',
-        ],
-        tags: ['#이젠그만', '#일자리에선', '#공고등록', '#무료'],
-        durationLabel: '0:15',
-        gradient: const [Color(0xFF0D47A1), Color(0xFF1565C0)],
-      ),
       _ShortClipData(
         hook: '공고를 등록하면!',
         bodyLines: const [
@@ -70,6 +57,7 @@ class _CorporateServiceGuideSectionState
 
   double _clipWidth(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
+    if (_clips.length <= 1) return width - 40;
     return (width - 40) * 0.76;
   }
 
@@ -136,22 +124,25 @@ class _CorporateServiceGuideSectionState
                   ),
                 ),
               ),
-              Text(
-                '${_page + 1}/${clips.length}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary.withValues(alpha: 0.85),
+              if (clips.length > 1)
+                Text(
+                  '${_page + 1}/${clips.length}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary.withValues(alpha: 0.85),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
-        _StoryProgressBar(
-          count: clips.length,
-          activeIndex: _page,
-        ),
-        const SizedBox(height: 12),
+        if (clips.length > 1) ...[
+          _StoryProgressBar(
+            count: clips.length,
+            activeIndex: _page,
+          ),
+          const SizedBox(height: 12),
+        ],
         NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             if (notification.metrics.axis != Axis.horizontal) return false;
@@ -190,17 +181,17 @@ class _CorporateServiceGuideSectionState
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        Center(
-          child: Text(
-            '← 스와이프 →',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary.withValues(alpha: 0.75),
+        if (clips.length > 1)
+          Center(
+            child: Text(
+              '← 스와이프 →',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary.withValues(alpha: 0.75),
+              ),
             ),
           ),
-        ),
       ],
     );
   }

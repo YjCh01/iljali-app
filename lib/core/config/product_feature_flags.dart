@@ -12,7 +12,7 @@ abstract final class ProductFeatureFlags {
 
   static const bool enableWorkerContract = bool.fromEnvironment(
     'ENABLE_WORKER_CONTRACT',
-    defaultValue: false,
+    defaultValue: true,
   );
 
   static const bool enablePermanentHire = bool.fromEnvironment(
@@ -38,6 +38,18 @@ abstract final class ProductFeatureFlags {
     defaultValue: false,
   );
 
+  /// 구직자 앱 — 고용주 평점·신뢰100·배지 표시 (페이즈 2)
+  static const bool enableEmployerTrustDisplay = bool.fromEnvironment(
+    'ENABLE_EMPLOYER_TRUST_DISPLAY',
+    defaultValue: false,
+  );
+
+  /// 구직자 → 고용주 평가 다이얼로그 (페이즈 2, 구직자 신뢰는 어드민 전용 예정)
+  static const bool enableSeekerEmployerRating = bool.fromEnvironment(
+    'ENABLE_SEEKER_EMPLOYER_RATING',
+    defaultValue: false,
+  );
+
   static bool get isWorkerGeneralEnabled => enableWorkerGeneral;
 
   static bool get isWorkerContractEnabled => enableWorkerContract;
@@ -50,6 +62,10 @@ abstract final class ProductFeatureFlags {
 
   static bool get isHiringCommissionEnabled => enableHiringCommission;
 
+  static bool get isEmployerTrustDisplayEnabled => enableEmployerTrustDisplay;
+
+  static bool get isSeekerEmployerRatingEnabled => enableSeekerEmployerRating;
+
   static WorkerCategory get defaultWorkerCategory =>
       isWorkerGeneralEnabled ? WorkerCategory.general : WorkerCategory.shortTerm;
 
@@ -60,6 +76,7 @@ abstract final class ProductFeatureFlags {
         if (enableWorkerGeneral) WorkerCategory.general,
         WorkerCategory.daily,
         WorkerCategory.shortTerm,
+        WorkerCategory.regular,
         if (enableWorkerContract) WorkerCategory.contract,
       ];
 
@@ -172,6 +189,33 @@ abstract final class ProductFeatureFlags {
             ],
             reEnableSteps:
                 '제휴 연계 채널 빌드 시 --dart-define=ENABLE_HIRING_COMMISSION=true 추가.',
+          ),
+        if (!enableEmployerTrustDisplay)
+          const DisabledFeature(
+            id: 'employer_trust_display',
+            displayName: '고용주 평점·신뢰 배지',
+            description:
+                '공고 상세·목록의 별점·신뢰100·우수 고용주 등 — 페이즈 2',
+            flagKey: 'ENABLE_EMPLOYER_TRUST_DISPLAY',
+            affectedFiles: [
+              'lib/core/trust/presentation/employer_trust_section.dart',
+              'lib/features/job_seeker/presentation/widgets/job_post_detail_sheet.dart',
+            ],
+            reEnableSteps:
+                '--dart-define=ENABLE_EMPLOYER_TRUST_DISPLAY=true',
+          ),
+        if (!enableSeekerEmployerRating)
+          const DisabledFeature(
+            id: 'seeker_employer_rating',
+            displayName: '구직자 고용주 평가',
+            description: '근무 완료 후 고용주 평가 다이얼로그 — 페이즈 2',
+            flagKey: 'ENABLE_SEEKER_EMPLOYER_RATING',
+            affectedFiles: [
+              'lib/core/trust/company_rating_prompt_service.dart',
+              'lib/features/job_seeker/presentation/pages/tabs/individual_work_tab.dart',
+            ],
+            reEnableSteps:
+                '--dart-define=ENABLE_SEEKER_EMPLOYER_RATING=true',
           ),
       ];
 

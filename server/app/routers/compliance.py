@@ -16,6 +16,11 @@ from app.services.entitlement_service import (
     normalize_brn,
 )
 from app.services.nts_service import NtsService
+from app.services.ocr_business_cross_check import (
+    OcrCrossCheckInput,
+    detect_ocr_blocking_mismatch,
+    detect_ocr_representative_mismatch,
+)
 
 router = APIRouter(prefix="/v1/compliance", tags=["compliance"])
 nts = NtsService()
@@ -26,6 +31,22 @@ async def verify_business(body: VerifyBusinessRequest, db: Session = Depends(get
     brn = normalize_brn(body.business_registration_number)
     if len(brn) != 10:
         raise HTTPException(status_code=400, detail="사업자등록번호 10자리가 필요합니다.")
+
+    blocking_reason = None
+    rep_review_reason = None
+    if body.ocr_brn or body.ocr_company_name:
+        ocr_input = OcrCrossCheckInput(
+            ocr_brn=body.ocr_brn,
+            ocr_company_name=body.ocr_company_name,
+            ocr_representative_name=body.ocr_representative_name,
+            ocr_confidence=body.ocr_confidence or 1.0,
+            expected_brn=brn,
+            expected_company_name=body.company_name,
+            expected_representative_name=body.representative_name,
+        )
+        blocking_reason = detect_ocr_blocking_mismatch(ocr_input)
+        if blocking_reason:
+            raise HTTPException(status_code=422, detail=blocking_reason)
 
     lookup = await nts.verify_business(
         brn,
@@ -40,13 +61,21 @@ async def verify_business(body: VerifyBusinessRequest, db: Session = Depends(get
             or "국세청 조회 결과 유효하지 않은 사업자입니다.",
         )
 
-    flagged = industry_requires_review(lookup.industry_name)
+    if body.ocr_brn or body.ocr_company_name:
+        rep_review_reason = detect_ocr_representative_mismatch(ocr_input)
+
+    industry_flagged = industry_requires_review(lookup.industry_name)
+    flagged = industry_flagged or rep_review_reason is not None
     status = "adminReviewRequired" if flagged else "verified"
-    reason = (
-        f"업종「{lookup.industry_name}」— 인력공급·아웃소싱 의심, Enterprise 가입·관리자 승인 필요"
-        if flagged
-        else None
-    )
+    if rep_review_reason:
+        reason = rep_review_reason
+    elif industry_flagged:
+        reason = (
+            f"업종「{lookup.industry_name}」— 인력공급·아웃소싱 의심, "
+            "Enterprise 가입·관리자 승인 필요"
+        )
+    else:
+        reason = None
 
     company = get_or_create_company(db, brn, body.company_name, body.entity_type)
     company.industry_name = lookup.industry_name

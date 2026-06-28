@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/map_constants.dart';
 import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
@@ -8,9 +9,7 @@ import 'package:map/features/commute/data/repositories/commute_route_repository.
 import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_overlay.dart';
 import 'package:map/features/corporate/domain/services/corporate_shuttle_density_loader.dart';
 import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
-import 'package:map/features/corporate/domain/utils/corporate_map_content_access_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_exposure_mini_map.dart';
-import 'package:map/features/corporate/presentation/widgets/corporate_map_intel_paywall.dart';
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase.dart';
@@ -59,7 +58,7 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
 
   Future<void> _load() async {
     JobBoardRefresh.consumeIfDirty();
-    final pins = await _getPins();
+    final pins = await _getPins(includeClosedGhosts: false);
     final posts = await _getPosts();
     final routeRepo = await CommuteRouteRepository.create();
     final shuttleOverlays = await CorporateShuttleDensityLoader.load(
@@ -105,40 +104,23 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
       );
       return;
     }
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-    if (CorporateMapContentAccessPolicy.canViewPostContent(
-      viewerProfile: profile,
-      ownPostIds: _ownPostIds,
-      post: pin.post,
-    )) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${pin.companyName} · ${pin.post.title}'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-    showCorporateMapIntelPaywall(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${pin.companyName} · ${pin.post.title}'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _onShuttleStopTap(CorporateShuttleMapOverlay overlay) {
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-    if (CorporateMapContentAccessPolicy.canViewShuttleContent(
-      viewerProfile: profile,
-      routeCompanyKey: overlay.companyKey,
-    )) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('셔틀 노선 · ${overlay.route.routeName}'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-    showCorporateMapIntelPaywall(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('셔틀 노선 · ${overlay.route.routeName}'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -215,7 +197,7 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
                         interactive: _expanded,
                         onPinTap: _expanded ? _onPinTap : null,
                         onShuttleStopTap: _expanded ? _onShuttleStopTap : null,
-                        initialZoom: _expanded ? 12.5 : 12.0,
+                        initialZoom: MapConstants.defaultZoom,
                       ),
               ),
             ),

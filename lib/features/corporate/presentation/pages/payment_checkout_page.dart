@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/payments/payment_deep_link_handler.dart';
@@ -52,11 +53,11 @@ class _PaymentCheckoutPageState extends State<PaymentCheckoutPage> {
         NavigationDelegate(
           onNavigationRequest: (request) {
             final url = request.url;
-            if (url.startsWith('iljari://payment/success')) {
+            if (_isPaymentSuccessUrl(url)) {
               _finishSuccess(url);
               return NavigationDecision.prevent;
             }
-            if (url.startsWith('iljari://payment/fail')) {
+            if (_isPaymentFailUrl(url)) {
               _finishFailure();
               return NavigationDecision.prevent;
             }
@@ -89,6 +90,29 @@ class _PaymentCheckoutPageState extends State<PaymentCheckoutPage> {
     _done = true;
     widget.onFailure?.call();
     if (mounted) Navigator.of(context).pop(null);
+  }
+
+  bool _isPaymentSuccessUrl(String url) {
+    if (url.startsWith('iljari://payment/success')) return true;
+    if (url.contains('paymentKey=') &&
+        (url.contains('success') || url.contains('payment-success'))) {
+      return true;
+    }
+    if (kIsWeb &&
+        (url.contains('payment-success') ||
+            url.contains('payment-fail') ||
+            (url.startsWith('https://') && url.contains('paymentKey=')))) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _isPaymentFailUrl(String url) {
+    if (url.startsWith('iljari://payment/fail')) return true;
+    if (url.contains('payment/fail') || url.contains('payment-fail')) {
+      return true;
+    }
+    return false;
   }
 
   @override

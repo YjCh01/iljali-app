@@ -15,6 +15,7 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
 import 'package:map/features/corporate/domain/entities/corporate_payment_preference.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/core/widgets/map_form_split_layout.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 import 'package:map/features/corporate/presentation/widgets/select_all_toggle_bar.dart';
 
@@ -379,16 +380,8 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
                     ),
                   ),
                 )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: PushRadiusMapPicker(
+              : MapStackSplitLayout(
+                  map: PushRadiusMapPicker(
                             key: ValueKey(
                               'shuttle_pay_${_rows.map((r) => r.stop.id).join('-')}_'
                               '${_selectedStopIds.join('-')}',
@@ -401,9 +394,9 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
                             polylines: _mapPolylines(),
                             onCenterChanged: (_) {},
                           ),
-                        ),
-                      ),
-                    ),
+                  bottom: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     const SizedBox(height: 10),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -435,7 +428,6 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
                     ),
                     const SizedBox(height: 4),
                     Expanded(
-                      flex: 4,
                       child: ListView.separated(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: _rows.length,
@@ -630,6 +622,7 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
                     ),
                   ],
                 ),
+              ),
     );
   }
 }

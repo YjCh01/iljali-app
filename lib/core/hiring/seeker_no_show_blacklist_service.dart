@@ -1,3 +1,5 @@
+import 'package:map/core/api/iljari_api_client.dart';
+import 'package:map/core/config/env_config.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,6 +49,15 @@ class SeekerNoShowBlacklistService {
     required LocalHiringRepository hiringRepo,
   }) async {
     final streak = await consecutiveNoShowCount(seekerEmail, hiringRepo);
+    if (EnvConfig.isComplianceApiEnabled) {
+      final client = IljariApiClient();
+      if (client.isEnabled) {
+        await client.syncSeekerNoShowSanction(
+          seekerEmail: seekerEmail,
+          streak: streak,
+        );
+      }
+    }
     if (streak >= consecutiveThreshold) {
       await _prefs.setBool(_blacklistKey(seekerEmail), true);
       return SeekerNoShowRecordResult(

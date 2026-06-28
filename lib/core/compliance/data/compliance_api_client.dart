@@ -25,6 +25,10 @@ class ComplianceApiClient {
     required String certificateImageRef,
     required String representativeName,
     required String openingDate,
+    String? ocrBrn,
+    String? ocrCompanyName,
+    String? ocrRepresentativeName,
+    double? ocrConfidence,
   }) async {
     final response = await _client.post(
       Uri.parse('$_baseUrl/v1/compliance/business/verify'),
@@ -36,6 +40,11 @@ class ComplianceApiClient {
         'opening_date': openingDate,
         'entity_type': entityType.name,
         'certificate_image_ref': certificateImageRef,
+        if (ocrBrn != null) 'ocr_brn': ocrBrn,
+        if (ocrCompanyName != null) 'ocr_company_name': ocrCompanyName,
+        if (ocrRepresentativeName != null)
+          'ocr_representative_name': ocrRepresentativeName,
+        if (ocrConfidence != null) 'ocr_confidence': ocrConfidence,
       }),
     );
     if (response.statusCode >= 400) {
@@ -145,6 +154,23 @@ class ComplianceApiClient {
     if (response.statusCode >= 400) {
       throw ComplianceApiException('관리자 검토 API 오류');
     }
+  }
+
+  /// companies 테이블 기록 조회 (검증 ops API 미배포 시 fallback)
+  Future<Map<String, dynamic>?> findBusinessRecord(String companyKey) async {
+    final brn = companyKey.replaceAll(RegExp(r'[^0-9]'), '');
+    if (brn.isEmpty) return null;
+    final response = await _client.get(
+      Uri.parse('$_baseUrl/v1/admin/compliance/business-records'),
+    );
+    if (response.statusCode >= 400) return null;
+    final list = jsonDecode(response.body) as List<dynamic>;
+    for (final raw in list) {
+      final map = Map<String, dynamic>.from(raw as Map);
+      final key = '${map['company_key'] ?? ''}'.replaceAll(RegExp(r'[^0-9]'), '');
+      if (key == brn) return map;
+    }
+    return null;
   }
 
   Future<void> adminSuspendCompany(String companyKey) async {

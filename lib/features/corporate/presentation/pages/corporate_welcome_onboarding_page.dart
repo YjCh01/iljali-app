@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/config/product_feature_flags.dart';
@@ -46,7 +46,7 @@ class _CorporateWelcomeOnboardingPageState
           title: '지도 기반\n스마트 채용',
           body: '근무지 도로명 주소를 기준으로\n'
               '공고 노출 범위 설정으로 주변 구직자에게 공고를 알립니다.\n'
-              '근무지 1km 무료 노출, 일자리 알림핀은 설정 시 이용하세요.',
+              '근무지 ${PushPackageCatalog.pushRadiusLabel} 무료 노출, 일자리 알림핀은 설정 시 이용하세요.',
         ),
       ];
       if (ProductFeatureFlags.isHiringCommissionEnabled) {
@@ -95,7 +95,7 @@ class _CorporateWelcomeOnboardingPageState
         title: '지도 기반\n스마트 채용',
         body: '근무지 도로명 주소를 기준으로\n'
             '공고 노출 범위 설정으로 주변 구직자에게 공고를 알립니다.\n'
-            '근무지 1km 무료 노출, 일자리 알림핀은 설정 시 이용하세요.',
+            '근무지 ${PushPackageCatalog.pushRadiusLabel} 무료 노출, 일자리 알림핀은 설정 시 이용하세요.',
       ),
       const _OnboardingSlide(
         icon: Icons.campaign_outlined,

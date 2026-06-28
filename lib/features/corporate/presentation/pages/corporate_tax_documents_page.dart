@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/widgets/transient_snack_bar.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
@@ -190,13 +191,8 @@ class _CorporateTaxDocumentsPageState extends State<CorporateTaxDocumentsPage> {
   }
 
   void _openDetail(CorporateTaxDocument doc) {
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (context) => _TaxDocumentDetailSheet(document: doc),
     );
   }

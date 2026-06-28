@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:map/core/compliance/services/business_certificate_address_extractor.dart';
 import 'package:map/core/compliance/services/mock_business_certificate_ocr_service.dart';
 import 'package:map/core/config/env_config.dart';
 
@@ -94,6 +95,7 @@ class ClovaBusinessCertificateOcrService implements BusinessCertificateOcrServic
   }) {
     final images = payload['images'] as List<dynamic>? ?? [];
     final fields = <String, String>{};
+    final lineTexts = <String>[];
     for (final image in images) {
       if (image is! Map) continue;
       final infer = image['fields'] as List<dynamic>? ?? [];
@@ -102,11 +104,13 @@ class ClovaBusinessCertificateOcrService implements BusinessCertificateOcrServic
         final name = field['name']?.toString() ?? '';
         final text = field['inferText']?.toString() ?? '';
         if (name.isNotEmpty) fields[name] = text;
+        if (text.isNotEmpty) lineTexts.add(text);
       }
       final lines = image['lines'] as List<dynamic>? ?? [];
       for (final line in lines) {
         if (line is! Map) continue;
         final text = line['inferText']?.toString() ?? '';
+        if (text.isNotEmpty) lineTexts.add(text);
         if (text.contains('사업자') || text.contains('등록')) {
           fields.putIfAbsent('raw', () => text);
         }
@@ -119,7 +123,11 @@ class ClovaBusinessCertificateOcrService implements BusinessCertificateOcrServic
         fields['법인명'] ??
         expectedCompanyName;
     final industry = fields['industry'] ?? fields['업종'] ?? fields['업태'] ?? '물류·창고업';
-    final rep = fields['representative'] ?? fields['대표자'] ?? '대표자(OCR)';
+    final rep = fields['representative'] ?? fields['대표자'] ?? '';
+    final address = fields['businessAddress'] ??
+        fields['사업장소재지'] ??
+        fields['본점소재지'] ??
+        BusinessCertificateAddressExtractor.fromOcrLines(lineTexts);
 
     return BusinessCertificateOcrResult(
       businessRegistrationNumber: brn,
@@ -128,6 +136,7 @@ class ClovaBusinessCertificateOcrService implements BusinessCertificateOcrServic
       industryName: industry,
       confidence: 0.97,
       entityTypeHint: brn.startsWith('1') ? 'corporation' : 'soleProprietor',
+      businessAddress: address,
     );
   }
 

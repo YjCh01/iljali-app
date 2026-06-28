@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:map/core/config/product_feature_flags.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
@@ -20,6 +21,8 @@ import 'package:map/core/constants/labor_constants.dart';
 import 'package:map/core/widgets/comma_number_input_formatter.dart';
 
 import 'package:map/features/corporate/presentation/widgets/corporate_service_action_style.dart';
+import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
+import 'package:map/features/corporate/presentation/widgets/job_post_description_body_editor.dart';
 import 'package:map/features/corporate/presentation/widgets/work_schedule_field_preview.dart';
 import 'package:map/features/corporate/presentation/widgets/work_schedule_selector_field.dart';
 import 'package:map/features/work_category/presentation/widgets/work_category_picker_field.dart';
@@ -36,7 +39,9 @@ class CorporateJobPostForm extends StatefulWidget {
 
     required this.titleController,
 
-    required this.jobDescriptionController,
+    required this.descriptionBody,
+
+    required this.onDescriptionBodyChanged,
 
     required this.wageController,
 
@@ -45,6 +50,10 @@ class CorporateJobPostForm extends StatefulWidget {
     required this.workplace,
 
     required this.onSearchWorkplace,
+
+    this.onLoadRegisteredWorkplace,
+
+    this.loadingRegisteredWorkplace = false,
 
     required this.workerCategory,
 
@@ -94,13 +103,19 @@ class CorporateJobPostForm extends StatefulWidget {
 
     required this.onPaymentDateNegotiableChanged,
 
+    this.workPeriodNegotiable = false,
+
+    required this.onWorkPeriodNegotiableChanged,
+
   });
 
 
 
   final TextEditingController titleController;
 
-  final TextEditingController jobDescriptionController;
+  final JobPostDescriptionBody descriptionBody;
+
+  final ValueChanged<JobPostDescriptionBody> onDescriptionBodyChanged;
 
   final TextEditingController wageController;
 
@@ -109,6 +124,10 @@ class CorporateJobPostForm extends StatefulWidget {
   final WorkplaceAddress? workplace;
 
   final VoidCallback onSearchWorkplace;
+
+  final Future<void> Function()? onLoadRegisteredWorkplace;
+
+  final bool loadingRegisteredWorkplace;
 
   final WorkerCategory workerCategory;
 
@@ -158,6 +177,10 @@ class CorporateJobPostForm extends StatefulWidget {
   final bool paymentDateNegotiable;
 
   final ValueChanged<bool> onPaymentDateNegotiableChanged;
+
+  final bool workPeriodNegotiable;
+
+  final ValueChanged<bool> onWorkPeriodNegotiableChanged;
 
 
 
@@ -215,25 +238,53 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
         ),
 
+        if (widget.onLoadRegisteredWorkplace != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: widget.loadingRegisteredWorkplace
+                  ? null
+                  : () => widget.onLoadRegisteredWorkplace!(),
+              icon: widget.loadingRegisteredWorkplace
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.business_outlined, size: 18),
+              label: Text(
+                widget.loadingRegisteredWorkplace
+                    ? '사업장 소재지 확인 중...'
+                    : '등록증·사업자 소재지 불러오기',
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 2),
+            child: Text(
+              '가입·내정보에 제출한 사업자등록증의 사업장 주소를 근무지에 채웁니다.',
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+        ],
+
         const SizedBox(height: 16),
 
         const FieldLabel('업무 내용'),
 
-        TextField(
-
-          controller: widget.jobDescriptionController,
-
-          minLines: 3,
-
-          maxLines: 5,
-
-          decoration: _inputDecoration('담당 업무, 근무 조건 등'),
-
+        JobPostDescriptionBodyEditor(
+          body: widget.descriptionBody,
+          onChanged: widget.onDescriptionBodyChanged,
         ),
         Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
-            '구직자 공고 상세 화면에 표시됩니다.',
+            '구직자 공고 상세 화면 본문에 표시됩니다.',
             style: TextStyle(
               fontSize: 11,
               height: 1.35,
@@ -303,6 +354,9 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
         WorkScheduleSelectorField(
           controller: widget.scheduleController,
           dailyOnly: widget.workerCategory.usesDailyPickSchedule,
+          firstStartDateOnly: widget.workerCategory.usesFirstStartDateOnly,
+          workPeriodNegotiable: widget.workPeriodNegotiable,
+          onWorkPeriodNegotiableChanged: widget.onWorkPeriodNegotiableChanged,
           onDailyScheduleCommitted: widget.onDailyScheduleCommitted,
         ),
 
@@ -413,7 +467,7 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
             onNegotiableChanged: widget.onPaymentDateNegotiableChanged,
           )
 
-        else
+        else if (widget.workerCategory.usesMonthlyPaymentDate)
 
           _MonthlyPaymentDayField(
 
@@ -479,7 +533,7 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
           selectedId: widget.workCategoryId,
           onChanged: widget.onWorkCategoryChanged,
           title: widget.titleController.text,
-          jobDescription: widget.jobDescriptionController.text,
+          jobDescription: widget.descriptionBody.legacyPlainText,
         ),
 
         const SizedBox(height: 28),
@@ -1344,17 +1398,9 @@ class _MonthlyPaymentDayField extends StatelessWidget {
 
 
 
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showAdaptiveSheet<bool>(
 
       context: context,
-
-      isScrollControlled: true,
-
-      shape: const RoundedRectangleBorder(
-
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-
-      ),
 
       builder: (sheetContext) {
 

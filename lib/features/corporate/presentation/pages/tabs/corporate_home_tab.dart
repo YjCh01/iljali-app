@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:map/core/compliance/services/subscription_renewal_service.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/corporate/presentation/utils/corporate_shell_access.dart';
+import 'package:map/core/sync/member_sanction_guard.dart';
 import 'package:map/core/widgets/push_wallet_bonus_feedback.dart';
 import 'package:map/features/corporate/data/datasources/corporate_dashboard_local_data_source.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
@@ -12,9 +14,7 @@ import 'package:map/features/job_seeker/presentation/pages/job_post_detail_page.
 import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_callout_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_home_feature_highlights.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_home_map_background.dart';
-import 'package:map/features/corporate/presentation/widgets/corporate_map_intel_paywall.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_stat_card.dart';
-import 'package:map/features/corporate/domain/utils/corporate_map_content_access_policy.dart';
 
 /// 기업회원 홈 — 지도 전체 + 당근형 드래그 시트
 class CorporateHomeTab extends StatefulWidget {
@@ -60,6 +60,13 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
     SubscriptionRenewalService().checkAndApplyExpiry().then((_) {
       if (mounted) _load();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showSanctionNotices());
+  }
+
+  Future<void> _showSanctionNotices() async {
+    final email = AuthSession.instance.currentUser?.email;
+    if (email == null || !mounted) return;
+    await MemberSanctionGuard.showPendingNotices(context, email: email);
   }
 
   void _onCorporateProfileChanged() {
@@ -83,15 +90,6 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
   }
 
   void _openDetailPreview(JobMapPin pin) {
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-    if (!CorporateMapContentAccessPolicy.canViewPostContent(
-      viewerProfile: profile,
-      ownPostIds: _isOwnPin(pin) ? {pin.post.id} : const {},
-      post: pin.post,
-    )) {
-      showCorporateMapIntelPaywall(context);
-      return;
-    }
     final isOwnPreview = _isOwnPin(pin);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -201,6 +199,10 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
   }
 
   String _greetingLine() {
+    if (!CorporateShellAccess.isSignedInCorporate) {
+      return '채용 지도를 먼저 둘러보세요';
+    }
+
     final user = AuthSession.instance.currentUser;
     final profile = user?.corporateProfile;
     final contact = profile?.contactPersonName.trim();

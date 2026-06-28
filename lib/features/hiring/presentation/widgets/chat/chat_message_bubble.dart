@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/hiring/application_chat_message.dart';
 import 'package:map/core/hiring/chat_message_kind.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_applicant_resume_page.dart';
+import 'package:map/features/job_seeker/presentation/widgets/seeker_document_image.dart';
 
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
@@ -84,8 +83,7 @@ class ChatMessageBubble extends StatelessWidget {
   }
 
   void _openImageViewer(BuildContext context, String path) {
-    final file = File(path);
-    if (!file.existsSync()) {
+    if (!seekerDocumentHasImage(path)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('첨부 파일을 불러올 수 없습니다.')),
       );
@@ -110,17 +108,15 @@ class _Content extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (message.kind == ChatMessageKind.photo && message.hasAttachment) {
-      final file = File(message.attachmentPath!);
-      if (file.existsSync()) {
+      if (seekerDocumentHasImage(message.attachmentPath)) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: Image.file(
-                file,
+              child: SizedBox(
                 width: 200,
-                fit: BoxFit.cover,
+                child: seekerDocumentImage(message.attachmentPath),
               ),
             ),
             if (message.text.isNotEmpty) ...[
@@ -135,7 +131,6 @@ class _Content extends StatelessWidget {
     if ((message.kind == ChatMessageKind.bankAccount ||
             message.kind == ChatMessageKind.idCard) &&
         message.hasAttachment) {
-      final file = File(message.attachmentPath!);
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -159,14 +154,13 @@ class _Content extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          if (file.existsSync())
+          if (seekerDocumentHasImage(message.attachmentPath))
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                file,
+              child: SizedBox(
                 width: 200,
                 height: 120,
-                fit: BoxFit.cover,
+                child: seekerDocumentImage(message.attachmentPath, height: 120),
               ),
             ),
           const SizedBox(height: 6),
@@ -245,7 +239,7 @@ class _AttachmentImageViewerPage extends StatelessWidget {
       ),
       body: Center(
         child: InteractiveViewer(
-          child: Image.file(File(imagePath)),
+          child: seekerDocumentImage(imagePath, height: double.infinity),
         ),
       ),
     );

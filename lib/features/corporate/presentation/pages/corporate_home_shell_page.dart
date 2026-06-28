@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/config/product_feature_flags.dart';
-import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/hiring/permanent_commission_sync_service.dart';
 import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/session/auth_session.dart';
-import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/presentation/navigation/corporate_job_post_flow_result.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_applicants_tab.dart';
@@ -14,8 +12,11 @@ import 'package:map/features/corporate/presentation/pages/tabs/corporate_chat_ta
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_home_tab.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_job_posts_tab.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_more_tab.dart';
-import 'package:map/features/corporate/presentation/widgets/corporate_bottom_nav.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_create_job_post_entry_sheet.dart';
+import 'package:map/features/corporate/presentation/utils/corporate_shell_access.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_login_prompt_sheet.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_guest_auth_actions.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_web_scaffold.dart';
 
 /// 기업회원 메인 셸 — 하단 6탭 + 홈 대시보드
 class CorporateHomeShellPage extends StatefulWidget {
@@ -39,7 +40,9 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   void initState() {
     super.initState();
     _rebuildTabs();
-    _syncPermanentCommission();
+    if (CorporateShellAccess.isSignedInCorporate) {
+      _syncPermanentCommission();
+    }
   }
 
   @override
@@ -62,10 +65,10 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
     _tabs = [
       CorporateHomeTab(
         key: const ValueKey('corp-home'),
-        onCreateJobPost: _openCreateJobPost,
-        onSetupProfile: _openProfileSetup,
-        onOpenJobPosts: () => _switchTab(1),
-        onOpenChat: () => _switchTab(4),
+        onCreateJobPost: () => _requireSignedIn(_openCreateJobPost),
+        onSetupProfile: () => _requireSignedIn(_openProfileSetup),
+        onOpenJobPosts: () => _requireSignedIn(() => _switchTab(1)),
+        onOpenChat: () => _requireSignedIn(() => _switchTab(4)),
         focusPostId: _mapFocusPostId,
         onFocusConsumed: _clearMapFocus,
       ),
@@ -93,12 +96,25 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   }
 
   void _switchTab(int index) {
+    if (!CorporateShellAccess.isTabEnabled(index)) {
+      CorporateLoginPromptSheet.show(context);
+      return;
+    }
+
     setState(() {
       _currentIndex = index;
       if (index == 2) _hiringRevision++;
       if (index == 4) _chatRevision++;
       _rebuildTabs();
     });
+  }
+
+  void _requireSignedIn(VoidCallback action) {
+    if (CorporateShellAccess.isSignedInCorporate) {
+      action();
+      return;
+    }
+    CorporateLoginPromptSheet.show(context);
   }
 
   void _openApplicantsForJob(CorporateJobPost post) {
@@ -201,52 +217,46 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
     await AuthSession.instance.signOut();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.memberGateway,
+      AppRoutes.home,
       (_) => false,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        leading: const AppRootLeading(),
-        title: Text(
-          AuthSession.instance.currentUser?.corporateProfile?.companyName ??
-              AuthSession.instance.currentUser?.name ??
-              '기업',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          IconButton(
-            tooltip: '로그아웃',
-            onPressed: _logout,
-            icon: const Icon(Icons.logout_rounded),
-          ),
-        ],
-      ),
+    final signedIn = CorporateShellAccess.isSignedInCorporate;
+
+    return CorporateWebScaffold(
+      sectionIndex: _currentIndex,
+      isItemEnabled: CorporateShellAccess.isTabEnabled,
+      onSectionChanged: (index) {
+        if (!CorporateShellAccess.isTabEnabled(index)) {
+          CorporateLoginPromptSheet.show(context);
+          return;
+        }
+        setState(() {
+          if (index == 2 && _currentIndex != 2) {
+            _applicantsFocusJobPostId = null;
+            _applicantsFocusJobTitle = null;
+          }
+          _currentIndex = index;
+          if (index == 2) _hiringRevision++;
+          if (index == 4) _chatRevision++;
+          _rebuildTabs();
+        });
+      },
+      actions: signedIn
+          ? [
+              IconButton(
+                tooltip: '로그아웃',
+                onPressed: _logout,
+                icon: const Icon(Icons.logout_rounded),
+              ),
+            ]
+          : null,
       body: IndexedStack(
         index: _currentIndex,
         children: _tabs,
-      ),
-      bottomNavigationBar: CorporateBottomNav(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            if (index == 2 && _currentIndex != 2) {
-              _applicantsFocusJobPostId = null;
-              _applicantsFocusJobTitle = null;
-            }
-            _currentIndex = index;
-            if (index == 2) _hiringRevision++;
-            _rebuildTabs();
-          });
-        },
       ),
     );
   }

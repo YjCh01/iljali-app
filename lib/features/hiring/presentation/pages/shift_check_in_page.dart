@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/geo/location_consent_service.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/geo/geo_distance.dart';
@@ -25,6 +26,7 @@ class ShiftCheckInPage extends StatefulWidget {
 class _ShiftCheckInPageState extends State<ShiftCheckInPage> {
   bool _checkingIn = false;
   bool _loadingLocation = true;
+  bool _locationBlocked = false;
   GeoCoordinate? _currentPosition;
   double? _distanceMeters;
   String? _locationStatus;
@@ -33,7 +35,25 @@ class _ShiftCheckInPageState extends State<ShiftCheckInPage> {
   @override
   void initState() {
     super.initState();
-    _refreshLocation();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prepareLocation());
+  }
+
+  Future<void> _prepareLocation() async {
+    final granted = await LocationConsentService.ensureGranted(
+      context,
+      trigger: LocationConsentTrigger.checkIn,
+    );
+    if (!mounted) return;
+    if (!granted) {
+      setState(() {
+        _locationBlocked = true;
+        _loadingLocation = false;
+        _locationStatus = '위치 권한·동의가 필요합니다. 설정에서 허용 후 다시 시도해 주세요.';
+        _canCheckIn = false;
+      });
+      return;
+    }
+    await _refreshLocation();
   }
 
   Future<void> _refreshLocation() async {
@@ -135,7 +155,9 @@ class _ShiftCheckInPageState extends State<ShiftCheckInPage> {
         title: const Text('출근 체크'),
         actions: [
           IconButton(
-            onPressed: _loadingLocation ? null : _refreshLocation,
+            onPressed: (_loadingLocation || _locationBlocked)
+                ? null
+                : _prepareLocation,
             tooltip: '위치 새로고침',
             icon: const Icon(Icons.my_location_outlined),
           ),

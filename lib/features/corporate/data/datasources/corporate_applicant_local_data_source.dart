@@ -62,6 +62,8 @@ class CorporateApplicantLocalDataSourceImpl
 
   CorporateApplicantStatus _mapStatus(HiringApplicationStatus status) =>
       switch (status) {
+        HiringApplicationStatus.inquiry =>
+          CorporateApplicantStatus.chatting,
         HiringApplicationStatus.applied => CorporateApplicantStatus.pending,
         HiringApplicationStatus.chatting =>
           CorporateApplicantStatus.chatting,

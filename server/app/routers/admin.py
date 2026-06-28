@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import AbuseFlag, Company
+from app.qc_models import QcMemberRow
 from app.schemas import (
     AbuseFlagResponse,
     AdminReviewRequest,
@@ -12,7 +13,7 @@ from app.schemas import (
     SubscribeRequest,
     SubscribeResponse,
 )
-from app.services.entitlement_service import normalize_brn
+from app.services.entitlement_service import get_or_create_company, normalize_brn
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 sub_router = APIRouter(prefix="/v1/subscriptions", tags=["subscriptions"])
@@ -59,7 +60,18 @@ def review_company(
     brn = normalize_brn(company_key)
     company = db.query(Company).filter(Company.company_key == brn).first()
     if not company:
-        raise HTTPException(status_code=404, detail="기업을 찾을 수 없습니다.")
+        member = (
+            db.query(QcMemberRow)
+            .filter(QcMemberRow.company_key == brn)
+            .filter(QcMemberRow.member_type == "corporate")
+            .order_by(QcMemberRow.created_at.desc())
+            .first()
+        )
+        if not member:
+            raise HTTPException(status_code=404, detail="기업을 찾을 수 없습니다.")
+        company = get_or_create_company(db, brn, member.company_name, "corporation")
+        company.requires_admin_review = True
+        company.verification_status = "pending"
 
     if body.approved:
         company.admin_review_approved = True

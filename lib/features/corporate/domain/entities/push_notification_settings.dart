@@ -1,4 +1,4 @@
-﻿import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_request_kind.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/push_ticket_catalog.dart';
@@ -54,7 +54,7 @@ extension PushRadiusTierX on PushRadiusTier {
         PushRadiusTier.extended7km => '7km',
       };
 
-  /// UI 노출용 — 1km 구간은 「주변」
+  /// UI 노출용 — 기본(700m) 구간은 「주변」
   String get nearbyDisplayLabel => switch (this) {
         PushRadiusTier.radius0km => '위치만',
         PushRadiusTier.standardFree1km => '주변',
@@ -64,9 +64,12 @@ extension PushRadiusTierX on PushRadiusTier {
 
   String get description => switch (this) {
         PushRadiusTier.radius0km => '지도 위치만 저장하고 알림 반경은 설정하지 않습니다.',
-        PushRadiusTier.standardFree1km => '근무지 주변 1km · 현재 노출중.',
-        PushRadiusTier.standard1km => '일자리 알림핀 주변 1km.',
-        _ => '레거시 반경 — 근무지 1km/일자리 알림핀 1km 정책 사용을 권장합니다.',
+        PushRadiusTier.standardFree1km =>
+          '근무지 주변 ${PushPackageCatalog.pushRadiusLabel} · 현재 노출중.',
+        PushRadiusTier.standard1km =>
+          '일자리 알림핀 주변 ${PushPackageCatalog.pushRadiusLabel}.',
+        _ =>
+          '레거시 반경 — 근무지/일자리 알림핀 ${PushPackageCatalog.pushRadiusLabel} 정책 사용을 권장합니다.',
       };
 
   bool get isPaid => false;
@@ -374,7 +377,7 @@ class PushPaymentBundle {
       JobPostPaymentRequestKind.pushTicket =>
         '알림핀·정류장 1곳 선택 후 PUSH 1회 발송',
       JobPostPaymentRequestKind.packagePurchase =>
-        '거점 1 + 푸시 1 (반경 1km)',
+        '거점 1 + 푸시 1 (반경 ${PushPackageCatalog.pushRadiusLabel})',
       JobPostPaymentRequestKind.extraPush =>
         '기본 일일 푸시 한도 초과 · 패키지 1회 발송\n'
         '추가 공고 노출 범위·지원자 모집하기는 패키지 구매로 확장',

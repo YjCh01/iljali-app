@@ -26,6 +26,18 @@ abstract final class ExposureSlotPolicy {
     );
   }
 
+  /// 만료된 노출 연장 — 결제 시각을 새로 갱신
+  static PushNotificationBasePoint renewActivation(
+    PushNotificationBasePoint point, {
+    DateTime? paidAt,
+  }) {
+    return point.copyWith(
+      exposureActivated: true,
+      activationCoordinate: point.activationCoordinate ?? point.coordinate,
+      exposurePaidAt: paidAt ?? DateTime.now(),
+    );
+  }
+
   /// 이용권으로 추가된 일자리 알림핀(isPremiumSlot) — 노출 활성화 동기화
   static List<PushNotificationBasePoint> syncPaidRecruitmentActivations(
     List<PushNotificationBasePoint> points,

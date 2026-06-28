@@ -3,7 +3,7 @@ import 'package:map/features/corporate/domain/entities/push_package_catalog.dart
 
 /// PUSH 발송 대상 유형 — 각 1곳 = PUSH권 1회
 enum PushDispatchTargetKind {
-  /// 무료 등록 공고의 사업소재지 · 근무지 반경 1km
+  /// 무료 등록 공고의 사업소재지 · 근무지 반경 700m
   workplace,
 
   /// 유료 활성화된 알림핀 거점
@@ -21,9 +21,12 @@ extension PushDispatchTargetKindX on PushDispatchTargetKind {
       };
 
   String get iconHint => switch (this) {
-        PushDispatchTargetKind.workplace => '근무지 주변 1km',
-        PushDispatchTargetKind.notificationPin => '알림핀 주변 1km',
-        PushDispatchTargetKind.shuttleStop => '정류장 주변 1km',
+        PushDispatchTargetKind.workplace =>
+          '근무지 주변 ${PushPackageCatalog.pushRadiusLabel}',
+        PushDispatchTargetKind.notificationPin =>
+          '알림핀 주변 ${PushPackageCatalog.pushRadiusLabel}',
+        PushDispatchTargetKind.shuttleStop =>
+          '정류장 주변 ${PushPackageCatalog.pushRadiusLabel}',
       };
 }
 

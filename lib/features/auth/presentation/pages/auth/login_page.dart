@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:map/core/dev/dev_auth_service.dart';
 import 'package:map/core/dev/dev_test_accounts.dart';
 import 'package:map/core/constants/app_colors.dart';
-import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/constants/app_routes.dart';
-import 'package:map/core/session/auth_session.dart';
-import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
+import 'package:map/features/auth/data/repositories/corporate_auth_repository.dart';
+import 'package:map/features/auth/data/repositories/individual_auth_repository.dart';
 import 'package:map/features/auth/domain/usecases/validate_login_form_usecase.dart';
 import 'package:map/features/auth/presentation/widgets/auth_form_card.dart';
 import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart';
 import 'package:map/features/auth/presentation/widgets/auth_scaffold.dart';
 import 'package:map/features/auth/presentation/widgets/auth_text_field.dart';
+import 'package:map/features/auth/presentation/widgets/login_qc_quick_panel.dart';
 import 'package:map/features/auth/presentation/widgets/social_login_buttons.dart';
 
 /// 로그인 화면
@@ -37,6 +37,8 @@ class _LoginPageState extends State<LoginPage> {
   String? _passwordError;
   bool _submitting = false;
 
+  bool get _isIndividual => widget.memberType == MemberType.individual;
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -56,7 +58,7 @@ class _LoginPageState extends State<LoginPage> {
       );
   }
 
-  void _signIn() async {
+  Future<void> _signIn() async {
     if (_submitting) return;
     FocusManager.instance.primaryFocus?.unfocus();
 
@@ -80,39 +82,36 @@ class _LoginPageState extends State<LoginPage> {
 
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    final devAccount = DevTestAccounts.matchCredentials(
-      email: email,
-      password: password,
-    );
 
-    if (DevAuthService.isEnabled && devAccount != null) {
-      if (devAccount.memberType != widget.memberType) {
-        if (!mounted) return;
-        setState(() => _submitting = false);
-        _showValidationSnackBar(
-          devAccount.memberType == MemberType.corporate
-              ? '해당 계정은 기업회원 로그인에서 이용하세요.'
-              : '해당 계정은 개인회원 로그인에서 이용하세요.',
-        );
-        return;
-      }
-      await DevAuthService.signIn(devAccount);
-    } else {
-      await AuthSession.instance.signIn(
-        AuthUser(
-          name: email.split('@').first,
+    try {
+      if (_isIndividual) {
+        await IndividualAuthRepository.signIn(email: email, password: password);
+      } else {
+        final devAccount = DevTestAccounts.matchCredentials(
           email: email,
-          memberType: widget.memberType,
-        ),
-      );
-
-      if (widget.memberType == MemberType.corporate) {
-        await AuthSession.instance.ensureCorporateProfile();
+          password: password,
+        );
+        if (DevAuthService.isEnabled && devAccount != null) {
+          if (devAccount.memberType != widget.memberType) {
+            throw ArgumentError('해당 계정은 개인회원 로그인에서 이용하세요.');
+          }
+          await DevAuthService.signIn(devAccount);
+        } else {
+          await CorporateAuthRepository.signIn(email: email, password: password);
+        }
       }
-    }
 
-    if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      final message = error
+          .toString()
+          .replaceFirst('ArgumentError: ', '')
+          .replaceFirst('IljariApiException: ', '');
+      _showValidationSnackBar(message);
+    }
   }
 
   void _goToSignUp() {
@@ -120,6 +119,14 @@ class _LoginPageState extends State<LoginPage> {
       AppRoutes.signUp,
       arguments: widget.memberType,
     );
+  }
+
+  void _goToFindAccount() {
+    Navigator.of(context).pushNamed(AppRoutes.findAccount);
+  }
+
+  void _goToResetPassword() {
+    Navigator.of(context).pushNamed(AppRoutes.resetPassword);
   }
 
   @override
@@ -140,15 +147,6 @@ class _LoginPageState extends State<LoginPage> {
                   fontSize: 26,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                AppStrings.loginWelcome,
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.4,
-                  color: AppColors.textSecondary.withValues(alpha: 0.95),
                 ),
               ),
               const SizedBox(height: 28),
@@ -184,44 +182,78 @@ class _LoginPageState extends State<LoginPage> {
                   },
                 ),
               ),
-              Text(
-                'MVP: 등록한 이메일 형식만 확인합니다.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary.withValues(alpha: 0.85),
+              if (_isIndividual) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: _goToFindAccount,
+                      child: const Text(
+                        '아이디 찾기',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '|',
+                      style: TextStyle(
+                        color: AppColors.textSecondary.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _goToResetPassword,
+                      child: const Text(
+                        '비밀번호 찾기',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 24),
+              ],
+              const SizedBox(height: 12),
               AuthPrimaryButton(
                 label: _submitting ? '로그인 중...' : '로그인',
                 onPressed: _submitting ? () {} : _signIn,
               ),
               const SizedBox(height: 28),
-              const SocialLoginButtons(),
+              if (_isIndividual) const SocialLoginButtons(),
             ],
           ),
         ),
       ),
-      bottom: GestureDetector(
-        onTap: _goToSignUp,
-        child: RichText(
-          textAlign: TextAlign.center,
-          text: const TextSpan(
-            style: TextStyle(fontSize: 14, color: Colors.white70),
-            children: [
-              TextSpan(text: '계정이 없으신가요? '),
-              TextSpan(
-                text: '회원가입하기',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  decoration: TextDecoration.underline,
-                  decorationColor: Colors.white,
-                ),
+      bottom: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LoginQcQuickPanel(memberType: widget.memberType),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: _goToSignUp,
+            child: RichText(
+              textAlign: TextAlign.center,
+              text: const TextSpan(
+                style: TextStyle(fontSize: 14, color: Colors.white70),
+                children: [
+                  TextSpan(text: '계정이 없으신가요? '),
+                  TextSpan(
+                    text: '회원가입하기',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.underline,
+                      decorationColor: Colors.white,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

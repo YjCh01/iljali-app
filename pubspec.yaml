@@ -1,7 +1,7 @@
 name: map
 description: 물류 일자리 플랫폼 — 일자리
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -9,9 +9,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
   cupertino_icons: ^1.0.8
   flutter_naver_map: ^1.4.4
   shared_preferences: ^2.5.3
+  crypto: ^3.0.6
   pdf: ^3.11.3
   printing: ^5.14.2
   path_provider: ^2.1.5
@@ -24,6 +27,9 @@ dependencies:
   geolocator: ^13.0.2
   daum_postcode_search: ^1.1.0
   web: ^1.1.1
+  sentry_flutter: ^8.14.2
+  geocoding: ^4.0.0
+  flutter_widget_from_html: ^0.16.0
 
 dev_dependencies:
   flutter_test:
@@ -44,3 +50,4 @@ flutter:
   assets:
     - assets/icon/
     - assets/fixtures/
+    - assets/legal/

@@ -10,6 +10,7 @@ import 'package:map/core/geo/map_viewport_bounds.dart';
 import 'package:map/features/job_seeker/domain/utils/job_map_cluster_engine.dart';
 import 'package:map/features/job_seeker/domain/utils/mock_map_viewport.dart';
 import 'package:map/core/geo/device_location_service.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_floating_insets.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_current_location_button.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_search_area_button.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_zoom_control_bar.dart';
@@ -44,10 +45,10 @@ class JobSeekerMockMap extends StatefulWidget {
 }
 
 class JobSeekerMockMapState extends State<JobSeekerMockMap> {
-  double _zoom = 12.5;
+  double _zoom = MapConstants.defaultZoom;
   Offset _panOffset = Offset.zero;
   static const _minZoom = 10.0;
-  static const _maxZoom = 16.0;
+  static const _maxZoom = 21.0;
 
   void _notifyViewportChanged() => widget.onViewportChanged?.call();
 
@@ -175,20 +176,19 @@ class JobSeekerMockMapState extends State<JobSeekerMockMap> {
                 ),
               ),
             Positioned(
-              left: 16,
-              right: 16,
-              bottom: 20,
+              left: 0,
+              right: 0,
+              bottom: MapFloatingInsets.searchAreaButtonBottom(context),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (widget.areaSearchPending) ...[
+                  if (widget.areaSearchPending)
                     MapSearchAreaButton(
                       loading: widget.areaSearchLoading,
                       onPressed: widget.onSearchArea,
                     ),
-                    const SizedBox(height: 16),
-                  ],
+                  if (widget.areaSearchPending) const SizedBox(height: 16),
                   MapZoomControlBar(
                     zoom: _zoom,
                     minZoom: _minZoom,
@@ -200,7 +200,7 @@ class JobSeekerMockMapState extends State<JobSeekerMockMap> {
             ),
             MapCurrentLocationButton(
               onMockLocate: _focusMockOnUserLocation,
-              bottom: 130,
+              bottom: MapFloatingInsets.searchAreaButtonBottom(context) + 56,
             ),
           ],
         );

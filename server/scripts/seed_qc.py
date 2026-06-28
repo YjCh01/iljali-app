@@ -21,6 +21,8 @@ from app.services.admin_ops_service import (  # noqa: E402
     bulk_import_jobs,
     distribute_applications,
     grant_wallet_credits,
+    seed_employers,
+    seed_qc_visual_scenario,
     seed_seekers,
 )
 
@@ -33,6 +35,11 @@ def main() -> None:
     parser.add_argument("--wallet-credits", type=int, default=30)
     parser.add_argument("--distribute-post", type=str, default="")
     parser.add_argument("--distribute-max", type=int, default=100)
+    parser.add_argument(
+        "--visual-scenario",
+        action="store_true",
+        help="테스트기업 알파 + QC구직자 0001 지원 시나리오",
+    )
     args = parser.parse_args()
 
     Base.metadata.create_all(bind=engine)
@@ -57,7 +64,10 @@ def main() -> None:
                 company_key=args.wallet_brn,
                 package_credits=args.wallet_credits,
             )
-            print(f"wallet: available={result.get('available_push_credits')}")
+            print(f"wallet: {result}")
+
+        emp = seed_employers(db)
+        print(f"employers: {emp}")
 
         if args.distribute_post:
             result = distribute_applications(
@@ -66,6 +76,10 @@ def main() -> None:
                 max_applications=args.distribute_max,
             )
             print(f"applications: {result}")
+
+        if args.visual_scenario:
+            result = seed_qc_visual_scenario(db)
+            print(f"visual_scenario: {result}")
     finally:
         db.close()
 

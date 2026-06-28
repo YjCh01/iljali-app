@@ -1,6 +1,7 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/widgets/transient_snack_bar.dart';
@@ -53,13 +54,8 @@ Future<ExtraPushConfirmResult?> showExtraPushConfirmSheet(
   ExtraPushSheetMode mode = ExtraPushSheetMode.dispatch,
 }) async {
   clearSnackBarQueue(context);
-  final result = await showModalBottomSheet<ExtraPushConfirmResult>(
+  final result = await showAdaptiveSheet<ExtraPushConfirmResult>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (context) => _ExtraPushConfirmSheet(
       post: post,
       availablePushCredits: availablePushCredits,

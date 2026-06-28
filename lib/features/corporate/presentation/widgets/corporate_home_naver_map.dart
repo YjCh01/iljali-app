@@ -54,6 +54,8 @@ class CorporateHomeNaverMap extends StatefulWidget {
 
     this.onMapBackgroundTap,
 
+    this.onMapCoordinateTap,
+
   });
 
 
@@ -73,6 +75,8 @@ class CorporateHomeNaverMap extends StatefulWidget {
   final ValueChanged<CorporateShuttleMapOverlay>? onShuttleStopTap;
 
   final VoidCallback? onMapBackgroundTap;
+
+  final void Function(double latitude, double longitude)? onMapCoordinateTap;
 
 
 
@@ -418,7 +422,7 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
         centerOnPin: widget.centerOnPin,
 
-        initialZoom: 12.5,
+        initialZoom: MapConstants.defaultZoom,
 
       );
 
@@ -475,17 +479,22 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
             onCameraIdle: () => unawaited(_persistViewport()),
 
-            onMapTap: widget.onMapBackgroundTap == null
-
+            onMapTap: widget.onMapCoordinateTap == null &&
+                    widget.onMapBackgroundTap == null
                 ? null
-
-                : (_, __) => widget.onMapBackgroundTap!(),
+                : (lat, lng) {
+                    if (widget.onMapCoordinateTap != null) {
+                      widget.onMapCoordinateTap!(lat, lng);
+                    } else {
+                      widget.onMapBackgroundTap?.call();
+                    }
+                  },
 
             onMarkerTap: (id) {
 
               for (final pin in widget.pins) {
 
-                if (pin.post.id == id) {
+                if (pin.mapMarkerId == id || pin.post.id == id) {
 
                   widget.onPinTap(pin);
 

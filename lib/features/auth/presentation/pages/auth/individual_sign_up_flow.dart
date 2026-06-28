@@ -1,105 +1,77 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
-import 'package:map/core/session/auth_session.dart';
-import 'package:map/core/session/auth_user.dart';
-import 'package:map/core/session/member_type.dart';
-import 'package:map/features/auth/domain/services/mock_phone_verification_service.dart';
-import 'package:map/features/auth/domain/usecases/validate_sign_up_form_usecase.dart';
+import 'package:map/core/legal/legal_consent_catalog.dart';
+import 'package:map/features/auth/data/repositories/individual_auth_repository.dart';
+import 'package:map/features/auth/domain/services/phone_verification_service.dart';
+import 'package:map/features/auth/domain/usecases/validate_basic_sign_up_form_usecase.dart';
 import 'package:map/features/auth/domain/validators/phone_validator.dart';
 import 'package:map/features/auth/presentation/widgets/auth_form_card.dart';
 import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart';
 import 'package:map/features/auth/presentation/widgets/auth_scaffold.dart';
 import 'package:map/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.dart';
-import 'package:map/features/job_seeker/domain/entities/seeker_work_availability.dart';
-import 'package:map/features/job_seeker/presentation/widgets/seeker_work_availability_picker.dart';
+import 'package:map/features/job_seeker/domain/utils/seeker_profile_readiness.dart';
 
 enum _IndividualSignUpStep {
   phone,
   phoneVerify,
-  memberInfo,
-  region,
-  jobCategories,
-  schedule,
-  photo,
-  profile,
+  account,
 }
 
-/// 개인회원 다단계 가입 — 휴대폰 인증 우선 → 매칭 정보 → 홈
+/// 개인회원 1단계 가입 — 휴대폰 본인인증 + 이메일(아이디)·비밀번호
+///
+/// 실주소·근무지역·스케줄 등 2단계는 [SeekerProfileOnboardingFlow].
 class IndividualSignUpFlow extends StatefulWidget {
-  const IndividualSignUpFlow({super.key});
+  const IndividualSignUpFlow({
+    super.key,
+    PhoneVerificationService? phoneVerification,
+  }) : _phoneVerification = phoneVerification;
+
+  final PhoneVerificationService? _phoneVerification;
 
   @override
   State<IndividualSignUpFlow> createState() => _IndividualSignUpFlowState();
 }
 
 class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
-  final _validateSignUp = const ValidateSignUpFormUseCase();
-  final _phoneVerification = MockPhoneVerificationService.instance;
+  late final PhoneVerificationService _phoneVerification =
+      widget._phoneVerification ?? PhoneVerificationService();
+  final _validateBasic = const ValidateBasicSignUpFormUseCase();
 
   _IndividualSignUpStep _step = _IndividualSignUpStep.phone;
 
   final _phoneController = TextEditingController();
   final _codeController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _dobController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _passwordConfirmController = TextEditingController();
-  final _experienceController = TextEditingController();
-  final _regionSearchController = TextEditingController();
 
   bool _phoneVerified = false;
+  String? _phoneVerifiedToken;
   bool _sendingCode = false;
   bool _obscurePassword = true;
   bool _obscurePasswordConfirm = true;
   bool _termsAccepted = false;
   bool _submitting = false;
 
-  SeekerGender? _gender;
-  SeekerNationality? _nationality = SeekerNationality.domestic;
-  final _selectedRegions = <String>{};
-  final _selectedCategories = <String>{};
-  SeekerWorkAvailability _availability = const SeekerWorkAvailability();
-  String? _photoRef;
-
   String? _phoneError;
   String? _codeError;
-  String? _nameError;
-  String? _dobError;
   String? _emailError;
   String? _passwordError;
   String? _passwordConfirmError;
   String? _termsError;
-  String? _regionError;
-  String? _categoryError;
-  String? _scheduleError;
 
-  static const _stepLabels = [
-    '휴대폰',
-    '인증',
-    '회원정보',
-    '근무지역',
-    '희망업무',
-    '스케줄',
-    '사진',
-    '프로필',
-  ];
+  static const _stepLabels = ['휴대폰', '본인인증', '계정 만들기'];
 
   @override
   void dispose() {
     _phoneController.dispose();
     _codeController.dispose();
-    _nameController.dispose();
-    _dobController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _passwordConfirmController.dispose();
-    _experienceController.dispose();
-    _regionSearchController.dispose();
     super.dispose();
   }
 
@@ -153,14 +125,19 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
     }
   }
 
-  void _verifyCode() {
+  Future<void> _verifyCode() async {
     final phone = _phoneController.text.trim();
     final code = _codeController.text.trim();
     if (code.length != 6) {
       setState(() => _codeError = '인증번호 6자리를 입력해 주세요.');
       return;
     }
-    if (!_phoneVerification.verify(phone, code)) {
+    final result = await _phoneVerification.verifyAsync(
+      phone,
+      code,
+      purpose: PhoneVerificationPurpose.signup,
+    );
+    if (!result.verified || result.phoneVerifiedToken == null) {
       setState(() => _codeError = '인증번호가 올바르지 않습니다.');
       _snack('인증번호를 다시 확인해 주세요.');
       return;
@@ -168,26 +145,17 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
     setState(() {
       _codeError = null;
       _phoneVerified = true;
+      _phoneVerifiedToken = result.phoneVerifiedToken;
     });
-    _goNext(_IndividualSignUpStep.memberInfo);
+    _goNext(_IndividualSignUpStep.account);
   }
 
-  void _validateMemberInfo() {
-    final signUpResult = _validateSignUp(
-      name: _nameController.text,
-      phone: _phoneController.text,
+  void _validateAccount() {
+    final signUpResult = _validateBasic(
       email: _emailController.text,
       password: _passwordController.text,
       passwordConfirm: _passwordConfirmController.text,
     );
-
-    final dob = _dobController.text.trim();
-    String? dobError;
-    if (dob.isEmpty) {
-      dobError = '생년월일을 입력해 주세요.';
-    } else if (!RegExp(r'^\d{8}$').hasMatch(dob.replaceAll('-', ''))) {
-      dobError = 'YYYYMMDD 형식으로 입력해 주세요.';
-    }
 
     String? termsError;
     if (!_termsAccepted) {
@@ -195,103 +163,65 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
     }
 
     setState(() {
-      _nameError = signUpResult.nameError;
-      _phoneError = signUpResult.phoneError;
       _emailError = signUpResult.emailError;
       _passwordError = signUpResult.passwordError;
       _passwordConfirmError = signUpResult.passwordConfirmError;
-      _dobError = dobError;
       _termsError = termsError;
     });
 
-    if (!signUpResult.isValid || dobError != null || termsError != null) {
+    if (!signUpResult.isValid || termsError != null) {
       _snack('입력 내용을 확인해 주세요.');
       return;
     }
-    if (_gender == null || _nationality == null) {
-      _snack('성별과 국적을 선택해 주세요.');
-      return;
-    }
-    _goNext(_IndividualSignUpStep.region);
+    _completeBasicSignUp();
   }
 
-  void _validateRegion() {
-    if (_selectedRegions.isEmpty) {
-      setState(() => _regionError = '희망 근무 지역을 하나 이상 선택해 주세요.');
-      _snack('희망 근무 지역을 선택해 주세요.');
-      return;
-    }
-    setState(() => _regionError = null);
-    _goNext(_IndividualSignUpStep.jobCategories);
-  }
-
-  void _validateCategories() {
-    if (_selectedCategories.isEmpty) {
-      setState(() => _categoryError = '희망 업무를 하나 이상 선택해 주세요.');
-      _snack('희망 업무를 선택해 주세요.');
-      return;
-    }
-    setState(() => _categoryError = null);
-    _goNext(_IndividualSignUpStep.schedule);
-  }
-
-  void _validateSchedule() {
-    if (_availability.isEmpty) {
-      setState(() => _scheduleError = '근무 가능 시간을 선택해 주세요.');
-      _snack('근무 가능 스케줄을 설정해 주세요.');
-      return;
-    }
-    setState(() => _scheduleError = null);
-    _goNext(_IndividualSignUpStep.photo);
-  }
-
-  Future<void> _pickPhoto() async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery);
-    if (file == null) return;
-    setState(() => _photoRef = file.path);
-  }
-
-  Future<void> _completeSignUp() async {
+  Future<void> _completeBasicSignUp() async {
     if (_submitting) return;
+    final token = _phoneVerifiedToken;
+    if (token == null || !_phoneVerified) {
+      _snack('휴대폰 본인인증을 완료해 주세요.');
+      return;
+    }
+
     setState(() => _submitting = true);
 
-    final dobRaw = _dobController.text.replaceAll('-', '').trim();
-    final year = int.parse(dobRaw.substring(0, 4));
-    final month = int.parse(dobRaw.substring(4, 6));
-    final day = int.parse(dobRaw.substring(6, 8));
-
+    final email = _emailController.text.trim();
     final profile = SeekerMemberProfile(
-      phoneVerified: _phoneVerified,
-      dateOfBirth: DateTime(year, month, day),
-      gender: _gender,
-      nationality: _nationality,
-      preferredRegions: _selectedRegions.toList(),
-      preferredJobCategories: _selectedCategories.toList(),
-      workAvailability: _availability,
-      profilePhotoRef: _photoRef,
-      experienceSummary: _experienceController.text.trim().isEmpty
-          ? null
-          : _experienceController.text.trim(),
+      phoneVerified: true,
       termsAcceptedAt: DateTime.now(),
-      onboardingCompletedAt: DateTime.now(),
+      termsVersionAccepted: LegalConsentCatalog.termsVersion,
+      privacyVersionAccepted: LegalConsentCatalog.privacyVersion,
     );
 
-    await AuthSession.instance.signIn(
-      AuthUser(
-        name: _nameController.text.trim(),
-        email: _emailController.text.trim(),
-        phone: _phoneController.text.trim(),
-        memberType: MemberType.individual,
+    try {
+      await IndividualAuthRepository.signUp(
+        email: email,
+        password: _passwordController.text,
+        displayName: displayNameFromEmail(email),
+        phone: _phoneController.text,
+        phoneVerifiedToken: token,
         seekerProfile: profile,
-      ),
-    );
+      );
+      _phoneVerification.clear();
 
-    _phoneVerification.clear();
-
-    if (!mounted) return;
-    setState(() => _submitting = false);
-    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _snack(SeekerProfileReadiness.browseHintMessage);
+      Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      final raw = error.toString();
+      final message = raw.contains('Failed to fetch') ||
+              raw.contains('ClientException')
+          ? '서버 연결에 실패했습니다. 네트워크를 확인하거나, 휴대폰 인증부터 다시 시도해 주세요.'
+          : raw
+              .replaceFirst('ArgumentError: ', '')
+              .replaceFirst('StateError: ', '')
+              .replaceFirst('IljariApiException: ', '');
+      _snack(message.isEmpty ? '가입에 실패했습니다.' : message);
+    }
   }
 
   @override
@@ -315,12 +245,7 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
               switch (_step) {
                 _IndividualSignUpStep.phone => _buildPhoneStep(),
                 _IndividualSignUpStep.phoneVerify => _buildPhoneVerifyStep(),
-                _IndividualSignUpStep.memberInfo => _buildMemberInfoStep(),
-                _IndividualSignUpStep.region => _buildRegionStep(),
-                _IndividualSignUpStep.jobCategories => _buildJobCategoriesStep(),
-                _IndividualSignUpStep.schedule => _buildScheduleStep(),
-                _IndividualSignUpStep.photo => _buildPhotoStep(),
-                _IndividualSignUpStep.profile => _buildProfileStep(),
+                _IndividualSignUpStep.account => _buildAccountStep(),
               },
             ],
           ),
@@ -355,7 +280,7 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          '휴대폰 번호 인증',
+          '휴대폰 본인인증',
           style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.w800,
@@ -364,10 +289,11 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
         ),
         const SizedBox(height: 8),
         Text(
-          '본인 확인을 위해 휴대폰 번호를 먼저 인증합니다.',
+          '본인 확인을 위해 휴대폰 번호를 인증합니다.\n'
+          '(추후 다날 등 본인인증 연동 예정)',
           style: TextStyle(
             fontSize: 14,
-            height: 1.4,
+            height: 1.45,
             color: AppColors.textSecondary.withValues(alpha: 0.95),
           ),
         ),
@@ -407,7 +333,7 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
         ),
         const SizedBox(height: 8),
         Text(
-          '${_phoneController.text}로 발송된 6자리 번호를 입력해 주세요.',
+          '${_phoneController.text.trim()} 으로 발송된 번호를 입력하세요.',
           style: TextStyle(
             fontSize: 14,
             height: 1.4,
@@ -441,12 +367,12 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
     );
   }
 
-  Widget _buildMemberInfoStep() {
+  Widget _buildAccountStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          '회원정보',
+          '계정 만들기',
           style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.w800,
@@ -455,73 +381,16 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
         ),
         const SizedBox(height: 8),
         Text(
-          '이름·생년월일·계정 정보와 약관 동의를 진행합니다.',
+          '이메일이 로그인 아이디입니다. 가입 후 지도에서 공고를 바로 볼 수 있습니다.',
           style: TextStyle(
             fontSize: 14,
-            height: 1.4,
+            height: 1.45,
             color: AppColors.textSecondary.withValues(alpha: 0.95),
           ),
         ),
         const SizedBox(height: 24),
         AuthTextField(
-          label: '이름',
-          hint: '홍길동',
-          controller: _nameController,
-          errorText: _nameError,
-        ),
-        const SizedBox(height: 16),
-        AuthTextField(
-          label: '생년월일',
-          hint: '19900101',
-          controller: _dobController,
-          keyboardType: TextInputType.number,
-          maxLength: 8,
-          errorText: _dobError,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        ),
-        const SizedBox(height: 16),
-        Text(
-          '성별',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary.withValues(alpha: 0.95),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          children: SeekerGender.values.map((g) {
-            return ChoiceChip(
-              label: Text(g.label),
-              selected: _gender == g,
-              onSelected: (_) => setState(() => _gender = g),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          '국적',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary.withValues(alpha: 0.95),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          children: SeekerNationality.values.map((n) {
-            return ChoiceChip(
-              label: Text(n.label),
-              selected: _nationality == n,
-              onSelected: (_) => setState(() => _nationality = n),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 16),
-        AuthTextField(
-          label: '이메일',
+          label: '이메일 (아이디)',
           hint: 'example@email.com',
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
@@ -530,7 +399,7 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
         const SizedBox(height: 16),
         AuthTextField(
           label: '비밀번호',
-          hint: '8자 이상 입력',
+          hint: '8자 이상, 2종류 이상 조합',
           controller: _passwordController,
           obscureText: _obscurePassword,
           errorText: _passwordError,
@@ -543,6 +412,14 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
             ),
             onPressed: () =>
                 setState(() => _obscurePassword = !_obscurePassword),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '숫자·영문·특수문자 중 2가지 이상을 포함해 주세요.',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary.withValues(alpha: 0.85),
           ),
         ),
         const SizedBox(height: 16),
@@ -573,291 +450,25 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
             onChanged: (value) =>
                 setState(() => _termsAccepted = value ?? false),
             title: const Text('서비스 이용약관 및 개인정보 처리방침에 동의합니다.'),
-            subtitle: _termsError != null
-                ? Text(_termsError!, style: const TextStyle(color: Colors.red))
-                : null,
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_termsError != null)
+                  Text(_termsError!, style: const TextStyle(color: Colors.red)),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.of(context).pushNamed(AppRoutes.legalDocuments),
+                  child: const Text('약관·개인정보 전문 보기'),
+                ),
+              ],
+            ),
             controlAffinity: ListTileControlAffinity.leading,
           ),
         ),
         const SizedBox(height: 24),
-        AuthPrimaryButton(label: '다음', onPressed: _validateMemberInfo),
-      ],
-    );
-  }
-
-  Widget _buildRegionStep() {
-    final query = _regionSearchController.text.trim();
-    final filtered = query.isEmpty
-        ? SeekerRegionPresets.all
-        : SeekerRegionPresets.all
-            .where((r) => r.contains(query))
-            .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          '희망 근무 지역',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '근무하고 싶은 지역을 선택하세요. 여러 곳 선택 가능합니다.',
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.4,
-            color: AppColors.textSecondary.withValues(alpha: 0.95),
-          ),
-        ),
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: () {
-            setState(() => _selectedRegions.add('현재 위치 (GPS)'));
-          },
-          icon: const Icon(Icons.my_location_outlined),
-          label: const Text('현재 위치로 추가'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _regionSearchController,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: '지역 검색',
-            prefixIcon: const Icon(Icons.search),
-            filled: true,
-            fillColor: AppColors.surface,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.searchBarBorder),
-            ),
-          ),
-        ),
-        if (_regionError != null) ...[
-          const SizedBox(height: 8),
-          Text(_regionError!, style: const TextStyle(color: Colors.red)),
-        ],
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: filtered.map((region) {
-            final selected = _selectedRegions.contains(region);
-            return FilterChip(
-              label: Text(region),
-              selected: selected,
-              onSelected: (value) {
-                setState(() {
-                  if (value) {
-                    _selectedRegions.add(region);
-                  } else {
-                    _selectedRegions.remove(region);
-                  }
-                });
-              },
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 24),
-        AuthPrimaryButton(label: '다음', onPressed: _validateRegion),
-      ],
-    );
-  }
-
-  Widget _buildJobCategoriesStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          '희망 업무',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '관심 있는 업무 유형을 선택하세요.',
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.4,
-            color: AppColors.textSecondary.withValues(alpha: 0.95),
-          ),
-        ),
-        if (_categoryError != null) ...[
-          const SizedBox(height: 8),
-          Text(_categoryError!, style: const TextStyle(color: Colors.red)),
-        ],
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: SeekerJobCategories.all.map((category) {
-            final selected = _selectedCategories.contains(category);
-            return FilterChip(
-              label: Text(category),
-              selected: selected,
-              onSelected: (value) {
-                setState(() {
-                  if (value) {
-                    _selectedCategories.add(category);
-                  } else {
-                    _selectedCategories.remove(category);
-                  }
-                });
-              },
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 24),
-        AuthPrimaryButton(label: '다음', onPressed: _validateCategories),
-      ],
-    );
-  }
-
-  Widget _buildScheduleStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          '근무 가능 스케줄',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '패턴을 빠르게 선택하거나, 요일별로 시간을 추가하세요.',
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.4,
-            color: AppColors.textSecondary.withValues(alpha: 0.95),
-          ),
-        ),
-        if (_scheduleError != null) ...[
-          const SizedBox(height: 8),
-          Text(_scheduleError!, style: const TextStyle(color: Colors.red)),
-        ],
-        const SizedBox(height: 16),
-        SeekerWorkAvailabilityPicker(
-          availability: _availability,
-          onChanged: (value) => setState(() => _availability = value),
-        ),
-        const SizedBox(height: 24),
-        AuthPrimaryButton(label: '다음', onPressed: _validateSchedule),
-      ],
-    );
-  }
-
-  Widget _buildPhotoStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          '프로필 사진',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '선택 사항입니다. 나중에 추가할 수 있어요.',
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.4,
-            color: AppColors.textSecondary.withValues(alpha: 0.95),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Center(
-          child: CircleAvatar(
-            radius: 52,
-            backgroundColor: AppColors.primaryLight.withValues(alpha: 0.25),
-            child: Icon(
-              _photoRef != null ? Icons.check_circle_outline : Icons.person_outline,
-              size: 48,
-              color: _photoRef != null ? AppColors.primary : null,
-            ),
-          ),
-        ),
-        if (_photoRef != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            '사진이 선택되었습니다',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary.withValues(alpha: 0.9),
-            ),
-          ),
-        ],
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: _pickPhoto,
-          icon: const Icon(Icons.photo_library_outlined),
-          label: const Text('사진 선택'),
-        ),
-        const SizedBox(height: 12),
-        TextButton(
-          onPressed: () => _goNext(_IndividualSignUpStep.profile),
-          child: const Text('건너뛰기'),
-        ),
-        const SizedBox(height: 12),
         AuthPrimaryButton(
-          label: '다음',
-          onPressed: () => _goNext(_IndividualSignUpStep.profile),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProfileStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          '경력·소개',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '간단한 경력이나 자기소개를 적어 주세요. (선택)',
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.4,
-            color: AppColors.textSecondary.withValues(alpha: 0.95),
-          ),
-        ),
-        const SizedBox(height: 24),
-        TextField(
-          controller: _experienceController,
-          maxLines: 5,
-          decoration: InputDecoration(
-            hintText: '예: 물류센터 6개월, 포장·피킹 경험',
-            filled: true,
-            fillColor: AppColors.surface,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.searchBarBorder),
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        AuthPrimaryButton(
-          label: _submitting ? '가입 중...' : '가입 완료',
-          onPressed: _submitting ? () {} : _completeSignUp,
+          label: _submitting ? '가입 중...' : '가입 완료 · 지도로 이동',
+          onPressed: _submitting ? () {} : _validateAccount,
         ),
       ],
     );

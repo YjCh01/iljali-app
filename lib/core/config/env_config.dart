@@ -83,7 +83,7 @@ abstract final class EnvConfig {
   /// Admin Ops API key (QC/운영 콘솔)
   static const String adminApiKey = String.fromEnvironment(
     'ADMIN_API_KEY',
-    defaultValue: 'qc-admin-dev-key',
+    defaultValue: 'iljari-admin-dev-key',
   );
 
   /// `run_admin.sh` — 앱 시작 시 /admin 콘솔으로 바로 진입
@@ -92,6 +92,34 @@ abstract final class EnvConfig {
     defaultValue: false,
   );
 
+  /// `run_seeker_web.sh` / `개인회원 실행.command` — 개인회원 로그인으로 바로 진입
+  static const bool individualEntry = bool.fromEnvironment(
+    'INDIVIDUAL_ENTRY',
+    defaultValue: false,
+  );
+
+  /// `run_corporate_web.sh` — 기업 둘러보기(채용 지도) 우선
+  static const bool corporateWebQc = bool.fromEnvironment(
+    'CORPORATE_WEB_QC',
+    defaultValue: false,
+  );
+
+  static const bool corporateEntry = bool.fromEnvironment(
+    'CORPORATE_ENTRY',
+    defaultValue: false,
+  );
+
+  static bool get isCorporateBrowseEntry => corporateEntry || corporateWebQc;
+
   static bool get isAdminOpsConfigured =>
       adminApiKey.isNotEmpty && adminApiKey != 'YOUR_ADMIN_API_KEY';
+
+  /// Sentry DSN — 설정 시 error_reporting.dart에서 활성화
+  static const String sentryDsn = String.fromEnvironment(
+    'SENTRY_DSN',
+    defaultValue: '',
+  );
+
+  static bool get isSentryConfigured =>
+      sentryDsn.isNotEmpty && !sentryDsn.startsWith('YOUR_');
 }

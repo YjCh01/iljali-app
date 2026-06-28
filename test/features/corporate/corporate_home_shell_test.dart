@@ -8,6 +8,7 @@ import 'package:map/core/session/auth_user.dart';
 
 import 'package:map/core/session/member_type.dart';
 
+import 'package:map/core/session/guest_browse_intent.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_home_shell_page.dart';
 
 import 'package:map/features/corporate/presentation/widgets/corporate_bottom_nav.dart';
@@ -73,6 +74,19 @@ void main() {
   });
 
 
+
+  testWidgets('corporate guest lands on corporate home shell', (tester) async {
+    GuestBrowseIntent.useCorporate();
+
+    await tester.pumpWidget(
+      const MaterialApp(home: RoleBasedHomePage()),
+    );
+    await _pumpFrames(tester, count: 10);
+
+    expect(find.byType(CorporateHomeShellPage), findsOneWidget);
+    expect(find.text('둘러보기'), findsOneWidget);
+    expect(find.text('로그인'), findsWidgets);
+  });
 
   testWidgets('corporate user lands on corporate home shell', (tester) async {
 

@@ -2,7 +2,24 @@
 
 FastAPI 백엔드 — 사업자 검증, 토스 결제, 푸시·거점 지갑, 공고·지원·채팅 동기화, 외부 공고 스크래핑.
 
-## 로컬 실행 (SQLite)
+## 운영 (NCP — 기본 테스트 대상)
+
+| 항목 | 값 |
+|------|-----|
+| API | `http://api.iljari.app:8000` |
+| 서버 | `iljari-api-01` (`211.188.56.77`) |
+| 코드 | `/opt/iljari/server` (Docker Compose) |
+| 헬스 | `GET /health` |
+
+```bash
+curl http://api.iljari.app:8000/health
+# Mac에서 QC 시드
+./scripts/seed_ncp_server.sh
+```
+
+Flutter·QC 스크립트는 **맥에서 UI만 실행**, API·DB는 위 서버를 사용합니다 (`scripts/remote_api.env`).
+
+## 로컬 실행 (SQLite, opt-in)
 
 ```powershell
 cd d:\1jari\server
@@ -26,6 +43,28 @@ docker compose up --build
 ```
 
 API: `http://localhost:8000` · DB: PostgreSQL 16 (`iljari` / `iljari`)
+
+## Staging HTTPS (nginx + Postgres)
+
+로컬 self-signed TLS 또는 실서버 Let's Encrypt.
+
+```bash
+# repo root
+./run_staging.sh
+```
+
+1. `server/staging/env.example` → `server/.env.staging` (자동 복사)
+2. `/etc/hosts`: `127.0.0.1 app.staging.iljari.local api.staging.iljari.local`
+3. App `https://app.staging.iljari.local` · API `https://api.staging.iljari.local`
+4. Toss 웹훅: `https://api.staging.iljari.local/v1/payments/webhook/toss`
+
+실서버: `STAGING_APP_HOST` / `STAGING_API_HOST`를 실제 도메인으로 바꾸고 certbot으로 `server/staging/certs/fullchain.pem`·`privkey.pem` 교체.
+
+| 변수 | 용도 |
+|------|------|
+| `PAYMENT_WEB_SUCCESS_URL` | Toss 웹 결제 성공 리다이렉트 |
+| `PAYMENT_WEB_FAIL_URL` | Toss 웹 결제 실패 리다이렉트 |
+| `SIMPLE_AUTH_CALLBACK_URL` | 간편인증 콜백 (공개 HTTPS 필수) |
 
 ## 환경 변수
 
@@ -58,13 +97,15 @@ API: `http://localhost:8000` · DB: PostgreSQL 16 (`iljari` / `iljari`)
 
 ## Flutter 연동
 
-```powershell
-cd d:\1jari
-flutter run -d chrome --dart-define=COMPLIANCE_API_URL=http://127.0.0.1:8000
+```bash
+# 기본 (NCP)
+flutter run -d chrome --dart-define=COMPLIANCE_API_URL=http://api.iljari.app:8000
+# 또는
+./run_web.sh
 ```
 
-- Android 에뮬레이터: `http://10.0.2.2:8000`
-- 실기기·스테이징: 배포된 API URL
+- 로컬 API: `ILJARI_API_MODE=local ./run_web.sh` → `http://127.0.0.1:8000`
+- Android 에뮬 + 로컬 API: `http://10.0.2.2:8000`
 
 결제: `COMPLIANCE_API_URL` 설정 시 `RemotePaymentsGatewayService` → 서버 `/v1/payments/charge` → WebView checkout → `/v1/payments/confirm`
 

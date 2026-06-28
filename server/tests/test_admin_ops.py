@@ -16,10 +16,12 @@ def teardown_module():
     Base.metadata.drop_all(bind=engine)
 
 
-def test_admin_ops_health():
-    r = client.get("/v1/admin/ops/health", headers=ADMIN_HEADERS)
-    assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+def test_admin_ops_stats():
+    r = client.get("/v1/admin/ops/stats", headers=ADMIN_HEADERS)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "seekers" in body
+    assert "job_posts" in body
 
 
 def test_seed_seekers_and_sanction():
@@ -75,3 +77,46 @@ def test_bulk_jobs_and_sync_bootstrap():
     body = sync.json()
     assert body["counts"]["posts"] >= 1
     assert "qc_test_post" in body["post_entitlements"]
+
+
+def test_corporate_signup_verification_admin_approve():
+    signup = client.post(
+        "/v1/auth/signup/corporate",
+        json={
+            "email": "corp-verify@test.co.kr",
+            "password": "TestPass1!",
+            "display_name": "라인헬스케어 담당",
+            "company_key": "1234567890",
+            "company_name": "라인헬스케어",
+            "phone": "01012345678",
+            "contact_person_name": "담당자",
+            "handler_code": "main",
+            "org_role": "recruiter",
+        },
+    )
+    assert signup.status_code == 200, signup.text
+
+    verify = client.get(
+        "/v1/admin/ops/companies/1234567890/verification",
+        headers=ADMIN_HEADERS,
+    )
+    assert verify.status_code == 200, verify.text
+    body = verify.json()
+    assert body["needs_admin_approval"] is True
+    assert body["has_registered_member"] is True
+    assert body["has_server_record"] is False
+
+    approve = client.post(
+        "/v1/admin/ops/companies/1234567890/approve-verification",
+        headers=ADMIN_HEADERS,
+        json={},
+    )
+    assert approve.status_code == 200, approve.text
+    assert approve.json()["verification_status"] == "verified"
+
+    after = client.get(
+        "/v1/admin/ops/companies/1234567890/verification",
+        headers=ADMIN_HEADERS,
+    )
+    assert after.json()["needs_admin_approval"] is False
+    assert after.json()["has_server_record"] is True

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/calendar/korean_public_holidays.dart';
 import 'package:map/core/constants/app_colors.dart';
 
@@ -84,10 +85,8 @@ Future<DateTime?> showKoreanDatePickerSheet(
   String title = '날짜 선택',
 }) {
   final safeInitial = _clampDate(initialDate, firstDate, lastDate);
-  return showModalBottomSheet<DateTime>(
+  return showAdaptiveSheet<DateTime>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (context) => _KoreanDatePickerSheet(
       title: title,
       initialDate: safeInitial,

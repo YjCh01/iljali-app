@@ -1,9 +1,12 @@
 import 'dart:convert';
 
+import 'package:map/core/api/iljari_api_client.dart';
+import 'package:map/core/config/env_config.dart';
 import 'package:map/core/hiring/application_chat_message.dart';
+import 'package:map/core/hiring/chat_message_kind.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 지원 건 채팅 메시지 — SharedPreferences 영속
+/// 지원 건 채팅 메시지 — 로컬 캐시 + 서버 동기화
 class ApplicationChatMessageRepository {
   ApplicationChatMessageRepository(this._prefs);
 
@@ -35,6 +38,37 @@ class ApplicationChatMessageRepository {
     }
   }
 
+  Future<List<ApplicationChatMessage>> loadSynced({
+    required String applicationId,
+    required String companyName,
+    required String postTitle,
+    required String seekerName,
+  }) async {
+    if (EnvConfig.isComplianceApiEnabled) {
+      final client = IljariApiClient();
+      if (client.isEnabled) {
+        try {
+          final remote = await client.listChatMessages(applicationId);
+          if (remote.isNotEmpty) {
+            final mapped = remote.map(_fromServerRow).toList()
+              ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+            await saveAll(applicationId, mapped);
+            return mapped;
+          }
+        } on Object {
+          // 서버 실패 시 로컬 폴백
+        }
+      }
+    }
+
+    return ensureWelcomeMessages(
+      applicationId: applicationId,
+      companyName: companyName,
+      postTitle: postTitle,
+      seekerName: seekerName,
+    );
+  }
+
   Future<void> saveAll(
     String applicationId,
     List<ApplicationChatMessage> messages,
@@ -49,6 +83,7 @@ class ApplicationChatMessageRepository {
   ) async {
     final current = await load(applicationId);
     await saveAll(applicationId, [...current, message]);
+    await _pushToServer(applicationId, message);
   }
 
   Future<void> appendSystemMessage({
@@ -89,6 +124,47 @@ class ApplicationChatMessageRepository {
       ),
     ];
     await saveAll(applicationId, seeded);
+    for (final message in seeded) {
+      await _pushToServer(applicationId, message);
+    }
     return seeded;
+  }
+
+  Future<void> _pushToServer(
+    String applicationId,
+    ApplicationChatMessage message,
+  ) async {
+    if (!EnvConfig.isComplianceApiEnabled) return;
+    final client = IljariApiClient();
+    if (!client.isEnabled) return;
+    try {
+      await client.appendChatMessage(applicationId, {
+        'sender_role': _senderRole(message),
+        'sender_name': message.fromEmployer ? 'employer' : 'seeker',
+        'body': message.text,
+        'message_type': message.kind.name,
+      });
+    } on Object {
+      // 로컬 메시지는 유지
+    }
+  }
+
+  String _senderRole(ApplicationChatMessage message) {
+    if (message.isSystem) return 'system';
+    return message.fromEmployer ? 'employer' : 'seeker';
+  }
+
+  ApplicationChatMessage _fromServerRow(Map<String, dynamic> row) {
+    final role = row['sender_role'] as String? ?? 'seeker';
+    final kindRaw = row['message_type'] as String? ?? 'text';
+    return ApplicationChatMessage(
+      id: row['id'] as String?,
+      fromEmployer: role == 'employer' || role == 'system',
+      text: row['body'] as String? ?? '',
+      sentAt: DateTime.tryParse(row['sent_at'] as String? ?? '') ??
+          DateTime.now(),
+      isSystem: role == 'system',
+      kind: ChatMessageKindX.parse(kindRaw),
+    );
   }
 }

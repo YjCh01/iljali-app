@@ -28,6 +28,14 @@ class AddressSearchResponse(BaseModel):
     message: str | None = None
 
 
+class AddressGeocodeResponse(BaseModel):
+    success: bool
+    latitude: float | None = None
+    longitude: float | None = None
+    road_address: str | None = None
+    message: str | None = None
+
+
 async def _geocode_kakao(client: httpx.AsyncClient, query: str) -> tuple[float, float] | None:
     if not settings.kakao_rest_api_key:
         return None
@@ -164,6 +172,56 @@ def _mock_results(keyword: str) -> list[AddressItem]:
     return [item for item in samples if _matches(item)]
 
 
+@router.get("/geocode", response_model=AddressGeocodeResponse)
+async def geocode_address(
+    q: str = Query(min_length=1, max_length=120, description="도로명·지번 전체 주소"),
+):
+    keyword = q.strip()
+    if not keyword:
+        return AddressGeocodeResponse(success=True, message="empty query")
+
+    async with httpx.AsyncClient() as client:
+        if settings.kakao_rest_api_key:
+            coord = await _geocode_kakao(client, keyword)
+            if coord:
+                return AddressGeocodeResponse(
+                    success=True,
+                    latitude=coord[0],
+                    longitude=coord[1],
+                    road_address=keyword,
+                )
+
+        if settings.juso_confm_key:
+            try:
+                items = await _search_juso(client, keyword)
+                for item in items:
+                    if item.latitude is not None and item.longitude is not None:
+                        return AddressGeocodeResponse(
+                            success=True,
+                            latitude=item.latitude,
+                            longitude=item.longitude,
+                            road_address=item.road_address,
+                        )
+            except httpx.HTTPError:
+                pass
+
+    mock = _mock_results(keyword)
+    if mock and mock[0].latitude is not None and mock[0].longitude is not None:
+        first = mock[0]
+        return AddressGeocodeResponse(
+            success=True,
+            latitude=first.latitude,
+            longitude=first.longitude,
+            road_address=first.road_address,
+            message="mock geocode",
+        )
+
+    return AddressGeocodeResponse(
+        success=True,
+        message="geocode unavailable — set KAKAO_REST_API_KEY or use NAVER Maps on web",
+    )
+
+
 @router.get("/search", response_model=AddressSearchResponse)
 async def search_addresses(
     q: str = Query(min_length=1, max_length=80, description="동·도로명·건물명"),
@@ -185,6 +243,19 @@ async def search_addresses(
             items = await _search_kakao_keyword(client, keyword)
             if items:
                 return AddressSearchResponse(success=True, results=items)
+
+            coord = await _geocode_kakao(client, keyword)
+            if coord:
+                return AddressSearchResponse(
+                    success=True,
+                    results=[
+                        AddressItem(
+                            road_address=keyword,
+                            latitude=coord[0],
+                            longitude=coord[1],
+                        )
+                    ],
+                )
 
     mock = _mock_results(keyword)
     if mock:

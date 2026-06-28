@@ -1,8 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_request_kind.dart';
 import 'package:map/features/corporate/domain/entities/payment_method.dart';
@@ -13,6 +14,7 @@ import 'package:map/features/corporate/domain/entities/saved_payment_method.dart
 import 'package:map/features/corporate/domain/services/job_post_payment_request_service.dart';
 import 'package:map/features/corporate/domain/services/payment_flow_helper.dart';
 import 'package:map/features/corporate/domain/services/payment_gateway_service.dart';
+import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/domain/services/saved_payment_method_service.dart';
 import 'package:map/features/corporate/presentation/widgets/payment/payment_amount_breakdown.dart';
 import 'package:map/features/corporate/presentation/widgets/payment/payment_method_selection_section.dart';
@@ -54,6 +56,7 @@ class _CorporateNotificationPaymentPageState
   List<SavedPaymentMethod> _savedCards = [];
   String? _selectedCardId;
   bool _useOtherMethod = false;
+  int _cashBalanceKrw = 0;
 
   JobPostPaymentRequestKind? get _effectiveKind =>
       widget.paymentKind ?? widget.bundle.paymentKind;
@@ -77,6 +80,15 @@ class _CorporateNotificationPaymentPageState
   void initState() {
     super.initState();
     _loadSavedCards();
+    _loadCashBalance();
+  }
+
+  Future<void> _loadCashBalance() async {
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    if (profile == null) return;
+    final wallet = await PushWalletService().loadWallet(profile);
+    if (!mounted) return;
+    setState(() => _cashBalanceKrw = wallet.cashBalanceKrw);
   }
 
   Future<void> _loadSavedCards() async {
@@ -232,6 +244,32 @@ class _CorporateNotificationPaymentPageState
                 const SizedBox(height: 8),
 
                 _OrderSummaryCard(bundle: bundle),
+                if (_cashBalanceKrw > 0) ...[
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        '보유금 ${EmployerPushWallet(cashBalanceKrw: _cashBalanceKrw).cashBalanceLabel}원 — '
+                        '결제 시 보유금 우선 차감, 부족분만 카드·간편결제로 청구됩니다.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.45,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary.withValues(alpha: 0.95),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 SavedCardCheckoutSection(
                   cards: _savedCards,

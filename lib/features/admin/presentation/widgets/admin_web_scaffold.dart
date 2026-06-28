@@ -6,8 +6,9 @@ import 'package:map/features/admin/domain/admin_ops_controller.dart';
 
 enum AdminNavSection {
   dashboard('대시보드', Icons.dashboard_outlined),
-  wallet('기업·이용권', Icons.account_balance_wallet_outlined),
-  members('회원·제재', Icons.people_outline),
+  map('공고 지도', Icons.map_outlined),
+  members('회원·이용권', Icons.people_outline),
+  chat('채팅 열람', Icons.forum_outlined),
   jobs('공고·핀', Icons.push_pin_outlined),
   qc('QC 시드', Icons.science_outlined),
   audit('감사 로그', Icons.receipt_long_outlined),
@@ -39,6 +40,7 @@ class AdminWebScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
     final apiReady = controller.apiReady;
+    final apiConnected = controller.apiConnected;
 
     if (wide) {
       return Scaffold(
@@ -50,6 +52,7 @@ class AdminWebScaffold extends StatelessWidget {
               width: _railWidth,
               section: section,
               apiReady: apiReady,
+              apiConnected: apiConnected,
               onSectionChanged: onSectionChanged,
             ),
             Expanded(
@@ -99,13 +102,28 @@ class _SideRail extends StatelessWidget {
     required this.width,
     required this.section,
     required this.apiReady,
+    required this.apiConnected,
     required this.onSectionChanged,
   });
 
   final double width;
   final AdminNavSection section;
   final bool apiReady;
+  final bool apiConnected;
   final ValueChanged<AdminNavSection> onSectionChanged;
+
+  String get _apiStatusLabel {
+    if (!apiReady) return 'API 미설정 — Admin 실행.command 사용';
+    if (!apiConnected) return 'API 연결 실패 — api.iljari.app 확인';
+    return 'API 연결됨 · QC=${EnvConfig.qcMode ? "ON" : "OFF"}';
+  }
+
+  Color get _apiStatusColor {
+    if (!apiReady || !apiConnected) {
+      return const Color(0xFFC62828).withValues(alpha: 0.35);
+    }
+    return const Color(0xFF2E7D32).withValues(alpha: 0.35);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,15 +160,11 @@ class _SideRail extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: apiReady
-                      ? const Color(0xFF2E7D32).withValues(alpha: 0.35)
-                      : const Color(0xFFC62828).withValues(alpha: 0.35),
+                  color: _apiStatusColor,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  apiReady
-                      ? 'API 연결됨 · QC=${EnvConfig.qcMode ? "ON" : "OFF"}'
-                      : 'API 미연결 — QC 실행.command 사용',
+                  _apiStatusLabel,
                   style: const TextStyle(color: Colors.white, fontSize: 11),
                 ),
               ),

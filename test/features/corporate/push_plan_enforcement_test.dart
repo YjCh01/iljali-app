@@ -6,7 +6,7 @@ import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
 
 void main() {
   group('PushPlanEnforcement', () {
-    test('default plan allows only 1km radius', () {
+    test('default plan allows only 700m radius', () {
       expect(
         PushPlanEnforcement.isRadiusAllowed(PushRadiusTier.standard1km),
         isTrue,

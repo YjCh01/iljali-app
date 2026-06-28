@@ -2,7 +2,7 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 
-/// 기업 지도 — 무료는 핀·밀도만, 유료는 경쟁 공고 열람
+/// 기업 지도 — 모든 기업회원이 타사 공고·셔틀 노선 열람 가능
 abstract final class CorporateMapContentAccessPolicy {
   static bool hasPaidIntelAccess(CorporateMemberProfile? profile) {
     if (profile == null) return false;
@@ -29,28 +29,12 @@ abstract final class CorporateMapContentAccessPolicy {
     required CorporateMemberProfile? viewerProfile,
     required Set<String> ownPostIds,
     required CorporateJobPost post,
-  }) {
-    if (isOwnPost(ownPostIds: ownPostIds, postId: post.id)) {
-      return true;
-    }
-    final viewerKey = viewerProfile?.companyKey;
-    final ownerKey = post.registeredBy?.companyKey;
-    if (viewerKey != null &&
-        ownerKey != null &&
-        viewerKey == ownerKey) {
-      return true;
-    }
-    return hasPaidIntelAccess(viewerProfile);
-  }
+  }) =>
+      true;
 
   static bool canViewShuttleContent({
     required CorporateMemberProfile? viewerProfile,
     required String routeCompanyKey,
-  }) {
-    final viewerKey = viewerProfile?.companyKey;
-    if (viewerKey != null && viewerKey == routeCompanyKey) {
-      return true;
-    }
-    return hasPaidIntelAccess(viewerProfile);
-  }
+  }) =>
+      true;
 }

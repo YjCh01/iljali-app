@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
@@ -42,7 +43,7 @@ class PushRegistrationCostBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '근무지 주변 1km 무료 노출',
+                  '근무지 주변 ${PushPackageCatalog.pushRadiusLabel} 무료 노출',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,

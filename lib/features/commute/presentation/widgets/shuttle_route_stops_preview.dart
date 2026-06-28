@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/map_constants.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_color_utils.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
@@ -66,7 +67,7 @@ class ShuttleRouteStopsPreview extends StatelessWidget {
   }
 
   double _zoomForStops(List<CommuteRouteStop> stops) {
-    if (stops.length < 2) return 14;
+    if (stops.length < 2) return MapConstants.defaultZoom;
     var maxSpan = 0.0;
     for (var i = 0; i < stops.length; i++) {
       for (var j = i + 1; j < stops.length; j++) {
@@ -79,8 +80,8 @@ class ShuttleRouteStopsPreview extends StatelessWidget {
     }
     if (maxSpan > 0.15) return 11;
     if (maxSpan > 0.05) return 12;
-    if (maxSpan > 0.02) return 13;
-    return 14;
+    if (maxSpan > 0.02) return MapConstants.defaultZoom - 1;
+    return MapConstants.defaultZoom;
   }
 }
 

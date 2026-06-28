@@ -1,8 +1,11 @@
 import 'package:map/core/compliance/business_verification_status.dart';
+import 'package:map/core/legal/legal_consent_catalog.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
+import 'package:map/features/job_seeker/domain/entities/seeker_credential_holding.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.dart';
+import 'package:map/features/job_seeker/domain/entities/seeker_work_availability.dart';
 
 /// 로컬 MVP 개발·QA용 고정 테스트 계정.
 ///
@@ -184,6 +187,19 @@ final class DevTestAccount {
         preferredRegions: const ['세종', '대전'],
         preferredJobCategories: const ['식품·공장', '청소·환경'],
         experienceSummary: '매장·주방 보조 경력 2년',
+        workAvailability: const SeekerWorkAvailability(
+          slots: [
+            SeekerAvailabilitySlot(weekday: 1, anyTime: true),
+            SeekerAvailabilitySlot(weekday: 3, anyTime: true),
+            SeekerAvailabilitySlot(weekday: 5, anyTime: true),
+          ],
+        ),
+        credentialHoldings: const [
+          SeekerCredentialHolding(
+            credentialId: 'construction_safety_basic',
+            imagePath: 'qc://credential/construction_safety_basic',
+          ),
+        ],
         termsAcceptedAt: DateTime(2026, 1, 1),
         onboardingCompletedAt: DateTime(2026, 1, 1),
       );
@@ -196,6 +212,24 @@ final class DevTestAccount {
       preferredRegions: const ['경기', '서울'],
       preferredJobCategories: const ['물류·입출고', '포장·피킹'],
       experienceSummary: '물류센터 피킹·입고 경력 1년',
+      workAvailability: const SeekerWorkAvailability(
+        slots: [
+          SeekerAvailabilitySlot(weekday: 0, anyTime: true),
+          SeekerAvailabilitySlot(weekday: 2, anyTime: true),
+          SeekerAvailabilitySlot(weekday: 4, anyTime: true),
+        ],
+      ),
+      credentialHoldings: const [
+        SeekerCredentialHolding(
+          credentialId: 'forklift_operator_cert',
+          imagePath: 'qc://credential/forklift_operator_cert',
+        ),
+      ],
+      homeRoadAddress: '서울특별시 송파구 올림픽로 300',
+      homeLatitude: 37.5128,
+      homeLongitude: 127.0471,
+      locationConsentAcceptedAt: DateTime(2026, 1, 1),
+      locationConsentVersion: LegalConsentCatalog.locationBasedVersion,
       termsAcceptedAt: DateTime(2026, 1, 1),
       onboardingCompletedAt: DateTime(2026, 1, 1),
     );

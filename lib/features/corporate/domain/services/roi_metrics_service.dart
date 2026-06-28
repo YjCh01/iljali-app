@@ -11,7 +11,7 @@ import 'package:map/features/corporate/domain/entities/corporate_branch.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
 import 'package:map/features/corporate/domain/entities/roi_period.dart';
 
-/// ROI 대시보드 집계 — 출근 확인 수수료(10,000원/건) 대비 절감
+/// ROI 대시보드 집계 — 제휴 채널 수수료 대비 절감(활성 시) · PUSH 비용
 class RoiMetrics {
   const RoiMetrics({
     required this.periodLabel,
@@ -30,7 +30,7 @@ class RoiMetrics {
     required this.estimatedCommissionAtTierKrw,
   });
 
-  /// 일용직 출근 확인 기준 수수료 (map/PUSH_PACKAGE_PRICING — 티어 무관)
+  /// ROI 비교용 레거시 기준선 (제휴 채널 수수료·아웃소싱 대체 비교). 메인 앱 청구액 아님.
   static const baselineDailyCheckInFeeKrw = 15000;
 
   @Deprecated('Use baselineDailyCheckInFeeKrw')
@@ -56,8 +56,8 @@ class RoiMetrics {
       : '지원 $applications건 · 출근 데이터를 모으는 중';
 
   String get savingsHeadline => commissionSavingsVsBasicKrw > 0
-      ? '출근 확인(15,000원/건) 대비 ${_formatKrw(commissionSavingsVsBasicKrw)} 절약'
-      : '출근 $checkIns건 · 수수료 ${_formatKrw(commissionSpendKrw)}';
+      ? '제휴 수수료 기준 대비 ${_formatKrw(commissionSavingsVsBasicKrw)} 절약'
+      : '출근 $checkIns건 · 비용 ${_formatKrw(commissionSpendKrw)}';
 
   bool get hasActivity =>
       applications > 0 || checkIns > 0 || totalSpendKrw > 0;

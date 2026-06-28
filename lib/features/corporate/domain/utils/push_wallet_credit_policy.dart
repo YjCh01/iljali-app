@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
@@ -352,7 +352,7 @@ class PushRegistrationCostSummary {
     final zones = configuredRecruitZones > 0
         ? ' · 일자리 알림핀 $configuredRecruitZones곳 설정됨'
         : '';
-    return '근무지 주변 1km 무료 노출$zones';
+    return '근무지 주변 ${PushPackageCatalog.pushRadiusLabel} 무료 노출$zones';
   }
 
   String get purchasePromptMessage =>

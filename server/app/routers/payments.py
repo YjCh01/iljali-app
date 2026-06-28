@@ -22,6 +22,7 @@ class ChargeRequest(BaseModel):
     buyer_email: str | None = None
     buyer_name: str | None = None
     company_key: str | None = None
+    web_checkout: bool = False
 
 
 class ChargeResponse(BaseModel):
@@ -60,6 +61,7 @@ async def charge_payment(body: ChargeRequest, db: Session = Depends(get_db)):
         order_id=body.order_id,
         order_name=body.order_name,
         amount_krw=body.amount_krw,
+        web_checkout=body.web_checkout,
     )
     return ChargeResponse(
         success=True,

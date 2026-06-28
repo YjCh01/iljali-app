@@ -63,6 +63,7 @@ class CorporateAttendanceLocalDataSourceImpl
       employmentType: app.employmentType,
       workerName: app.seekerName,
       genderLabel: seekerProfile.genderLabel,
+      ageLabel: seekerProfile.ageLabel,
       birthDateLabel: seekerProfile.birthDateLabel,
       jobTitle: app.postTitle,
       workDate: app.workDate,

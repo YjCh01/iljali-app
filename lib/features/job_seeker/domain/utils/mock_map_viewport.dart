@@ -46,6 +46,6 @@ abstract final class MockMapViewport {
 
   static MapViewportBounds initial({Size? mapSize}) {
     final size = mapSize ?? const Size(360, 640);
-    return resolve(mapSize: size, panOffset: Offset.zero, zoom: 12.5);
+    return resolve(mapSize: size, panOffset: Offset.zero, zoom: MapConstants.defaultZoom);
   }
 }

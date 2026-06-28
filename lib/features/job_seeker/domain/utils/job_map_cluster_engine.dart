@@ -11,6 +11,33 @@ abstract final class JobMapClusterEngine {
   }) {
     if (pins.isEmpty) return const [];
 
+    final ghosts = pins.where((pin) => pin.isClosedGhost).toList();
+    final active = pins.where((pin) => !pin.isClosedGhost).toList();
+
+    final activeClusters = active.isEmpty
+        ? const <JobMapCluster>[]
+        : _clusterActive(active, zoom);
+
+    final ghostClusters = ghosts
+        .map(
+          (pin) => JobMapCluster(
+            pins: [pin],
+            latitude: pin.latitude,
+            longitude: pin.longitude,
+            displayTier: JobMapPinDisplayTier.closedGhost,
+          ),
+        )
+        .toList();
+
+    return [...activeClusters, ...ghostClusters];
+  }
+
+  static List<JobMapCluster> _clusterActive(
+    List<JobMapPin> pins,
+    double zoom,
+  ) {
+    if (pins.isEmpty) return const [];
+
     // 줌 10~18: 숫자가 클수록 더 촘촘히 분리
     final cellSize = 0.045 / math.pow(2, zoom - 12);
     final buckets = <String, List<JobMapPin>>{};

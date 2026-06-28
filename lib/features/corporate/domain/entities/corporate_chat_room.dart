@@ -15,6 +15,7 @@ class CorporateChatRoom {
     required this.unreadCount,
     this.kind = CorporateChatRoomKind.applicant,
     this.fullMessageBody,
+    this.jobPostId,
   });
 
   final String id;
@@ -25,6 +26,7 @@ class CorporateChatRoom {
   final int unreadCount;
   final CorporateChatRoomKind kind;
   final String? fullMessageBody;
+  final String? jobPostId;
 
   bool get isOfficialNotice => kind == CorporateChatRoomKind.officialNotice;
 }

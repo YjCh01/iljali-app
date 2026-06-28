@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/auth/guest_auth_navigation.dart';
+import 'package:map/core/branding/iljari_ad_campaign.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/corporate/presentation/utils/corporate_shell_access.dart';
 import 'package:map/features/corporate/data/repositories/corporate_tax_document_repository.dart';
 import 'package:map/features/corporate/domain/entities/tax_document_type.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_service_guide_section.dart';
+import 'package:map/core/legal/widgets/business_disclosure_footer.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_tax_documents_grid_section.dart';
 
@@ -71,12 +75,71 @@ class _CorporateMoreTabState extends State<CorporateMoreTab> {
   Widget build(BuildContext context) {
     final profile = AuthSession.instance.currentUser?.corporateProfile;
     final user = AuthSession.instance.currentUser;
+    final signedIn = CorporateShellAccess.isSignedInCorporate;
+
+    if (!signedIn) {
+      return ColoredBox(
+        color: AppColors.background,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          children: [
+            const IljariAdCampaignBanner(),
+            const SizedBox(height: 16),
+            CorporateSurfaceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '로그인하고 채용을 시작하세요',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => GuestAuthNavigation.openLogin(context),
+                    child: const Text('로그인'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () => GuestAuthNavigation.openSignUp(context),
+                    child: const Text('회원가입'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const CorporateServiceGuideSection(),
+            const SizedBox(height: 16),
+            _MenuTile(
+              icon: Icons.help_outline_rounded,
+              title: '고객센터',
+              onTap: () => Navigator.of(context).pushNamed(
+                AppRoutes.customerSupport,
+              ),
+            ),
+            _MenuTile(
+              icon: Icons.description_outlined,
+              title: '약관 및 정책',
+              onTap: () => Navigator.of(context).pushNamed(
+                AppRoutes.legalDocuments,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const BusinessDisclosureFooter(),
+          ],
+        ),
+      );
+    }
 
     return ColoredBox(
       color: AppColors.background,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
+          const IljariAdCampaignBanner(),
+          const SizedBox(height: 20),
           const CorporateServiceGuideSection(),
           const SizedBox(height: 20),
           if (_needsHeadOffice) ...[
@@ -215,6 +278,8 @@ class _CorporateMoreTabState extends State<CorporateMoreTab> {
             onTap: () =>
                 Navigator.of(context).pushNamed(AppRoutes.legalDocuments),
           ),
+          const SizedBox(height: 16),
+          const BusinessDisclosureFooter(),
         ],
       ),
     );

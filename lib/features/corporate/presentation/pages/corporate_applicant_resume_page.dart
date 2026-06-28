@@ -4,11 +4,14 @@ import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_applicant.dart';
-import 'package:map/features/corporate/domain/services/seeker_profile_lookup.dart';
-import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
+import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
+import 'package:map/features/job_seeker/domain/entities/seeker_resume_snapshot.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_resume_detail_page.dart';
+import 'package:map/features/job_seeker/presentation/widgets/seeker_resume_grid_summary.dart';
 
-/// 구인자 — 지원자 이력서 (근태 그리드·지원자 탭 공통)
+/// 구인자 — 지원자 이력서 (그리드 요약 → 상세보기)
 class CorporateApplicantResumePage extends StatefulWidget {
   const CorporateApplicantResumePage({
     super.key,
@@ -38,6 +41,7 @@ Future<void> openCorporateApplicantResume(
 class _CorporateApplicantResumePageState
     extends State<CorporateApplicantResumePage> {
   HiringApplication? _application;
+  List<String> _postRequiredCredentialIds = const [];
   bool _loading = true;
 
   @override
@@ -49,14 +53,16 @@ class _CorporateApplicantResumePageState
   Future<void> _load() async {
     final repo = await LocalHiringRepository.create();
     final app = await repo.findById(widget.applicationId);
-    if (app == null) {
-      if (mounted) setState(() => _loading = false);
-      return;
+    var requiredIds = app?.requiredCredentialIds ?? const <String>[];
+    if (app != null && requiredIds.isEmpty) {
+      final post = await const CorporateJobPostLocalDataSourceImpl()
+          .findById(app.postId);
+      requiredIds = post?.requiredCredentialIds ?? const [];
     }
-
     if (!mounted) return;
     setState(() {
       _application = app;
+      _postRequiredCredentialIds = requiredIds;
       _loading = false;
     });
   }
@@ -77,7 +83,10 @@ class _CorporateApplicantResumePageState
           ? const Center(child: CircularProgressIndicator())
           : _application == null
               ? _NotFound(onBack: () => Navigator.of(context).pop())
-              : _ResumeBody(application: _application!),
+              : _ResumeGridView(
+                  application: _application!,
+                  postRequiredCredentialIds: _postRequiredCredentialIds,
+                ),
     );
   }
 }
@@ -102,147 +111,78 @@ class _NotFound extends StatelessWidget {
   }
 }
 
-class _ResumeBody extends StatelessWidget {
-  const _ResumeBody({required this.application});
+class _ResumeGridView extends StatelessWidget {
+  const _ResumeGridView({
+    required this.application,
+    required this.postRequiredCredentialIds,
+  });
 
   final HiringApplication application;
+  final List<String> postRequiredCredentialIds;
 
   @override
   Widget build(BuildContext context) {
-    final seekerProfile = SeekerProfileLookup.forEmail(application.seekerEmail);
+    final snapshot = SeekerResumeSnapshot.fromApplication(
+      application,
+      postRequiredCredentialIds: postRequiredCredentialIds,
+    );
     final status = _mapStatus(application.status);
+    final heldCount = snapshot.heldCredentialCount;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       children: [
-        CorporateSurfaceCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _StatusBadge(status: status),
-                  const Spacer(),
-                  Text(
-                    LocalHiringRepository.formatRelativeTime(
-                      application.appliedAt,
-                    ),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary.withValues(alpha: 0.9),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                application.seekerName,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
+        SeekerResumeGridSummary(
+          snapshot: snapshot,
+          subtitle: application.postTitle,
+          trailing: _StatusBadge(status: status),
+          resumeCounts: ResumeItemKind.values.map((kind) {
+            if (kind == ResumeItemKind.license ||
+                kind == ResumeItemKind.certification) {
+              return heldCount;
+            }
+            return snapshot.visibleResume.countFor(kind);
+          }).toList(),
         ),
         const SizedBox(height: 12),
-        CorporateSurfaceCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _SectionTitle('기본 정보'),
-              _InfoRow(label: '성별', value: seekerProfile.genderLabel),
-              _InfoRow(label: '생년월일', value: seekerProfile.birthDateLabel),
-              _InfoRow(
-                label: '연락처',
-                value: application.seekerPhoneMasked,
-              ),
-            ],
+        Text(
+          '지원 ${LocalHiringRepository.formatRelativeTime(application.appliedAt)}',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary.withValues(alpha: 0.9),
           ),
         ),
-        const SizedBox(height: 12),
-        CorporateSurfaceCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _SectionTitle('지원 정보'),
-              _InfoRow(
-                icon: Icons.work_outline_rounded,
-                label: '공고',
-                value: application.postTitle,
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: () => openSeekerResumeDetail(
+              context,
+              snapshot: snapshot,
+              title: '지원자 이력서 상세',
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              if (application.workDate != null)
-                _InfoRow(
-                  icon: Icons.event_outlined,
-                  label: '근무 예정',
-                  value: LocalHiringRepository.formatWorkDateFull(
-                    application.workDate!,
-                  ),
-                ),
-              _InfoRow(
-                icon: Icons.schedule_outlined,
-                label: '근무 시간',
-                value: application.workSchedule,
-              ),
-              _InfoRow(
-                icon: Icons.business_outlined,
-                label: '기업',
-                value: application.companyName,
-              ),
-            ],
+            ),
+            child: const Text(
+              '상세보기',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
           ),
         ),
-        if (seekerProfile.experienceSummary != null &&
-            seekerProfile.experienceSummary!.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          CorporateSurfaceCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SectionTitle('경력·자기소개'),
-                Text(
-                  seekerProfile.experienceSummary!,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.55,
-                    color: AppColors.textSecondary.withValues(alpha: 0.98),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        if (seekerProfile.preferredJobCategories.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          CorporateSurfaceCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _SectionTitle('희망 업무'),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: seekerProfile.preferredJobCategories
-                      .map(
-                        (c) => Chip(
-                          label: Text(c),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
 
   CorporateApplicantStatus _mapStatus(HiringApplicationStatus status) =>
       switch (status) {
+        HiringApplicationStatus.inquiry =>
+          CorporateApplicantStatus.chatting,
         HiringApplicationStatus.applied => CorporateApplicantStatus.pending,
         HiringApplicationStatus.chatting => CorporateApplicantStatus.chatting,
         HiringApplicationStatus.scheduled => CorporateApplicantStatus.scheduled,
@@ -252,75 +192,6 @@ class _ResumeBody extends StatelessWidget {
         HiringApplicationStatus.rejected => CorporateApplicantStatus.rejected,
         HiringApplicationStatus.noShow => CorporateApplicantStatus.rejected,
       };
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w800,
-          color: AppColors.textPrimary,
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.icon,
-  });
-
-  final String label;
-  final String value;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 16, color: AppColors.textSecondary),
-            const SizedBox(width: 6),
-          ],
-          SizedBox(
-            width: 72,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary.withValues(alpha: 0.95),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatusBadge extends StatelessWidget {

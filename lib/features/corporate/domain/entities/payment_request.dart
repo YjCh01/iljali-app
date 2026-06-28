@@ -39,6 +39,7 @@ class PaymentResult {
     this.checkoutUrl,
     this.paymentKey,
     this.mock = false,
+    this.usedCashKrw = 0,
   });
 
   final bool success;
@@ -47,6 +48,7 @@ class PaymentResult {
   final String? checkoutUrl;
   final String? paymentKey;
   final bool mock;
+  final int usedCashKrw;
 
   static PaymentResult ok(String transactionId) => PaymentResult(
         success: true,

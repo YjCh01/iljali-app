@@ -50,6 +50,17 @@ class BusinessVerificationRequest {
     return null;
   }
 
+  /// 사업자등록증 제출·미인증 가입 — BRN·회사명만 확인 (개업일 미보유 시)
+  String? validateForCertificateReview() {
+    final brnError =
+        BusinessRegistrationNumber.formatErrorMessage(businessRegistrationNumber);
+    if (brnError != null) return brnError;
+    if (companyName.trim().isEmpty) {
+      return '회사명을 입력해 주세요.';
+    }
+    return null;
+  }
+
   Map<String, dynamic> toNtsValidatePayload() => {
         'b_no': normalizedBrn,
         'start_dt': normalizedOpeningDate,

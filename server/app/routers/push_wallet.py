@@ -43,6 +43,8 @@ def upsert_wallet(
     wallet = get_or_create_wallet(db, brn)
     if body.package_credits is not None:
         wallet.package_credits = body.package_credits
+    if body.cash_balance_krw is not None:
+        wallet.cash_balance_krw = body.cash_balance_krw
     if body.signup_bonus_remaining is not None:
         wallet.signup_bonus_remaining = body.signup_bonus_remaining
     if body.location_slots_from_packages is not None:

@@ -6,7 +6,10 @@ NAVER_MAP_CLIENT_ID=
 #   인증정보 Client ID → naver_map_client_id.txt 또는 run_web.bat
 #   (2024+ NCP: JS는 ncpKeyId 파라미터로 로드 — 값은 Client ID와 동일)
 # Windows MVP: NAVER_MAP 미설정 시 mock 지도
-COMPLIANCE_API_URL=http://10.0.2.2:8000
+COMPLIANCE_API_URL=http://api.iljari.app
+ADMIN_API_KEY=iljari-admin-dev-key
+# 로컬만: ILJARI_ENV=local + http://127.0.0.1:8000
+SENTRY_DSN=
 TOSS_CLIENT_KEY=
 CLOVA_OCR_URL=
 CLOVA_OCR_SECRET=
@@ -22,7 +25,10 @@ KAKAO_REST_API_KEY=
 # --- MVP 제품 범위 (product_feature_flags.dart · docs/disabled_features.md) ---
 # 기본값: 일용직만 · 상시직/일반/계약 off · 제휴사 위저드 on
 # ENABLE_WORKER_GENERAL=false
-# ENABLE_WORKER_CONTRACT=false
+# ENABLE_WORKER_CONTRACT=true
 # ENABLE_PERMANENT_HIRE=false
 # ENABLE_PREMIUM_PARTNER_WIZARD=true
 # ENABLE_ENTERPRISE_OUTSOURCING=true
+# ENABLE_HIRING_COMMISSION=false   # 메인 앱 기본 — 제휴 채널만 true
+# ENABLE_EMPLOYER_TRUST_DISPLAY=false   # 고용주 평점·신뢰100·배지 — 페이즈 2
+# ENABLE_SEEKER_EMPLOYER_RATING=false     # 구직자→고용주 평가 — 페이즈 2

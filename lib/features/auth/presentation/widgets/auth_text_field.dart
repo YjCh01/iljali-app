@@ -18,6 +18,7 @@ class AuthTextField extends StatelessWidget {
     this.autofillHints,
     this.textInputAction,
     this.onSubmitted,
+    this.readOnly = false,
   });
 
   final String label;
@@ -32,6 +33,7 @@ class AuthTextField extends StatelessWidget {
   final Iterable<String>? autofillHints;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +55,7 @@ class AuthTextField extends StatelessWidget {
           controller: controller,
           keyboardType: keyboardType,
           obscureText: obscureText,
+          readOnly: readOnly,
           inputFormatters: inputFormatters,
           maxLength: maxLength,
           autofillHints: autofillHints,

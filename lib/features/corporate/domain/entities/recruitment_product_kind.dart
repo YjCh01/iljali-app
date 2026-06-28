@@ -3,7 +3,7 @@ enum RecruitmentProductKind {
   /// 일자리 알림핀 또는 정류장 표시핀 — 지도 노출만 (동일 크레딧)
   exposureOnly,
 
-  /// 핀 설치 + 해당 위치 반경 1km PUSH 1회
+  /// 핀 설치 + 해당 위치 반경 700m PUSH 1회
   exposureWithPush,
 
   /// 지도 노출 없이 PUSH 발송만

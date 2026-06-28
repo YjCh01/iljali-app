@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 
 class ChatAttachmentOption {
@@ -21,12 +22,8 @@ Future<String?> showChatAttachmentPickerSheet(
   BuildContext context, {
   required List<ChatAttachmentOption> options,
 }) {
-  return showModalBottomSheet<String>(
+  return showAdaptiveSheet<String>(
     context: context,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (context) {
       return SafeArea(
         child: Padding(

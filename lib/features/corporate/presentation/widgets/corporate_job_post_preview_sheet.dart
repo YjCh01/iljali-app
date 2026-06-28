@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_preview_panel.dart';
@@ -8,10 +9,8 @@ Future<void> showCorporateJobPostPreviewSheet(
   BuildContext context,
   CorporateJobPost post,
 ) {
-  return showModalBottomSheet<void>(
+  return showAdaptiveSheet<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (context) => CorporateJobPostPreviewSheet(post: post),
   );
 }

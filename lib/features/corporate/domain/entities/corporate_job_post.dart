@@ -1,4 +1,5 @@
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
@@ -10,6 +11,7 @@ import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_entitlement.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
+import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
 
 /// 채용 공고 고용 형태 — 일용직(출근 확인) · 상시직(재직 확인)
 enum JobEmploymentType {
@@ -36,6 +38,7 @@ class CorporateJobPost {
     required this.workSchedule,
     required this.summary,
     this.jobDescription = '',
+    this.descriptionBody = const JobPostDescriptionBody(),
     required this.status,
     required this.applicantCount,
     required this.postedAt,
@@ -47,6 +50,7 @@ class CorporateJobPost {
     this.paymentMonthOffset,
     this.paymentDayOfMonth,
     this.paymentDateNegotiable = false,
+    this.workPeriodNegotiable = false,
     this.notificationSettings,
     this.registeredBy,
     this.recruiterEmail,
@@ -63,6 +67,8 @@ class CorporateJobPost {
     this.workCategoryId,
     this.workplaceLatitude,
     this.workplaceLongitude,
+    this.requiredResumeItems = const [],
+    this.requiredCredentialIds = const [],
   });
 
   final String id;
@@ -78,6 +84,13 @@ class CorporateJobPost {
   /// 근무지 좌표 — 알림핀 미설정 공고·지도 중심용
   final double? workplaceLatitude;
   final double? workplaceLongitude;
+
+  /// 지원 시 구직자에게 공개 요청할 이력서 항목
+  final List<ResumeItemKind> requiredResumeItems;
+
+  /// 필수 제출 자격·면허 (표준 DB ID)
+  final List<String> requiredCredentialIds;
+
   final String hourlyWage;
   final String? dailyWage;
   final String workSchedule;
@@ -85,6 +98,9 @@ class CorporateJobPost {
 
   /// 업무 내용 (요약·추가 내용과 분리)
   final String jobDescription;
+
+  /// 업무 내용 본문 — 텍스트·HTML·이미지 (상세 화면 전용)
+  final JobPostDescriptionBody descriptionBody;
   final DateTime? paymentDate;
 
   /// null이면 [paymentDate] 절대일 모드 (일용직)
@@ -93,6 +109,9 @@ class CorporateJobPost {
 
   /// 일용직 급여지급일 — 구인·구직자 협의
   final bool paymentDateNegotiable;
+
+  /// 정규직 근무기간 — 첫 근무 시작일 협의 가능
+  final bool workPeriodNegotiable;
 
   final JobPostNotificationSettings? notificationSettings;
   final CorporateMemberProfile? registeredBy;
@@ -142,10 +161,12 @@ class CorporateJobPost {
     String? workSchedule,
     String? summary,
     String? jobDescription,
+    JobPostDescriptionBody? descriptionBody,
     DateTime? paymentDate,
     SalaryPaymentMonthOffset? paymentMonthOffset,
     int? paymentDayOfMonth,
     bool? paymentDateNegotiable,
+    bool? workPeriodNegotiable,
     JobPostNotificationSettings? notificationSettings,
     CorporateMemberProfile? registeredBy,
     String? recruiterEmail,
@@ -162,6 +183,8 @@ class CorporateJobPost {
     String? workCategoryId,
     double? workplaceLatitude,
     double? workplaceLongitude,
+    List<ResumeItemKind>? requiredResumeItems,
+    List<String>? requiredCredentialIds,
     CorporateJobPostStatus? status,
     int? applicantCount,
     DateTime? postedAt,
@@ -178,11 +201,14 @@ class CorporateJobPost {
       workSchedule: workSchedule ?? this.workSchedule,
       summary: summary ?? this.summary,
       jobDescription: jobDescription ?? this.jobDescription,
+      descriptionBody: descriptionBody ?? this.descriptionBody,
       paymentDate: paymentDate ?? this.paymentDate,
       paymentMonthOffset: paymentMonthOffset ?? this.paymentMonthOffset,
       paymentDayOfMonth: paymentDayOfMonth ?? this.paymentDayOfMonth,
       paymentDateNegotiable:
           paymentDateNegotiable ?? this.paymentDateNegotiable,
+      workPeriodNegotiable:
+          workPeriodNegotiable ?? this.workPeriodNegotiable,
       notificationSettings: notificationSettings ?? this.notificationSettings,
       registeredBy: registeredBy ?? this.registeredBy,
       recruiterEmail: recruiterEmail ?? this.recruiterEmail,
@@ -203,6 +229,9 @@ class CorporateJobPost {
       workCategoryId: workCategoryId ?? this.workCategoryId,
       workplaceLatitude: workplaceLatitude ?? this.workplaceLatitude,
       workplaceLongitude: workplaceLongitude ?? this.workplaceLongitude,
+      requiredResumeItems: requiredResumeItems ?? this.requiredResumeItems,
+      requiredCredentialIds:
+          requiredCredentialIds ?? this.requiredCredentialIds,
       status: status ?? this.status,
       applicantCount: applicantCount ?? this.applicantCount,
       postedAt: postedAt ?? this.postedAt,
@@ -228,6 +257,14 @@ extension CorporateJobPostWorkerCategoryX on CorporateJobPost {
     }
     if (paymentDate != null) return WorkerCategory.daily;
     return WorkerCategory.general;
+  }
+
+  /// 근무 일정 표시 — 정규직 협의 가능 시 접미
+  String get workScheduleDisplayLabel {
+    final base = workSchedule.trim();
+    if (!workPeriodNegotiable) return base;
+    if (base.isEmpty) return '협의가능';
+    return '$base · 협의가능';
   }
 }
 
@@ -424,15 +461,18 @@ extension CorporateJobPostDisplayX on CorporateJobPost {
   bool get isActiveForSeekers =>
       !isExpired && status != CorporateJobPostStatus.closed;
 
-  /// 구버전(합쳐진 summary만 있는 공고) 호환
-  String get fullDescriptionText {
+  /// 상세 본문 — [descriptionBody] 우선, 구버전 plain [jobDescription] 호환
+  JobPostDescriptionBody get effectiveDescriptionBody {
+    if (descriptionBody.hasContent) return descriptionBody;
     final job = jobDescription.trim();
+    if (job.isNotEmpty) return JobPostDescriptionBody(text: job);
     final extra = summary.trim();
-    if (job.isEmpty) return extra;
-    if (extra.isEmpty) return job;
-    if (job == extra) return job;
-    return '$job\n\n$extra';
+    if (extra.isNotEmpty) return JobPostDescriptionBody(text: extra);
+    return const JobPostDescriptionBody();
   }
+
+  /// 구버전(합쳐진 summary만 있는 공고) 호환 — plain 텍스트 fallback
+  String get fullDescriptionText => effectiveDescriptionBody.legacyPlainText;
 }
 
 extension CorporateJobPostStatusX on CorporateJobPostStatus {

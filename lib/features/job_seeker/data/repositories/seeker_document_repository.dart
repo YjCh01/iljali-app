@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:map/core/legal/legal_consent_catalog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 구직자 신분증·통장사본 (이메일별 로컬 저장)
@@ -49,11 +50,26 @@ class SeekerDocuments {
     this.idCardImagePath,
     this.bankAccountImagePath,
     this.updatedAt,
+    this.documentConsentVersionAccepted,
+    this.documentConsentAcceptedAt,
   });
 
   final String? idCardImagePath;
   final String? bankAccountImagePath;
   final DateTime? updatedAt;
+  final String? documentConsentVersionAccepted;
+  final DateTime? documentConsentAcceptedAt;
+
+  bool get hasDocumentConsent =>
+      documentConsentVersionAccepted != null &&
+      documentConsentAcceptedAt != null;
+
+  bool get isDocumentConsentCurrent {
+    if (!hasDocumentConsent) return false;
+    return LegalConsentCatalog.seekerDocumentConsentCurrent(
+      documentConsentVersionAccepted: documentConsentVersionAccepted,
+    );
+  }
 
   bool get hasIdCard =>
       idCardImagePath != null && idCardImagePath!.trim().isNotEmpty;
@@ -65,11 +81,17 @@ class SeekerDocuments {
     String? idCardImagePath,
     String? bankAccountImagePath,
     DateTime? updatedAt,
+    String? documentConsentVersionAccepted,
+    DateTime? documentConsentAcceptedAt,
   }) {
     return SeekerDocuments(
       idCardImagePath: idCardImagePath ?? this.idCardImagePath,
       bankAccountImagePath: bankAccountImagePath ?? this.bankAccountImagePath,
       updatedAt: updatedAt ?? this.updatedAt,
+      documentConsentVersionAccepted:
+          documentConsentVersionAccepted ?? this.documentConsentVersionAccepted,
+      documentConsentAcceptedAt:
+          documentConsentAcceptedAt ?? this.documentConsentAcceptedAt,
     );
   }
 
@@ -78,6 +100,11 @@ class SeekerDocuments {
         if (bankAccountImagePath != null)
           'bankAccountImagePath': bankAccountImagePath,
         if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
+        if (documentConsentVersionAccepted != null)
+          'documentConsentVersionAccepted': documentConsentVersionAccepted,
+        if (documentConsentAcceptedAt != null)
+          'documentConsentAcceptedAt':
+              documentConsentAcceptedAt!.toIso8601String(),
       };
 
   factory SeekerDocuments.fromJson(Map<String, dynamic> json) {
@@ -85,6 +112,11 @@ class SeekerDocuments {
       idCardImagePath: json['idCardImagePath'] as String?,
       bankAccountImagePath: json['bankAccountImagePath'] as String?,
       updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? ''),
+      documentConsentVersionAccepted:
+          json['documentConsentVersionAccepted'] as String?,
+      documentConsentAcceptedAt: DateTime.tryParse(
+        json['documentConsentAcceptedAt'] as String? ?? '',
+      ),
     );
   }
 }

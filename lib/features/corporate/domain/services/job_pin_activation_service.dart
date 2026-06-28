@@ -53,6 +53,14 @@ class JobPinActivationService {
       );
     }
 
+    final paidBlocked = profile.paidServicesBlockedReason;
+    if (paidBlocked != null) {
+      return JobPinActivationResult(
+        success: false,
+        message: paidBlocked,
+      );
+    }
+
     final targets = <int>[];
     for (var i = 0; i < points.length; i++) {
       if (!PushWalletCreditPolicy.isRecruitmentZoneIndex(i)) continue;

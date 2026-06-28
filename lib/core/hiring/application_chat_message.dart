@@ -3,6 +3,7 @@ import 'package:map/core/hiring/chat_message_kind.dart';
 /// 지원 건별 채팅 메시지 (로컬 영속)
 class ApplicationChatMessage {
   const ApplicationChatMessage({
+    this.id,
     required this.fromEmployer,
     required this.text,
     required this.sentAt,
@@ -11,6 +12,7 @@ class ApplicationChatMessage {
     this.attachmentPath,
   });
 
+  final String? id;
   final bool fromEmployer;
   final String text;
   final DateTime sentAt;
@@ -22,6 +24,7 @@ class ApplicationChatMessage {
       attachmentPath != null && attachmentPath!.trim().isNotEmpty;
 
   Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
         'fromEmployer': fromEmployer,
         'text': text,
         'sentAt': sentAt.toIso8601String(),
@@ -32,6 +35,7 @@ class ApplicationChatMessage {
 
   factory ApplicationChatMessage.fromJson(Map<String, dynamic> json) {
     return ApplicationChatMessage(
+      id: json['id'] as String?,
       fromEmployer: json['fromEmployer'] as bool? ?? false,
       text: json['text'] as String? ?? '',
       sentAt: DateTime.tryParse(json['sentAt'] as String? ?? '') ??

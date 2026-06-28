@@ -1,10 +1,11 @@
-﻿import 'package:map/core/hiring/hiring_application_status.dart';
+import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
 import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 
-/// PUSH 반경·거점·발송 시각 AI 추천 (MVP — 로컬 이력 기반, 1km 고정)
+/// PUSH 반경·거점·발송 시각 AI 추천 (MVP — 로컬 이력 기반, 700m 고정)
 class PushOptimizationRecommendation {
   const PushOptimizationRecommendation({
     required this.suggestedRadius,
@@ -15,7 +16,7 @@ class PushOptimizationRecommendation {
     required this.confidencePercent,
   });
 
-  /// 항상 1km — 반경 확대 대신 거점 추가(패키지)로 도달 범위 확장
+  /// 항상 700m — 반경 확대 대신 거점 추가(패키지)로 도달 범위 확장
   final PushRadiusTier suggestedRadius;
   /// 추천 거점 수 (기본 거점 포함, 최소 1)
   final int suggestedBaseCount;
@@ -33,7 +34,7 @@ class PushOptimizationRecommendation {
     final baseLabel = suggestedBaseCount <= 1
         ? '기본 노출 범위'
         : '노출 범위 $suggestedBaseCount곳';
-    return '1km · $baseLabel · 약 $expectedReach명 · $sendTimeLabel 발송';
+    return '${PushPackageCatalog.pushRadiusLabel} · $baseLabel · 약 $expectedReach명 · $sendTimeLabel 발송';
   }
 }
 
@@ -85,17 +86,17 @@ class PushOptimizationService {
     } else if (conversion < 0.15) {
       suggestedBaseCount = 2;
       reason =
-          '출근 전환율 ${(conversion * 100).toStringAsFixed(0)}%입니다. 1km 반경에 공고 노출 범위를 추가해 후보 풀을 넓혀 보세요.';
+          '출근 전환율 ${(conversion * 100).toStringAsFixed(0)}%입니다. ${PushPackageCatalog.pushRadiusLabel} 반경에 공고 노출 범위를 추가해 후보 풀을 넓혀 보세요.';
       confidence = 72;
     } else if (conversion >= 0.35) {
       suggestedBaseCount = 1;
       reason =
-          '전환율 ${(conversion * 100).toStringAsFixed(0)}%로 양호합니다. 기본 노출 범위 1km로 효율적으로 운영하세요.';
+          '전환율 ${(conversion * 100).toStringAsFixed(0)}%로 양호합니다. 기본 노출 범위 ${PushPackageCatalog.pushRadiusLabel}로 효율적으로 운영하세요.';
       confidence = 78;
     } else {
       suggestedBaseCount = 2;
       reason =
-          '1km 반경에 공고 노출 범위 1~2곳을 추가하면 지원·출근 균형이 좋아집니다. 패키지로 노출·모집을 확장할 수 있습니다.';
+          '${PushPackageCatalog.pushRadiusLabel} 반경에 공고 노출 범위 1~2곳을 추가하면 지원·출근 균형이 좋아집니다. 패키지로 노출·모집을 확장할 수 있습니다.';
       confidence = 65;
     }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/scroll_time_picker.dart';
 
@@ -167,13 +168,8 @@ class _WorkDateRangePickerFieldState extends State<WorkDateRangePickerField> {
   }
 
   Future<void> _openPicker() async {
-    await showModalBottomSheet<void>(
+    await showAdaptiveSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {

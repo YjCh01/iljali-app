@@ -1,4 +1,7 @@
-/// MVP 휴대폰 인증 — 로컬 mock (실서비스 SMS 연동 전)
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 class MockPhoneVerificationService {
   MockPhoneVerificationService._();
   static final instance = MockPhoneVerificationService._();
@@ -41,5 +44,28 @@ class MockPhoneVerificationService {
     _pendingPhone = null;
     _pendingCode = null;
     _sentAt = null;
+    _verifiedTokens.clear();
+  }
+
+  final _verifiedTokens = <String, String>{};
+
+  /// 로컬 mock용 phone_verified_token (API 미연동 시 가입·찾기·재설정 바인딩)
+  String issueLocalVerifiedToken({
+    required String phone,
+    required String purpose,
+  }) {
+    final random = Random.secure();
+    final nonce = List<int>.generate(12, (_) => random.nextInt(256));
+    final digest = sha256.convert(utf8.encode('$phone::$purpose::${base64Url.encode(nonce)}'));
+    final token = base64Url.encode(utf8.encode('${phone}|$purpose|${digest.toString()}'));
+    _verifiedTokens['$phone::$purpose'] = token;
+    return token;
+  }
+
+  String? readLocalVerifiedToken({
+    required String phone,
+    required String purpose,
+  }) {
+    return _verifiedTokens['$phone::$purpose'];
   }
 }

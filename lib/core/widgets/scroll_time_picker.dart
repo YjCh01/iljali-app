@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 
 /// 30분 단위 스크롤 휠 시간 선택 (오전/오후 · 시 · 분).
@@ -8,10 +9,8 @@ Future<TimeOfDay?> showScrollTimePicker({
   required TimeOfDay initialTime,
 }) {
   final snapped = snapTimeToHalfHour(initialTime);
-  return showModalBottomSheet<TimeOfDay>(
+  return showAdaptiveSheet<TimeOfDay>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (context) => _ScrollTimePickerSheet(initialTime: snapped),
   );
 }

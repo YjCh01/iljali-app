@@ -22,8 +22,8 @@ if (naverMapClientId.isNotEmpty()) {
 }
 
 android {
-    namespace = "com.example.map"
-    compileSdk = flutter.compileSdkVersion
+    namespace = "kr.co.iljari.app"
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -33,7 +33,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.map"
+        applicationId = "kr.co.iljari.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = maxOf(23, flutter.minSdkVersion)

@@ -44,6 +44,13 @@ class JobApplicationRepository {
     await _save(items);
   }
 
+  Future<void> removeByPostId(String postId) async {
+    final items = await fetchAll();
+    final next = items.where((item) => item.postId != postId).toList();
+    if (next.length == items.length) return;
+    await _save(next);
+  }
+
   Future<void> _save(List<JobApplication> items) async {
     final encoded = jsonEncode(items.map((item) => item.toJson()).toList());
     await _prefs.setString(_key, encoded);

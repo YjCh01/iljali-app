@@ -1,69 +1,65 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:map/core/auth/guest_auth_navigation.dart';
+import 'package:map/core/branding/iljari_ad_campaign.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/legal/widgets/business_disclosure_footer.dart';
+import 'package:map/features/auth/data/local/local_individual_auth_store.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
-import 'package:map/features/work_category/domain/entities/seeker_work_achievement.dart';
-import 'package:map/features/work_category/domain/services/work_achievement_service.dart';
-import 'package:map/features/work_category/presentation/widgets/seeker_work_achievement_preview_row.dart';
+import 'package:map/features/job_seeker/domain/utils/seeker_profile_readiness.dart';
+import 'package:map/features/job_seeker/presentation/utils/seeker_shell_access.dart';
+import 'package:map/features/job_seeker/presentation/widgets/seeker_login_prompt_sheet.dart';
 
-/// 구직자 6번 탭 — 프로필·설정
-class IndividualMoreTab extends StatefulWidget {
-  const IndividualMoreTab({super.key, this.onOpenVaultTab});
-
-  final VoidCallback? onOpenVaultTab;
-
-  @override
-  State<IndividualMoreTab> createState() => _IndividualMoreTabState();
-}
-
-class _IndividualMoreTabState extends State<IndividualMoreTab> {
-  SeekerWorkAchievementSummary? _achievements;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAchievements();
-  }
-
-  Future<void> _loadAchievements() async {
-    final email = AuthSession.instance.currentUser?.email;
-    if (email == null) return;
-    final summary = await WorkAchievementService().loadSummary(email);
-    if (!mounted) return;
-    setState(() => _achievements = summary);
-  }
+/// 구직자 5번 탭 — 프로필·설정
+class IndividualMoreTab extends StatelessWidget {
+  const IndividualMoreTab({super.key});
 
   Future<void> _logout(BuildContext context) async {
     await AuthSession.instance.signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.memberGateway,
+      AppRoutes.home,
       (_) => false,
     );
+  }
+
+  Future<void> _requireLogin(
+    BuildContext context, {
+    required VoidCallback onSignedIn,
+    String? message,
+  }) async {
+    if (SeekerShellAccess.isSignedInSeeker) {
+      onSignedIn();
+      return;
+    }
+    await SeekerLoginPromptSheet.show(context, message: message);
   }
 
   @override
   Widget build(BuildContext context) {
     final user = AuthSession.instance.currentUser;
+    final signedIn = SeekerShellAccess.isSignedInSeeker;
 
     return ColoredBox(
       color: AppColors.background,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
+          const IljariAdCampaignBanner(),
+          const SizedBox(height: 16),
           CorporateSurfaceCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  user?.name ?? '구직자',
+                  signedIn ? (user?.name ?? '구직자') : '로그인하고 일자리를 지원해 보세요',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                if (user?.email != null) ...[
+                if (signedIn && user?.email != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     user!.email,
@@ -73,75 +69,121 @@ class _IndividualMoreTabState extends State<IndividualMoreTab> {
                     ),
                   ),
                 ],
-                if (_achievements != null) ...[
-                  const SizedBox(height: 14),
-                  const Divider(height: 1),
+                if (!signedIn) ...[
                   const SizedBox(height: 12),
-                  const Text(
-                    '내 업무 업적',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  FilledButton(
+                    onPressed: () => GuestAuthNavigation.openLogin(context),
+                    child: const Text('로그인'),
                   ),
                   const SizedBox(height: 8),
-                  SeekerWorkAchievementPreviewRow(
-                    summary: _achievements!,
-                    onTapViewAll: () async {
-                      await Navigator.of(context).pushNamed(
-                        AppRoutes.seekerWorkAchievements,
-                      );
-                      if (mounted) _loadAchievements();
-                    },
+                  OutlinedButton(
+                    onPressed: () => GuestAuthNavigation.openSignUp(context),
+                    child: const Text('회원가입'),
                   ),
                 ],
               ],
             ),
           ),
+          if (signedIn &&
+              !SeekerProfileReadiness.isMatchingReady(
+                user?.seekerProfile,
+                displayName: user?.name,
+              )) ...[
+            const SizedBox(height: 12),
+            CorporateSurfaceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '프로필 완성하기',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '실주소·근무지역·스케줄을 등록하면 공고 지원과 매칭이 가능합니다.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: AppColors.textSecondary.withValues(alpha: 0.95),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pushNamed(
+                      AppRoutes.seekerProfileOnboarding,
+                    ),
+                    child: const Text('2단계 프로필 입력'),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _MenuTile(
-            icon: Icons.emoji_events_outlined,
-            title: '업무 업적 전체 보기',
-            onTap: () async {
-              await Navigator.of(context).pushNamed(
-                AppRoutes.seekerWorkAchievements,
-              );
-              if (mounted) _loadAchievements();
-            },
+            icon: Icons.home_outlined,
+            title: '실주소',
+            onTap: () => _requireLogin(
+              context,
+              onSignedIn: () => Navigator.of(context).pushNamed(
+                AppRoutes.seekerHomeAddress,
+              ),
+            ),
+          ),
+          _MenuTile(
+            icon: Icons.article_outlined,
+            title: '내 이력서',
+            onTap: () => _requireLogin(
+              context,
+              message: '내 이력서는 개인회원 로그인 후 작성·확인할 수 있습니다.',
+              onSignedIn: () => Navigator.of(context).pushNamed(
+                AppRoutes.seekerMyResume,
+              ),
+            ),
+          ),
+          _MenuTile(
+            icon: Icons.verified_outlined,
+            title: '자격·면허 등록',
+            onTap: () => _requireLogin(
+              context,
+              onSignedIn: () => Navigator.of(context).pushNamed(
+                AppRoutes.seekerMyCredentials,
+              ),
+            ),
           ),
           _MenuTile(
             icon: Icons.badge_outlined,
             title: '신분증·통장 등록',
-            onTap: () => Navigator.of(context).pushNamed(
-              AppRoutes.seekerMyDocuments,
-            ),
-          ),
-          _MenuTile(
-            icon: Icons.health_and_safety_outlined,
-            title: '건강보험 재직 인증하기',
-            onTap: () => Navigator.of(context).pushNamed(
-              AppRoutes.seekerHealthInsurance,
+            onTap: () => _requireLogin(
+              context,
+              onSignedIn: () => Navigator.of(context).pushNamed(
+                AppRoutes.seekerMyDocuments,
+              ),
             ),
           ),
           _MenuTile(
             icon: Icons.notifications_active_outlined,
             title: 'PUSH 알림',
-            onTap: () => Navigator.of(context).pushNamed(
-              AppRoutes.seekerPushInbox,
+            onTap: () => _requireLogin(
+              context,
+              onSignedIn: () => Navigator.of(context).pushNamed(
+                AppRoutes.seekerPushInbox,
+              ),
             ),
           ),
           _MenuTile(
             icon: Icons.notifications_outlined,
             title: '알림 설정',
-            onTap: () => Navigator.of(context).pushNamed(
-              AppRoutes.seekerNotificationSettings,
+            onTap: () => _requireLogin(
+              context,
+              onSignedIn: () => Navigator.of(context).pushNamed(
+                AppRoutes.seekerNotificationSettings,
+              ),
             ),
           ),
-          _MenuTile(
-            icon: Icons.bookmark_outline_rounded,
-            title: '나의 보관함',
-            onTap: widget.onOpenVaultTab ?? () {},
-          ),
+          if (signedIn) const _ProposalOffersToggle(),
           _MenuTile(
             icon: Icons.help_outline_rounded,
             title: '고객센터',
@@ -156,17 +198,78 @@ class _IndividualMoreTabState extends State<IndividualMoreTab> {
               AppRoutes.legalDocuments,
             ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () => _logout(context),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
-              padding: const EdgeInsets.symmetric(vertical: 14),
+          const SizedBox(height: 16),
+          const BusinessDisclosureFooter(),
+          if (signedIn) ...[
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () => _logout(context),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text('로그아웃'),
             ),
-            child: const Text('로그아웃'),
-          ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _ProposalOffersToggle extends StatefulWidget {
+  const _ProposalOffersToggle();
+
+  @override
+  State<_ProposalOffersToggle> createState() => _ProposalOffersToggleState();
+}
+
+class _ProposalOffersToggleState extends State<_ProposalOffersToggle> {
+  bool _saving = false;
+
+  bool get _enabled =>
+      AuthSession.instance.currentUser?.seekerProfile?.proposalOffersAccepted ??
+      true;
+
+  Future<void> _setEnabled(bool value) async {
+    final user = AuthSession.instance.currentUser;
+    final profile = user?.seekerProfile;
+    if (user == null || profile == null || _saving) return;
+
+    setState(() => _saving = true);
+    final updated = profile.copyWith(proposalOffersAccepted: value);
+    await AuthSession.instance.updateSeekerProfile(updated);
+    await LocalIndividualAuthStore.updateSeekerProfile(
+      email: user.email,
+      seekerProfile: updated,
+    );
+    if (mounted) setState(() => _saving = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: CorporateSurfaceCard(
+        child: SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text(
+            '기업 채용 제안 수신',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '인재 검색에 노출되고 기업이 공고와 함께 제안을 보낼 수 있습니다.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: AppColors.textSecondary.withValues(alpha: 0.95),
+            ),
+          ),
+          value: _enabled,
+          onChanged: _saving ? null : _setEnabled,
+          activeThumbColor: AppColors.primary,
+        ),
       ),
     );
   }

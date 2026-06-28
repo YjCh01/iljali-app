@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/geo/location_consent_service.dart';
+import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/utils/naver_map_platform.dart';
 import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
 
@@ -23,6 +25,15 @@ abstract final class MapUserLocationService {
     BuildContext context, {
     NaverMapController? controller,
   }) async {
+    final user = AuthSession.instance.currentUser;
+    if (user?.isIndividual == true) {
+      final granted = await LocationConsentService.ensureGranted(
+        context,
+        trigger: LocationConsentTrigger.mapBrowse,
+      );
+      if (!granted || !context.mounted) return;
+    }
+
     final web = MapCameraHolder.instance.webController;
     if (web != null && web.isReady) {
       await web.moveToCurrentLocation();

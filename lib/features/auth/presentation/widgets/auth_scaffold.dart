@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/branding/iljari_ad_campaign.dart';
 import 'package:map/core/constants/app_colors.dart';
 
 /// Auth 화면 공통 — 짙은 퍼플 배경 + 상단 타이틀
@@ -46,7 +47,12 @@ class AuthScaffold extends StatelessWidget {
                   letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 12),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: IljariAdCampaignCopy(),
+              ),
+              const SizedBox(height: 20),
               Expanded(
                 child: SingleChildScrollView(
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,

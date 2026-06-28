@@ -1,4 +1,4 @@
-﻿import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
@@ -73,7 +73,7 @@ abstract final class PushPlanEnforcement {
   }
 
   static String planLimitSummary() =>
-      '근무지 주변 1km 무료 · 일자리 알림핀은 설정 시 이용';
+      '근무지 주변 ${PushPackageCatalog.pushRadiusLabel} 무료 · 일자리 알림핀은 설정 시 이용';
 
   static String pushCountSummary({required int usedToday}) {
     final wallet =

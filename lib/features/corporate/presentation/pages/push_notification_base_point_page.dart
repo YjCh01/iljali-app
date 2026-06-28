@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -111,29 +111,63 @@ class _PushNotificationBasePointPageState
     _searchController.text = _addressLabel;
     _clampAllToPlan();
     _ensureWalletLoaded();
-    _resolveWorkplaceCenterIfNeeded();
+    unawaited(_resolveWorkplaceCenterIfNeeded());
+  }
+
+  String _primaryWorkplaceAddress({
+    WorkplaceAddress? hint,
+    PushNotificationBasePoint? primary,
+  }) {
+    if (hint != null && hint.roadAddress.trim().isNotEmpty) {
+      return hint.roadAddress.trim();
+    }
+    final label = primary?.addressLabel.trim() ?? '';
+    if (label.isNotEmpty && !isDefaultPushMapAddressLabel(label)) {
+      return label;
+    }
+    return '';
+  }
+
+  void _applyPrimaryWorkplaceCenter(GeoCoordinate coordinate, String address) {
+    if (_points.isEmpty) return;
+    MapViewportSessionStore.instance.forget(
+      MapViewportSessionKeys.pushBasePoint(_points[0].id),
+    );
+    setState(() {
+      _center = coordinate;
+      _addressLabel = address;
+      _searchController.text = address;
+      _points[0] = _points[0].copyWith(
+        coordinate: coordinate,
+        addressLabel: address,
+        isPrimary: true,
+      );
+    });
   }
 
   Future<void> _resolveWorkplaceCenterIfNeeded() async {
+    if (_points.isEmpty) return;
+
     final hint = widget.workplaceHint;
-    if (hint == null || hint.coordinate != null) return;
-    if (widget.initialSettings != null &&
-        widget.initialSettings!.basePoints.isNotEmpty) {
+    final primary = _points[0];
+    final address = _primaryWorkplaceAddress(hint: hint, primary: primary);
+    if (address.isEmpty) return;
+
+    GeoCoordinate? resolved;
+    final hintCoord = hint?.coordinate;
+    if (hintCoord != null && !isLikelyDefaultPushMapCenter(hintCoord)) {
+      resolved = hintCoord;
+    }
+
+    resolved ??= await AddressGeocoder.geocode(address);
+    if (resolved == null || !mounted) return;
+
+    if (!coordinatesDifferMeaningfully(primary.coordinate, resolved) &&
+        primary.addressLabel.trim() == address) {
       return;
     }
-    final geocoded = await AddressGeocoder.geocode(hint.roadAddress);
-    if (geocoded == null || !mounted) return;
-    setState(() {
-      _center = geocoded;
-      if (_points.isNotEmpty) {
-        _points[0] = _points[0].copyWith(
-          coordinate: geocoded,
-          addressLabel: hint.roadAddress,
-        );
-        _addressLabel = hint.roadAddress;
-        _searchController.text = _addressLabel;
-      }
-    });
+
+    _applyPrimaryWorkplaceCenter(resolved, address);
   }
 
   Future<void> _ensureWalletLoaded() async {

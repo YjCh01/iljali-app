@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
@@ -67,13 +68,8 @@ class _ChatReplyMacroSettingsPageState extends State<ChatReplyMacroSettingsPage>
   }
 
   Future<void> _editMacro({ChatReplyMacro? existing}) async {
-    final result = await showModalBottomSheet<ChatReplyMacro>(
+    final result = await showAdaptiveSheet<ChatReplyMacro>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (context) => ChatReplyMacroEditorSheet(initial: existing),
     );
     if (result == null) return;

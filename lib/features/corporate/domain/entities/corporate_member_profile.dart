@@ -1,10 +1,11 @@
 import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/core/compliance/business_entity_type.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
+import 'package:map/core/compliance/corporate_verification_access_policy.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/domain/entities/premium_partnership_tier.dart';
 
-/// 기업회원 하위 담당자 프로필 (4자리 담당자 코드 + 검증·플랜)
+/// 기업회원 하위 담당자 프로필 (6자리 담당자 코드 + 검증·플랜)
 class CorporateMemberProfile {
   const CorporateMemberProfile({
     required this.companyName,
@@ -20,6 +21,9 @@ class CorporateMemberProfile {
     this.adminReviewApproved = false,
     this.adminReviewReason,
     this.policyAcceptedAt,
+    this.termsVersionAccepted,
+    this.privacyVersionAccepted,
+    this.outsourcingPolicyVersionAccepted,
     this.certificateImageRef,
     this.industryName,
     this.isSuspended = false,
@@ -45,6 +49,9 @@ class CorporateMemberProfile {
   final bool adminReviewApproved;
   final String? adminReviewReason;
   final DateTime? policyAcceptedAt;
+  final String? termsVersionAccepted;
+  final String? privacyVersionAccepted;
+  final String? outsourcingPolicyVersionAccepted;
   final String? certificateImageRef;
   final String? industryName;
   final bool isSuspended;
@@ -71,6 +78,18 @@ class CorporateMemberProfile {
   bool get isEnterpriseOutsourcing => isEnterpriseOutsourcingEdition;
 
   bool get hasActivePaidSubscription => false;
+
+  bool get isProvisionalMember =>
+      CorporateVerificationAccessPolicy.isProvisionalMember(this);
+
+  bool get canPostFreeJobs =>
+      CorporateVerificationAccessPolicy.canPostFreeJobs(this);
+
+  bool get canUsePaidServices =>
+      CorporateVerificationAccessPolicy.canUsePaidServices(this);
+
+  String? get paidServicesBlockedReason =>
+      CorporateVerificationAccessPolicy.paidServicesBlockedReason(this);
 
   /// @deprecated Legacy — migration only
   bool get hasLegacyPaidSubscription {
@@ -100,6 +119,9 @@ class CorporateMemberProfile {
     bool? adminReviewApproved,
     String? adminReviewReason,
     DateTime? policyAcceptedAt,
+    String? termsVersionAccepted,
+    String? privacyVersionAccepted,
+    String? outsourcingPolicyVersionAccepted,
     String? certificateImageRef,
     String? industryName,
     bool? isSuspended,
@@ -127,6 +149,11 @@ class CorporateMemberProfile {
       adminReviewApproved: adminReviewApproved ?? this.adminReviewApproved,
       adminReviewReason: adminReviewReason ?? this.adminReviewReason,
       policyAcceptedAt: policyAcceptedAt ?? this.policyAcceptedAt,
+      termsVersionAccepted: termsVersionAccepted ?? this.termsVersionAccepted,
+      privacyVersionAccepted:
+          privacyVersionAccepted ?? this.privacyVersionAccepted,
+      outsourcingPolicyVersionAccepted: outsourcingPolicyVersionAccepted ??
+          this.outsourcingPolicyVersionAccepted,
       certificateImageRef: certificateImageRef ?? this.certificateImageRef,
       industryName: industryName ?? this.industryName,
       isSuspended: isSuspended ?? this.isSuspended,
@@ -160,6 +187,12 @@ class CorporateMemberProfile {
         'adminReviewApproved': adminReviewApproved,
         'adminReviewReason': adminReviewReason,
         'policyAcceptedAt': policyAcceptedAt?.toIso8601String(),
+        if (termsVersionAccepted != null)
+          'termsVersionAccepted': termsVersionAccepted,
+        if (privacyVersionAccepted != null)
+          'privacyVersionAccepted': privacyVersionAccepted,
+        if (outsourcingPolicyVersionAccepted != null)
+          'outsourcingPolicyVersionAccepted': outsourcingPolicyVersionAccepted,
         'certificateImageRef': certificateImageRef,
         'industryName': industryName,
         'isSuspended': isSuspended,
@@ -194,6 +227,10 @@ class CorporateMemberProfile {
       adminReviewReason: map['adminReviewReason'] as String?,
       policyAcceptedAt:
           DateTime.tryParse(map['policyAcceptedAt'] as String? ?? ''),
+      termsVersionAccepted: map['termsVersionAccepted'] as String?,
+      privacyVersionAccepted: map['privacyVersionAccepted'] as String?,
+      outsourcingPolicyVersionAccepted:
+          map['outsourcingPolicyVersionAccepted'] as String?,
       certificateImageRef: map['certificateImageRef'] as String?,
       industryName: map['industryName'] as String?,
       isSuspended: map['isSuspended'] as bool? ?? false,

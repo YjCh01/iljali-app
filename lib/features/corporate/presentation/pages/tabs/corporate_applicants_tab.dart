@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 
 import 'package:map/core/compliance/presentation/partnership_upsell_dialog.dart';
@@ -233,7 +234,7 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
 
     final visible = _visibleApplicants;
     final hasJobFilter = widget.focusJobPostId != null;
-    final headerCount = (hasJobFilter ? 1 : 0) + (_contactAllowed ? 0 : 1);
+    final headerCount = (hasJobFilter ? 1 : 0) + (_contactAllowed ? 0 : 1) + 1;
 
     return ColoredBox(
       color: AppColors.background,
@@ -246,7 +247,46 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
           itemCount: headerCount + visible.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
-            if (hasJobFilter && index == 0) {
+            if (index == 0) {
+              return CorporateSurfaceCard(
+                onTap: () => Navigator.of(context)
+                    .pushNamed(AppRoutes.corporateTalentSearch),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.person_search_outlined,
+                      color: AppColors.primary.withValues(alpha: 0.95),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '인재 검색',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '자격·지역·요일로 구직자를 찾고 활성 공고와 함께 제안하세요.',
+                            style: TextStyle(fontSize: 12, height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.textSecondary.withValues(alpha: 0.7),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            if (hasJobFilter && index == 1) {
               return _JobFilterBanner(
                 jobTitle: widget.focusJobTitle ?? '공고',
                 applicantCount: visible.length,
@@ -254,7 +294,7 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
               );
             }
 
-            final upsellIndex = hasJobFilter ? 1 : 0;
+            final upsellIndex = hasJobFilter ? 2 : 1;
             if (!_contactAllowed && index == upsellIndex) {
 
               return CorporateSurfaceCard(
@@ -332,15 +372,15 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
 
                   : null,
 
-              onInstantAccept:
+              onInstantAccept: ProductFeatureFlags.isHiringCommissionEnabled &&
 
-                  applicant.status == CorporateApplicantStatus.pending ||
+                  (applicant.status == CorporateApplicantStatus.pending ||
 
-                          applicant.status == CorporateApplicantStatus.chatting
+                      applicant.status == CorporateApplicantStatus.chatting)
 
-                      ? () => _instantAccept(applicant)
+                  ? () => _instantAccept(applicant)
 
-                      : null,
+                  : null,
 
             );
 

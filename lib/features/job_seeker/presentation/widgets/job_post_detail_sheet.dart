@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
+import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/utils/external_maps_launcher.dart';
+import 'package:map/core/geo/device_location_service.dart';
+import 'package:map/core/geo/location_consent_service.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
+import 'package:map/core/hiring/selected_shift_dates.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/hiring/presentation/widgets/seeker_attendance_lock_dialog.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/job_seeker/data/repositories/job_application_repository.dart';
 import 'package:map/features/job_seeker/data/repositories/job_bookmark_vault_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/job_application.dart';
@@ -20,8 +28,19 @@ import 'package:map/features/commute/presentation/widgets/nearest_shuttle_stop_c
 import 'package:map/features/commute/presentation/widgets/shuttle_booking_sheet.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_transport_widgets.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/features/job_seeker/domain/utils/seeker_profile_readiness.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_profile_onboarding_args.dart';
+import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
+import 'package:map/features/corporate/presentation/widgets/job_post_description_body_view.dart';
 import 'package:map/features/job_seeker/presentation/widgets/easy_salary_calculator_section.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_apply_flow_sheet.dart';
+import 'package:map/features/job_seeker/presentation/widgets/credential_apply_dialog.dart';
+import 'package:map/features/job_seeker/presentation/widgets/resume_disclosure_dialog.dart';
+import 'package:map/features/credential/domain/entities/credential_catalog.dart';
+import 'package:map/features/job_seeker/domain/entities/seeker_resume_content.dart';
+import 'package:map/features/job_seeker/domain/services/seeker_application_withdraw_service.dart';
+import 'package:map/features/job_seeker/presentation/utils/seeker_shell_access.dart';
+import 'package:map/features/job_seeker/presentation/widgets/seeker_login_prompt_sheet.dart';
 
 /// 지도 핀 탭 시 공고 상세 바텀시트
 class JobPostDetailSheet extends StatefulWidget {
@@ -36,6 +55,7 @@ class JobPostDetailSheet extends StatefulWidget {
     this.onShowRouteOnMap,
     this.embeddedInPage = false,
     this.onBookmarkStateChanged,
+    this.onApplicationStateChanged,
   });
 
   final JobMapPin pin;
@@ -47,6 +67,7 @@ class JobPostDetailSheet extends StatefulWidget {
   final VoidCallback? onShowRouteOnMap;
   final bool embeddedInPage;
   final ValueChanged<bool>? onBookmarkStateChanged;
+  final VoidCallback? onApplicationStateChanged;
 
   @override
   State<JobPostDetailSheet> createState() => JobPostDetailSheetState();
@@ -55,11 +76,18 @@ class JobPostDetailSheet extends StatefulWidget {
 class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   bool _isBookmarked = false;
   bool _vaultBusy = false;
+  bool _hasApplied = false;
+  bool _canWithdraw = false;
+  bool _withdrawBusy = false;
 
   bool get isBookmarked => _isBookmarked;
   bool get vaultBusy => _vaultBusy;
+  bool get hasApplied => _hasApplied;
+  bool get canWithdrawApplication => _canWithdraw;
 
   Future<void> applyFromExternal() => _apply();
+  Future<void> withdrawFromExternal() => _withdrawApplication();
+  Future<void> refreshApplicationState() => _loadApplicationState();
 
   Future<void> toggleBookmarkFromExternal() => _toggleBookmark();
   ShuttleBookingSelection? _pendingShuttleSelection;
@@ -68,6 +96,35 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   void initState() {
     super.initState();
     _syncVaultState();
+    _loadApplicationState();
+    if (IljariApiClient().isEnabled) {
+      IljariApiClient().recordJobPostView(widget.pin.post.id);
+    }
+  }
+
+  Future<void> _loadApplicationState() async {
+    if (!SeekerShellAccess.isSignedInSeeker) {
+      if (!mounted) return;
+      setState(() {
+        _hasApplied = false;
+        _canWithdraw = false;
+      });
+      return;
+    }
+    final email = AuthSession.instance.currentUser?.email;
+    if (email == null) return;
+    final repo = await LocalHiringRepository.create();
+    final active = await repo.findActiveForPost(
+      postId: widget.pin.post.id,
+      seekerEmail: email,
+    );
+    if (!mounted) return;
+    setState(() {
+      _hasApplied = active != null && active.status.countsAsApplied;
+      _canWithdraw = active != null &&
+          LocalHiringRepository.canSeekerWithdraw(active);
+    });
+    widget.onApplicationStateChanged?.call();
   }
 
   Future<void> _syncVaultState() async {
@@ -82,6 +139,14 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   }
 
   Future<void> _toggleBookmark() async {
+    if (!SeekerShellAccess.isSignedInSeeker) {
+      await SeekerLoginPromptSheet.show(
+        context,
+        message: '보관함에 저장하려면 개인회원 로그인이 필요합니다.',
+      );
+      return;
+    }
+
     final repo = widget.vaultRepo;
     if (repo == null || _vaultBusy) return;
     setState(() => _vaultBusy = true);
@@ -114,7 +179,7 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   Future<String?> _pickFolder(JobBookmarkVaultRepository repo) async {
     final folders = await repo.loadFolders();
     if (!mounted) return JobBookmarkFolder.defaultFolderId;
-    return showModalBottomSheet<String>(
+    return showAdaptiveSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
@@ -161,9 +226,63 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
     await showJobApplyDialog(
       context,
       widget.pin,
-      onApplied: widget.onApply,
+      onApplied: () async {
+        widget.onApply();
+        await _loadApplicationState();
+      },
       presetShuttleSelection: _pendingShuttleSelection,
     );
+    await _loadApplicationState();
+  }
+
+  Future<void> _withdrawApplication() async {
+    if (_withdrawBusy || !_canWithdraw) return;
+    setState(() => _withdrawBusy = true);
+    try {
+      final ok = await SeekerApplicationWithdrawService.confirmAndWithdraw(
+        context,
+        postId: widget.pin.post.id,
+        postTitle: widget.pin.post.title,
+      );
+      if (ok) await _loadApplicationState();
+    } finally {
+      if (mounted) setState(() => _withdrawBusy = false);
+    }
+  }
+
+  Future<void> _openDirections() async {
+    final post = widget.pin.post;
+    final destLabel = post.warehouseName.trim().isNotEmpty
+        ? post.warehouseName
+        : post.title;
+    final destLat = post.workplaceLatitude ??
+        (widget.pin.latitude != 0 ? widget.pin.latitude : null);
+    final destLng = post.workplaceLongitude ??
+        (widget.pin.longitude != 0 ? widget.pin.longitude : null);
+
+    await LocationConsentService.ensureGranted(
+      context,
+      trigger: LocationConsentTrigger.mapBrowse,
+    );
+
+    final origin = await DeviceLocationService.getCurrentPosition();
+    final opened = await openNaverDirections(
+      destinationLabel: destLabel,
+      destinationLatitude: destLat,
+      destinationLongitude: destLng,
+      originLatitude: origin?.latitude,
+      originLongitude: origin?.longitude,
+      mode: NaverDirectionsMode.car,
+    );
+    if (!context.mounted) return;
+    if (!opened) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mapsSearchCopiedMessage(destLabel)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _openShuttleBooking(CommuteRoute route) async {
@@ -361,20 +480,17 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
                       color: AppColors.primaryLight.withValues(alpha: 0.35),
                     ),
                   ),
-                  child: Text(
-                    post.fullDescriptionText,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.45,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
-                    ),
+                  child: JobPostDescriptionBodyView(
+                    body: post.effectiveDescriptionBody,
                   ),
                 ),
                 const SizedBox(height: 14),
                 _InfoRow(label: '근무지', value: post.warehouseName),
                 const SizedBox(height: 8),
-                _InfoRow(label: '고용 형태', value: post.employmentType.label),
+                _InfoRow(
+                  label: '고용 형태',
+                  value: post.effectiveWorkerCategory.label,
+                ),
                 const SizedBox(height: 12),
                 EasySalaryCalculatorSection(post: post),
                 const SizedBox(height: 8),
@@ -384,16 +500,36 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
                   _InfoRow(label: '일급', value: post.dailyWage!),
                 ],
                 const SizedBox(height: 8),
-                _InfoRow(label: '근무 일정', value: post.workSchedule),
+                _InfoRow(
+                  label: '근무 일정',
+                  value: post.workScheduleDisplayLabel,
+                ),
                 const SizedBox(height: 8),
                 _InfoRow(label: '급여지급일', value: payDay),
+                if (post.requiredCredentialIds.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _InfoRow(
+                    label: '필수 자격',
+                    value: CredentialCatalog.labelsForIds(
+                      post.requiredCredentialIds,
+                    ).join(', '),
+                  ),
+                ],
+                if (post.requiredResumeItems.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _InfoRow(
+                    label: '이력서 확인',
+                    value: post.requiredResumeItems
+                        .map((k) => k.label)
+                        .join(', '),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    onPressed: () =>
-                        _showDirectionsStub(context, post.warehouseName),
-                    icon: const Icon(Icons.directions_bus_outlined, size: 18),
+                    onPressed: _openDirections,
+                    icon: const Icon(Icons.directions_car_outlined, size: 18),
                     label: const Text('길찾기'),
                   ),
                 ),
@@ -450,22 +586,47 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      if (_canWithdraw) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _withdrawBusy ? null : _withdrawApplication,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red.shade700,
+                              side: BorderSide(
+                                color: Colors.red.shade300,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              '지원취소',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 8),
                       Expanded(
                         child: FilledButton(
-                          onPressed: _apply,
+                          onPressed: _hasApplied ? null : _apply,
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
+                            disabledBackgroundColor:
+                                AppColors.primaryLight.withValues(alpha: 0.35),
+                            disabledForegroundColor: Colors.white70,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text(
-                            '지원하기',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                          child: Text(
+                            _hasApplied ? '지원 완료' : '지원하기',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
                       ),
@@ -479,15 +640,6 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
       ),
     );
   }
-}
-
-void _showDirectionsStub(BuildContext context, String destination) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text('길찾기 기능 준비중: $destination'),
-      behavior: SnackBarBehavior.floating,
-    ),
-  );
 }
 
 class _StatusChip extends StatelessWidget {
@@ -551,23 +703,81 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
+Future<bool> _ensureMatchingProfileForApply(BuildContext context) async {
+  final user = AuthSession.instance.currentUser;
+  if (user == null) return false;
+
+  if (SeekerProfileReadiness.isMatchingReady(
+    user.seekerProfile,
+    displayName: user.name,
+  )) {
+    return true;
+  }
+
+  final completed = await Navigator.of(context).pushNamed<bool>(
+    AppRoutes.seekerProfileOnboarding,
+    arguments: SeekerProfileOnboardingArgs.forApply,
+  );
+  if (completed != true || !context.mounted) return false;
+
+  final refreshed = AuthSession.instance.currentUser;
+  if (SeekerProfileReadiness.isMatchingReady(
+    refreshed?.seekerProfile,
+    displayName: refreshed?.name,
+  )) {
+    return true;
+  }
+
+  final missing = SeekerProfileReadiness.missingMatchingFields(
+    refreshed?.seekerProfile,
+    displayName: refreshed?.name,
+  );
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          missing.isEmpty
+              ? SeekerProfileReadiness.applyBlockedMessage
+              : '아직 입력이 필요합니다: ${missing.join(', ')}',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+  return false;
+}
+
 Future<bool> showJobApplyDialog(
   BuildContext context,
   JobMapPin pin, {
   VoidCallback? onApplied,
   ShuttleBookingSelection? presetShuttleSelection,
 }) async {
-  final user = AuthSession.instance.currentUser;
-  final repo = await JobApplicationRepository.create(user?.email);
-  final hiringRepo = await LocalHiringRepository.create();
+  if (AuthSession.instance.currentUser == null) {
+    await SeekerLoginPromptSheet.show(
+      context,
+      message: '지원하려면 개인회원 로그인 또는 회원가입이 필요합니다.',
+    );
+    return false;
+  }
 
-  if (user != null &&
-      !await ensureSeekerAttendanceAccess(context, user.email)) {
+  if (!await _ensureMatchingProfileForApply(context)) {
     return false;
   }
   if (!context.mounted) return false;
 
-  if (user != null && await hiringRepo.hasApplied(pin.post.id, user.email)) {
+  final user = AuthSession.instance.currentUser;
+  if (user == null) return false;
+
+  final repo = await JobApplicationRepository.create(user.email);
+  final hiringRepo = await LocalHiringRepository.create();
+
+  if (!await ensureSeekerAttendanceAccess(context, user.email)) {
+    return false;
+  }
+  if (!context.mounted) return false;
+
+  if (await hiringRepo.hasApplied(pin.post.id, user.email)) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -593,17 +803,27 @@ Future<bool> showJobApplyDialog(
   final flowResult = await showJobApplyFlowSheet(
     context,
     postTitle: pin.post.title,
+    workSchedule: pin.post.workSchedule,
+    workerCategory: pin.post.effectiveWorkerCategory,
     hasShuttle: shuttleRoute != null,
     shuttleRoute: shuttleRoute,
   );
 
-  if (flowResult == null || !context.mounted || user == null) return false;
+  if (flowResult == null || !context.mounted) return false;
+
+  if (pin.post.requiredCredentialIds.isNotEmpty) {
+    final proceed = await showRequiredCredentialsApplyDialog(
+      context,
+      credentialIds: pin.post.requiredCredentialIds,
+    );
+    if (!proceed || !context.mounted) return false;
+  }
 
   final shuttleSel = flowResult.shuttleSelection ?? presetShuttleSelection;
+  final shiftDateIso = SelectedShiftDates.encode(flowResult.selectedDates);
   String? bookingId;
   if (shuttleSel != null && shuttleRoute != null) {
-    final shiftDateIso =
-        '${flowResult.shiftDate.year}-${flowResult.shiftDate.month.toString().padLeft(2, '0')}-${flowResult.shiftDate.day.toString().padLeft(2, '0')}';
+    final shuttleDateIso = SelectedShiftDates.encode([flowResult.primaryDate]);
     bookingId = 'book_${DateTime.now().millisecondsSinceEpoch}';
     final booking = ShuttleBooking(
       id: bookingId,
@@ -613,7 +833,7 @@ Future<bool> showJobApplyDialog(
       stopId: shuttleSel.stop.id,
       stopLabel: shuttleSel.stop.label,
       pickupTime: shuttleSel.pickupTime,
-      shiftDate: shiftDateIso,
+      shiftDate: shuttleDateIso,
       createdAt: DateTime.now(),
     );
     final bookingRepo = await ShuttleBookingRepository.create();
@@ -623,8 +843,21 @@ Future<bool> showJobApplyDialog(
   }
 
   final phone = user.phone ?? '010-0000-0000';
-  final shiftDateIso =
-      '${flowResult.shiftDate.year}-${flowResult.shiftDate.month.toString().padLeft(2, '0')}-${flowResult.shiftDate.day.toString().padLeft(2, '0')}';
+
+  final requiredItems = pin.post.requiredResumeItems;
+  List<ResumeItemKind> disclosedItems = const [];
+  if (requiredItems.isNotEmpty) {
+    final profile = AuthSession.instance.currentUser?.seekerProfile;
+    final resume = profile?.resume ?? const SeekerResumeContent();
+    final disclosed = await showResumeDisclosureFlow(
+      context,
+      requiredItems: requiredItems,
+      resume: resume,
+      profile: profile,
+    );
+    if (disclosed == null || !context.mounted) return false;
+    disclosedItems = disclosed.toList();
+  }
 
   await hiringRepo.submitApplication(
     postId: pin.post.id,
@@ -640,13 +873,15 @@ Future<bool> showJobApplyDialog(
     seekerName: user.name,
     seekerPhoneMasked: phone,
     workSchedule: pin.post.workSchedule,
-    suggestedWorkDate: flowResult.shiftDate,
+    suggestedWorkDate: flowResult.primaryDate,
     hourlyWageText: pin.post.hourlyWage,
     employmentType: pin.post.employmentType,
     selectedShiftDate: shiftDateIso,
     shiftSlot: flowResult.shiftSlot,
     shuttleBookingId: bookingId,
     preferredStopId: shuttleSel?.stop.id,
+    disclosedResumeItems: disclosedItems,
+    requiredCredentialIds: pin.post.requiredCredentialIds,
   );
 
   if (repo != null) {
@@ -667,18 +902,25 @@ Future<bool> showJobApplyDialog(
   }
   if (!context.mounted) return false;
   final shuttleNote = shuttleSel != null ? ' · 셔틀 ${shuttleSel.stop.label}' : '';
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text('「${pin.post.title}」 지원이 접수되었습니다$shuttleNote'),
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: '내 지원',
-          onPressed: onApplied ?? () {},
-        ),
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      icon: Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 48),
+      title: const Text('지원 완료'),
+      content: Text(
+        '「${pin.post.title}」에 지원했습니다.$shuttleNote\n\n기업의 연락을 기다려 주세요.',
+        textAlign: TextAlign.center,
       ),
-    );
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('확인'),
+        ),
+      ],
+    ),
+  );
   onApplied?.call();
   return true;
 }

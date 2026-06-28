@@ -1,27 +1,29 @@
-/// 기업회원 가입 — 사업자 검증 완료 전 진행 차단
+import 'package:map/core/compliance/verified_business_record.dart';
+
+/// 기업회원 가입 — 국세청 검증 또는 미인증(provisional) 경로
 class CorporateSignUpVerificationGate {
   const CorporateSignUpVerificationGate();
 
-  bool canProceedToHandler({required bool hasVerifiedRecord}) =>
-      hasVerifiedRecord;
+  bool canProceedToHandler({required VerifiedBusinessRecord? record}) =>
+      record != null;
 
   bool canCompleteSignUp({
-    required bool hasVerifiedRecord,
+    required VerifiedBusinessRecord? record,
     required bool hasAssignedProfile,
   }) =>
-      hasVerifiedRecord && hasAssignedProfile;
+      record != null && hasAssignedProfile;
 
-  String? handlerBlockedMessage({required bool hasVerifiedRecord}) {
-    if (hasVerifiedRecord) return null;
-    return '국세청 사업자 확인을 완료해야 담당자 정보를 등록할 수 있습니다.';
+  String? handlerBlockedMessage({required VerifiedBusinessRecord? record}) {
+    if (record != null) return null;
+    return '국세청 확인을 완료하거나, 미인증 회원으로 가입해 주세요.';
   }
 
   String? completeBlockedMessage({
-    required bool hasVerifiedRecord,
+    required VerifiedBusinessRecord? record,
     required bool hasAssignedProfile,
   }) {
-    if (!hasVerifiedRecord) {
-      return '미검증 사업자번호로는 기업 계정을 만들 수 없습니다.';
+    if (record == null) {
+      return '사업자 확인 또는 미인증 가입을 완료해 주세요.';
     }
     if (!hasAssignedProfile) return '담당자 코드 발급이 필요합니다.';
     return null;

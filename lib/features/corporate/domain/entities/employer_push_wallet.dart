@@ -1,4 +1,4 @@
-﻿import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/push_ticket_catalog.dart';
 
 /// 기업별 PUSH·거점 크레딧 지갑
@@ -9,6 +9,7 @@ class EmployerPushWallet {
     this.pushTicketCredits = 0,
     this.signupBonusRemaining = 0,
     this.locationSlotsFromPackages = 0,
+    this.cashBalanceKrw = 0,
     this.lastFreePushDayKey,
     this.signupBonusExpiresAt,
     this.lifetimePackagesPurchased = 0,
@@ -17,13 +18,16 @@ class EmployerPushWallet {
 
   final int packageCredits;
 
-  /// 노출+PUSH 번들 — 알림핀/정류장 노출과 해당 위치 1km PUSH 1회
+  /// 노출+PUSH 번들 — 알림핀/정류장 노출과 해당 위치 700m PUSH 1회
   final int exposurePushBundleCredits;
 
   /// PUSH 알림권 — 알림핀·정류장 1곳 선택 · PUSH만 (19,900원/회)
   final int pushTicketCredits;
   final int signupBonusRemaining;
   final int locationSlotsFromPackages;
+
+  /// 선충전 보유금 — 결제 시 우선 차감
+  final int cashBalanceKrw;
 
   /// @deprecated Legacy daily-free tracking — no longer used for dispatch.
   final String? lastFreePushDayKey;
@@ -79,12 +83,28 @@ class EmployerPushWallet {
 
   int get jobPostRegistrationQuotaRemaining => availablePushCredits;
 
+  bool get hasCashBalance => cashBalanceKrw > 0;
+
+  String get cashBalanceLabel =>
+      '${_formatKrw(cashBalanceKrw)}원';
+
+  static String _formatKrw(int value) {
+    final s = value.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
   EmployerPushWallet copyWith({
     int? packageCredits,
     int? exposurePushBundleCredits,
     int? pushTicketCredits,
     int? signupBonusRemaining,
     int? locationSlotsFromPackages,
+    int? cashBalanceKrw,
     String? lastFreePushDayKey,
     DateTime? signupBonusExpiresAt,
     int? lifetimePackagesPurchased,
@@ -99,6 +119,7 @@ class EmployerPushWallet {
       signupBonusRemaining: signupBonusRemaining ?? this.signupBonusRemaining,
       locationSlotsFromPackages:
           locationSlotsFromPackages ?? this.locationSlotsFromPackages,
+      cashBalanceKrw: cashBalanceKrw ?? this.cashBalanceKrw,
       lastFreePushDayKey: clearLastFreePushDayKey
           ? null
           : (lastFreePushDayKey ?? this.lastFreePushDayKey),
@@ -116,6 +137,7 @@ class EmployerPushWallet {
         'pushTicketCredits': pushTicketCredits,
         'signupBonusRemaining': signupBonusRemaining,
         'locationSlotsFromPackages': locationSlotsFromPackages,
+        'cashBalanceKrw': cashBalanceKrw,
         'lastFreePushDayKey': lastFreePushDayKey,
         'signupBonusExpiresAt': signupBonusExpiresAt?.toIso8601String(),
         'lifetimePackagesPurchased': lifetimePackagesPurchased,
@@ -134,6 +156,7 @@ class EmployerPushWallet {
       signupBonusRemaining: map['signupBonusRemaining'] as int? ?? 0,
       locationSlotsFromPackages:
           map['locationSlotsFromPackages'] as int? ?? 0,
+      cashBalanceKrw: map['cashBalanceKrw'] as int? ?? 0,
       lastFreePushDayKey: map['lastFreePushDayKey'] as String?,
       signupBonusExpiresAt: DateTime.tryParse(
         map['signupBonusExpiresAt'] as String? ?? '',

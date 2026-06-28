@@ -151,6 +151,7 @@ class WorkScheduleSpec {
     this.mode = WorkScheduleMode.fixedWeekdays,
     this.startDate,
     this.endDate,
+    this.firstStartDateOnly = false,
     this.weekdays = const {0, 1, 2, 3, 4},
     this.rotatingPresetId = '3t2_ryo',
     this.cycleStartIndex = 0,
@@ -171,6 +172,9 @@ class WorkScheduleSpec {
   final WorkScheduleMode mode;
   final DateTime? startDate;
   final DateTime? endDate;
+
+  /// 정규직 — 종료일 없이 첫 근무 시작일만 지정
+  final bool firstStartDateOnly;
 
   /// 0=월 … 6=일
   final Set<int> weekdays;
@@ -232,7 +236,20 @@ class WorkScheduleSpec {
     return RotatingShiftPreset.byId(rotatingPresetId)?.cycle ?? const [];
   }
 
-  bool get isComplete {
+  bool get isComplete => isCompleteFor();
+
+  bool isCompleteFor({bool workPeriodNegotiable = false}) {
+    if (firstStartDateOnly) {
+      final hasStart = startDate != null;
+      return switch (mode) {
+        WorkScheduleMode.fixedWeekdays =>
+          weekdays.isNotEmpty && (hasStart || workPeriodNegotiable),
+        WorkScheduleMode.rotatingShift =>
+          rotatingCycle.isNotEmpty && (hasStart || workPeriodNegotiable),
+        WorkScheduleMode.customDates => hasStart || workPeriodNegotiable,
+        WorkScheduleMode.dailyPick => selectedWorkDates.isNotEmpty,
+      };
+    }
     return switch (mode) {
       WorkScheduleMode.fixedWeekdays =>
         startDate != null && endDate != null && weekdays.isNotEmpty,
@@ -250,6 +267,7 @@ class WorkScheduleSpec {
     bool clearStartDate = false,
     DateTime? endDate,
     bool clearEndDate = false,
+    bool? firstStartDateOnly,
     Set<int>? weekdays,
     String? rotatingPresetId,
     int? cycleStartIndex,
@@ -266,6 +284,7 @@ class WorkScheduleSpec {
       mode: mode ?? this.mode,
       startDate: clearStartDate ? null : (startDate ?? this.startDate),
       endDate: clearEndDate ? null : (endDate ?? this.endDate),
+      firstStartDateOnly: firstStartDateOnly ?? this.firstStartDateOnly,
       weekdays: weekdays ?? this.weekdays,
       rotatingPresetId: rotatingPresetId ?? this.rotatingPresetId,
       cycleStartIndex: cycleStartIndex ?? this.cycleStartIndex,
@@ -300,6 +319,25 @@ class WorkScheduleSpec {
       return _isSelectedWorkDay(d) ? ShiftSlotKind.day : ShiftSlotKind.off;
     }
 
+    if (firstStartDateOnly) {
+      if (startDate == null) return null;
+      final s = DateTime(startDate!.year, startDate!.month, startDate!.day);
+      final day = DateTime(d.year, d.month, d.day);
+      if (day.isBefore(s)) return null;
+      if (endDate != null) {
+        final e = DateTime(endDate!.year, endDate!.month, endDate!.day);
+        if (day.isAfter(e)) return null;
+      }
+      return switch (mode) {
+        WorkScheduleMode.fixedWeekdays =>
+          isWeekdayAllowed(day) ? ShiftSlotKind.day : ShiftSlotKind.off,
+        WorkScheduleMode.rotatingShift => _rotatingSlotOn(day, s),
+        WorkScheduleMode.customDates =>
+          _isExcluded(day) ? ShiftSlotKind.off : ShiftSlotKind.day,
+        WorkScheduleMode.dailyPick => null,
+      };
+    }
+
     if (startDate == null || endDate == null) return null;
     final s = DateTime(startDate!.year, startDate!.month, startDate!.day);
     final e = DateTime(endDate!.year, endDate!.month, endDate!.day);
@@ -327,6 +365,9 @@ class WorkScheduleSpec {
   int countWorkDays() {
     if (mode == WorkScheduleMode.dailyPick) {
       return selectedWorkDates.length;
+    }
+    if (firstStartDateOnly && endDate == null) {
+      return 0;
     }
     if (startDate == null || endDate == null) return 0;
     var count = 0;

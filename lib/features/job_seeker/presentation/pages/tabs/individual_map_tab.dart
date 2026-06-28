@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/sync/qc_sync_bootstrap.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
@@ -8,6 +9,7 @@ import 'package:map/features/job_seeker/data/repositories/job_bookmark_vault_rep
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_ranking_context.dart';
 import 'package:map/features/job_seeker/presentation/pages/job_post_detail_page.dart';
+import 'package:map/features/job_seeker/presentation/widgets/closed_ghost_pin_callout_card.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_callout_card.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_map_cluster_list_sheet.dart';
 import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
@@ -69,6 +71,11 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   }
 
   Future<void> _loadPins() async {
+    if (AuthSession.instance.isLoggedIn) {
+      await QcSyncBootstrap.pullIfEnabled();
+    } else {
+      await QcSyncBootstrap.pullPublicCatalogIfEnabled();
+    }
     final pins = await _getPins();
     if (!mounted) return;
     setState(() => _allPins = pins);
@@ -97,6 +104,24 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   }
 
   Future<void> _selectPin(JobMapPin pin) async {
+    if (pin.isClosedGhost) {
+      setState(() {
+        _clusterPins = null;
+        _calloutPin = pin;
+        _selectedRecruitmentPin = null;
+        _activeShuttleRoute = null;
+        _activeShuttleWorkplace = GeoCoordinate(
+          latitude: pin.latitude,
+          longitude: pin.longitude,
+        );
+      });
+      await MapCameraHolder.instance.focusPin(
+        latitude: pin.latitude,
+        longitude: pin.longitude,
+      );
+      return;
+    }
+
     if (_searchFilter != null &&
         !pin.post.title.contains(_searchFilter!) &&
         !pin.companyName.contains(_searchFilter!) &&
@@ -192,24 +217,23 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   }
 
   Future<void> _openSearch() async {
-    final warehouse = await Navigator.of(context).pushNamed(
+    final result = await Navigator.of(context).pushNamed(
       AppRoutes.search,
     );
-    if (!mounted || warehouse is! Warehouse) return;
+    if (!mounted || result == null) return;
+
+    final filter = switch (result) {
+      final String text => text.trim(),
+      final Warehouse warehouse => warehouse.name.trim(),
+      _ => '',
+    };
+    if (filter.isEmpty) return;
+
     setState(() {
-      _searchFilter = warehouse.name;
+      _searchFilter = filter;
       _calloutPin = null;
+      _screenMode = _MapScreenMode.map;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('「${warehouse.name}」 관련 공고를 지도에서 찾아보세요.'),
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: '보관함',
-          onPressed: widget.onOpenVaultTab ?? () {},
-        ),
-      ),
-    );
   }
 
   void _openHotPinOnMap(JobMapPin pin) {
@@ -330,33 +354,40 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: SegmentedButton<_MapScreenMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _MapScreenMode.map,
-                      label: Text('지도'),
-                      icon: Icon(Icons.map_outlined, size: 18),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SegmentedButton<_MapScreenMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _MapScreenMode.map,
+                            label: Text('지도'),
+                            icon: Icon(Icons.map_outlined, size: 18),
+                          ),
+                          ButtonSegment(
+                            value: _MapScreenMode.hot,
+                            label: Text('인기'),
+                            icon: Icon(Icons.local_fire_department_outlined, size: 18),
+                          ),
+                        ],
+                        selected: {_screenMode},
+                        onSelectionChanged: (value) {
+                          setState(() {
+                            _screenMode = value.first;
+                            if (_screenMode == _MapScreenMode.hot) {
+                              _closeSheet();
+                            }
+                          });
+                        },
+                      ),
                     ),
-                    ButtonSegment(
-                      value: _MapScreenMode.hot,
-                      label: Text('인기'),
-                      icon: Icon(Icons.local_fire_department_outlined, size: 18),
-                    ),
+                    if (showMap) ...[
+                      const SizedBox(width: 8),
+                      MapSearchIconButton(onTap: _openSearch),
+                    ],
                   ],
-                  selected: {_screenMode},
-                  onSelectionChanged: (value) {
-                    setState(() {
-                      _screenMode = value.first;
-                      if (_screenMode == _MapScreenMode.hot) _closeSheet();
-                    });
-                  },
                 ),
               ),
-              if (showMap)
-                Padding(
-                  padding: const EdgeInsets.only(right: 56),
-                  child: MapSearchBar(onTap: _openSearch),
-                ),
               if (showMap && !showOverlay)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -411,11 +442,16 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
                       )
                     : callout == null
                         ? const SizedBox.shrink()
-                        : JobMapPinCalloutCard(
-                            pin: callout,
-                            onClose: _closeSheet,
-                            onViewDetail: () => _openDetail(callout),
-                          ),
+                        : callout.isClosedGhost
+                            ? ClosedGhostPinCalloutCard(
+                                pin: callout,
+                                onClose: _closeSheet,
+                              )
+                            : JobMapPinCalloutCard(
+                                pin: callout,
+                                onClose: _closeSheet,
+                                onViewDetail: () => _openDetail(callout),
+                              ),
               ),
             ),
           ),

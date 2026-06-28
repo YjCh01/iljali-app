@@ -1,4 +1,4 @@
-﻿import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 
 /// @deprecated Legacy tier enum — runtime uses [PushPackageCatalog] + [EmployerPushWallet] only.
 enum PremiumPartnershipTier {
@@ -25,7 +25,7 @@ extension PremiumPartnershipTierX on PremiumPartnershipTier {
 
   int get extraPushPriceKrw => PushPackageCatalog.singlePackagePriceKrw;
 
-  /// 일용직 — 1인당 채용 수수료 (상호 출근 확정 시 청구, 원)
+  /// 일용직 — 1인당 채용 수수료 (제휴 채널·`ENABLE_HIRING_COMMISSION` 활성 시)
   int get dailyWorkerSuccessFeeKrwMin => 15000;
 
   String get dailyWorkerSuccessFeeLabel =>
@@ -55,12 +55,13 @@ abstract final class PartnershipPlanDefaults {
 
 abstract final class PremiumPartnershipPlans {
   static const questionText = '일자리 프로모션 제휴사이신가요?';
-  static const pushStrategyNote = '근무지 주변 1km는 무료로 노출됩니다. '
+  static const pushStrategyNote = '근무지 주변 700m 반경은 무료로 노출됩니다. '
       '일자리 알림핀·PUSH 알림권은 이용권 구매로 확장할 수 있습니다. '
       '가입 보너스 ${PushPackageCatalog.signupBonusPushes}회 · '
       '사업자 검증 보너스 ${PushPackageCatalog.verificationBonusPushes}회.';
+  /// 제휴 채널(`ENABLE_HIRING_COMMISSION=true`) 전용 — 메인 앱 UI에 노출하지 않음
   static const commissionSavingsNote =
-      '일용직 출근비 15,000원 · 상시직 채용 수수료 5.5% (플랜과 무관)';
+      '제휴 채널: 일용직 출근비 15,000원 · 상시직 채용 수수료 5.5% (별도 안내)';
 
   static String buildChatNoticeBody() {
     final buffer = StringBuffer()

@@ -18,7 +18,53 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="일자리 — 지도 기반 일용직·현장 채용 플랫폼">
+  <meta name="description" content="내 근처에서 찾고, 우리집 앞에서 타고. 내 주변 일자리! — 지도·셔틀 기반 현장 채용">
+
+  <style>
+    #iljari-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      background: linear-gradient(160deg, #311b92 0%, #4a148c 45%, #006064 100%);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      text-align: center;
+      padding: 24px;
+    }
+    #iljari-splash .brand {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.25rem;
+    }
+    #iljari-splash .line {
+      font-size: 1.05rem;
+      font-weight: 600;
+      opacity: 0.88;
+      line-height: 1.5;
+    }
+    #iljari-splash .headline {
+      font-size: 1.35rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin-top: 0.15rem;
+    }
+    #iljari-splash .spinner {
+      width: 28px;
+      height: 28px;
+      margin-top: 2rem;
+      border: 2.5px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: iljari-spin 0.8s linear infinite;
+    }
+    @keyframes iljari-spin { to { transform: rotate(360deg); } }
+  </style>
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -51,6 +97,7 @@
       script.src =
         'https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=' +
         encodeURIComponent(key) +
+        '&submodules=geocoder' +
         '&callback=iljariNaverMapsBoot';
       script.dataset.iljariNaverBootstrap = '1';
       document.head.appendChild(script);
@@ -58,6 +105,13 @@
   </script>
 </head>
 <body>
+  <div id="iljari-splash" aria-live="polite">
+    <div class="brand">일자리</div>
+    <p class="line">내 근처에서 찾고,</p>
+    <p class="line">우리집 앞에서 타고.</p>
+    <p class="headline">내 주변 일자리!</p>
+    <div class="spinner" role="status" aria-label="로딩 중"></div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -67,5 +121,11 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var splash = document.getElementById('iljari-splash');
+      if (splash) splash.remove();
+    });
+  </script>
 </body>
 </html>

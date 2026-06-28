@@ -1,4 +1,4 @@
-﻿import 'package:map/core/session/auth_session.dart';
+import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/features/corporate/data/repositories/company_bonus_ledger_repository.dart';
 import 'package:map/features/corporate/data/repositories/push_wallet_repository.dart';
@@ -316,6 +316,12 @@ class PushWalletService {
     return wallet.totalLocationSlots;
   }
 
+  Future<void> persistWallet(
+    CorporateMemberProfile profile,
+    EmployerPushWallet wallet,
+  ) =>
+      _persist(profile, wallet);
+
   Future<void> _persist(
     CorporateMemberProfile profile,
     EmployerPushWallet wallet,
@@ -332,7 +338,8 @@ class PushWalletService {
   }
 
   static String walletSummary(EmployerPushWallet wallet) {
-    return '노출 ${wallet.packageCredits}회 · '
+    return '보유금 ${wallet.cashBalanceLabel} · '
+        '노출 ${wallet.packageCredits}회 · '
         '노출+PUSH ${wallet.exposurePushBundleCredits}회 · '
         'PUSH ${wallet.pushTicketCredits}회 · '
         '노출 범위 ${wallet.totalLocationSlots}곳';

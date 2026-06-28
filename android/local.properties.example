@@ -3,3 +3,6 @@
 
 # Naver Map SDK (Android manifest + optional reference for dart-define)
 # naver.map.client.id=YOUR_NAVER_MAP_CLIENT_ID
+
+# 로컬 API (에뮬레이터: 10.0.2.2, 실기기 LAN IP) — ./run_app.sh 가 자동 주입
+# compliance.api.url=http://10.0.2.2:8000

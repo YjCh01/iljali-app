@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 
 import 'package:map/core/constants/app_routes.dart';
@@ -199,17 +200,9 @@ class _MainDashboardPageState extends State<MainDashboardPage> {
 
     final user = AuthSession.instance.currentUser;
 
-    showModalBottomSheet<void>(
+    showAdaptiveSheet<void>(
 
       context: context,
-
-      backgroundColor: AppColors.surface,
-
-      shape: const RoundedRectangleBorder(
-
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-
-      ),
 
       builder: (context) => SafeArea(
 

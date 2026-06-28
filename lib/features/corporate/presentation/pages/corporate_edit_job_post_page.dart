@@ -14,6 +14,8 @@ import 'package:map/features/corporate/domain/entities/push_notification_setting
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/corporate/domain/services/push_job_post_payment_flow.dart';
 import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
+import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
+import 'package:map/features/corporate/domain/services/registered_business_workplace_loader.dart';
 import 'package:map/features/corporate/domain/usecases/save_corporate_job_post_usecase.dart';
 import 'package:map/features/corporate/domain/entities/salary_pay_type.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
@@ -22,8 +24,12 @@ import 'package:map/features/corporate/presentation/navigation/push_base_point_a
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_card.dart';
 import 'package:map/core/widgets/korean_calendar.dart';
 import 'package:map/features/corporate/domain/utils/daily_worker_policy.dart';
+import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_form.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_optional_services_sheet.dart';
+import 'package:map/features/corporate/presentation/widgets/resume_required_items_field.dart';
+import 'package:map/features/credential/presentation/widgets/credential_search_picker.dart';
+import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
 import 'package:map/core/widgets/transient_snack_bar.dart';
 
 /// 기업회원 — 수정할 공고 선택 (Speed Dial 2)
@@ -126,12 +132,8 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
 
   late final TextEditingController _titleController =
       TextEditingController(text: widget.post.title);
-  late final TextEditingController _jobDescriptionController =
-      TextEditingController(
-    text: widget.post.jobDescription.isNotEmpty
-        ? widget.post.jobDescription
-        : widget.post.summary,
-  );
+  late JobPostDescriptionBody _descriptionBody =
+      widget.post.effectiveDescriptionBody;
   late SalaryPayType _salaryPayType =
       parseSalaryPayType(widget.post.hourlyWage);
   late final TextEditingController _wageController = TextEditingController(
@@ -149,6 +151,7 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
       widget.post.paymentMonthOffset;
   late int? _paymentDayOfMonth = widget.post.paymentDayOfMonth;
   late bool _paymentDateNegotiable = widget.post.paymentDateNegotiable;
+  late bool _workPeriodNegotiable = widget.post.workPeriodNegotiable;
   late JobPostNotificationSettings? _notificationSettings =
       widget.post.notificationSettings;
   late CorporateJobPostStatus _status = _asCopy
@@ -157,6 +160,8 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   late WorkerCategory _workerCategory = widget.post.effectiveWorkerCategory;
   late String? _workCategoryId = widget.post.workCategoryId;
   bool _submitting = false;
+  bool _loadingRegisteredWorkplace = false;
+  final _registeredWorkplaceLoader = RegisteredBusinessWorkplaceLoader();
   late bool _dailyWorkerAcknowledged;
   List<CorporateBranch> _branches = [];
   CorporateBranch? _selectedBranch;
@@ -166,6 +171,10 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   late bool _hasShuttleRouteOverlay = widget.post.hasShuttleRouteOverlay;
   late Map<String, List<String>> _shuttleRegisteredStopIdsByRoute =
       Map<String, List<String>>.from(widget.post.shuttleRegisteredStopIdsByRoute);
+  late List<ResumeItemKind> _requiredResumeItems =
+      List<ResumeItemKind>.from(widget.post.requiredResumeItems);
+  late List<String> _requiredCredentialIds =
+      List<String>.from(widget.post.requiredCredentialIds);
 
   @override
   void initState() {
@@ -205,7 +214,6 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   @override
   void dispose() {
     _titleController.dispose();
-    _jobDescriptionController.dispose();
     _wageController.dispose();
     _scheduleController.dispose();
     super.dispose();
@@ -219,6 +227,28 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
     if (result != null && mounted) {
       setState(() => _workplace = result);
     }
+  }
+
+  Future<void> _loadRegisteredWorkplace() async {
+    setState(() => _loadingRegisteredWorkplace = true);
+    final result = await _registeredWorkplaceLoader.load();
+    if (!mounted) return;
+    setState(() => _loadingRegisteredWorkplace = false);
+    if (!result.isSuccess || result.workplace == null) {
+      showTransientSnackBar(
+        context,
+        result.errorMessage ?? '사업장 소재지를 불러오지 못했습니다.',
+      );
+      return;
+    }
+    setState(() => _workplace = result.workplace!);
+    final syncNote = result.headOfficeSynced
+        ? ' 내정보 사업자 소재지도 함께 등록했습니다.'
+        : '';
+    showTransientSnackBar(
+      context,
+      '${result.sourceLabel}를 근무지에 적용했습니다.$syncNote',
+    );
   }
 
   Future<void> _pickPaymentDate() async {
@@ -255,13 +285,16 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
       if (_paymentDate == null) return null;
       return SalaryPaymentSchedule.absoluteDate(_paymentDate!);
     }
-    if (_paymentMonthOffset == null || _paymentDayOfMonth == null) {
-      return null;
+    if (_workerCategory.usesMonthlyPaymentDate) {
+      if (_paymentMonthOffset == null || _paymentDayOfMonth == null) {
+        return null;
+      }
+      return SalaryPaymentSchedule.monthlyRule(
+        monthOffset: _paymentMonthOffset!,
+        dayOfMonth: _paymentDayOfMonth!,
+      );
     }
-    return SalaryPaymentSchedule.monthlyRule(
-      monthOffset: _paymentMonthOffset!,
-      dayOfMonth: _paymentDayOfMonth!,
-    );
+    return null;
   }
 
   Future<void> _onWorkerCategoryChanged(WorkerCategory category) async {
@@ -279,10 +312,17 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
       } else if (category.usesCalendarPaymentDate) {
         _paymentMonthOffset = null;
         _paymentDayOfMonth = null;
+      } else if (category.usesMonthlyPaymentDate) {
+        _paymentDate = null;
+        _paymentDateNegotiable = false;
+        _dailyWorkerAcknowledged = false;
       } else {
         _paymentDate = null;
         _paymentDateNegotiable = false;
         _dailyWorkerAcknowledged = false;
+      }
+      if (!category.usesFirstStartDateOnly) {
+        _workPeriodNegotiable = false;
       }
     });
   }
@@ -340,6 +380,24 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         const SnackBar(content: Text('근무 일·시간을 선택해 주세요.')),
       );
       return;
+    }
+    if (_workerCategory.usesFirstStartDateOnly) {
+      final spec = WorkScheduleCodec.tryParse(_scheduleController.text);
+      if (spec == null ||
+          !spec.isCompleteFor(workPeriodNegotiable: _workPeriodNegotiable)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('근무 일·시간을 선택해 주세요.')),
+        );
+        return;
+      }
+    } else if (_workerCategory.usesWorkPeriodWithEndDate) {
+      final spec = WorkScheduleCodec.tryParse(_scheduleController.text);
+      if (spec == null || !spec.isCompleteFor()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('근무 시작일과 종료일을 선택해 주세요.')),
+        );
+        return;
+      }
     }
 
     final paymentSchedule = _buildPaymentSchedule();
@@ -405,10 +463,10 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         workplace: _workplace,
         hourlyWage: wageLabel,
         workSchedule: _scheduleController.text,
-        jobDescription: _jobDescriptionController.text,
-        summary: _jobDescriptionController.text,
+        descriptionBody: _descriptionBody,
         paymentSchedule: paymentSchedule,
         workerCategory: _workerCategory,
+        workPeriodNegotiable: _workPeriodNegotiable,
         workCategoryId: _workCategoryId,
         employmentType: _workerCategory.employmentType,
         notificationSettings: notificationSettings,
@@ -421,6 +479,8 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         hasShuttleRouteOverlay: _linkedShuttleRouteIds.isEmpty
             ? false
             : _hasShuttleRouteOverlay,
+        requiredResumeItems: _requiredResumeItems,
+        requiredCredentialIds: _requiredCredentialIds,
       );
     } else {
       result = await _updatePost(
@@ -436,10 +496,10 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         workplace: _workplace,
         hourlyWage: wageLabel,
         workSchedule: _scheduleController.text,
-        jobDescription: _jobDescriptionController.text,
-        summary: _jobDescriptionController.text,
+        descriptionBody: _descriptionBody,
         paymentSchedule: paymentSchedule,
         workerCategory: _workerCategory,
+        workPeriodNegotiable: _workPeriodNegotiable,
         workCategoryId: _workCategoryId,
         status: _status,
         notificationSettings: notificationSettings,
@@ -451,6 +511,8 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         hasShuttleRouteOverlay: _linkedShuttleRouteIds.isEmpty
             ? false
             : _hasShuttleRouteOverlay,
+        requiredResumeItems: _requiredResumeItems,
+        requiredCredentialIds: _requiredCredentialIds,
       );
     }
 
@@ -503,11 +565,15 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         padding: const EdgeInsets.all(20),
         child: CorporateJobPostForm(
           titleController: _titleController,
-          jobDescriptionController: _jobDescriptionController,
+          descriptionBody: _descriptionBody,
+          onDescriptionBodyChanged: (body) =>
+              setState(() => _descriptionBody = body),
           wageController: _wageController,
           scheduleController: _scheduleController,
           workplace: _workplace,
           onSearchWorkplace: _searchWorkplace,
+          onLoadRegisteredWorkplace: _loadRegisteredWorkplace,
+          loadingRegisteredWorkplace: _loadingRegisteredWorkplace,
           workerCategory: _workerCategory,
           onWorkerCategoryChanged: _onWorkerCategoryChanged,
           workCategoryId: _workCategoryId,
@@ -534,9 +600,24 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
           paymentDateNegotiable: _paymentDateNegotiable,
           onPaymentDateNegotiableChanged: (value) =>
               setState(() => _paymentDateNegotiable = value),
+          workPeriodNegotiable: _workPeriodNegotiable,
+          onWorkPeriodNegotiableChanged: (value) =>
+              setState(() => _workPeriodNegotiable = value),
           beforeSubmit: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              ResumeRequiredItemsField(
+                selected: _requiredResumeItems,
+                onChanged: (value) =>
+                    setState(() => _requiredResumeItems = value),
+              ),
+              const SizedBox(height: 16),
+              RequiredCredentialsField(
+                selectedIds: _requiredCredentialIds,
+                onChanged: (value) =>
+                    setState(() => _requiredCredentialIds = value),
+              ),
+              const SizedBox(height: 16),
               if (!_asCopy) ...[
                 const FieldLabel('공고 상태'),
                 Container(

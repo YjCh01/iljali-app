@@ -3,6 +3,7 @@ import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/job_seeker/data/repositories/job_bookmark_vault_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/features/job_seeker/domain/services/job_post_inquiry_service.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_post_action_grid.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_post_detail_sheet.dart';
 
@@ -33,19 +34,35 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
   final _sheetKey = GlobalKey<JobPostDetailSheetState>();
   bool _isBookmarked = false;
   bool _bookmarkBusy = false;
+  bool _hasApplied = false;
+  bool _canWithdraw = false;
+
+  void _syncSheetState() {
+    final sheet = _sheetKey.currentState;
+    if (sheet == null) return;
+    setState(() {
+      _isBookmarked = sheet.isBookmarked;
+      _bookmarkBusy = sheet.vaultBusy;
+      _hasApplied = sheet.hasApplied;
+      _canWithdraw = sheet.canWithdrawApplication;
+    });
+  }
+
+  final _inquiry = const JobPostInquiryService();
 
   void _inquire() {
     if (widget.employerPreview) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('지원 후 기업과 채팅으로 문의할 수 있습니다.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    _inquiry.openInquiryChat(context, widget.pin).then((_) => _syncSheetState());
   }
 
   void _apply() {
-    _sheetKey.currentState?.applyFromExternal();
+    _sheetKey.currentState?.applyFromExternal().then((_) => _syncSheetState());
+  }
+
+  void _withdraw() {
+    _sheetKey.currentState
+        ?.withdrawFromExternal()
+        .then((_) => _syncSheetState());
   }
 
   void _bookmark() {
@@ -102,6 +119,7 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
                     _bookmarkBusy = _sheetKey.currentState?.vaultBusy ?? false;
                   });
                 },
+                onApplicationStateChanged: _syncSheetState,
               ),
             ),
           ),
@@ -109,8 +127,11 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
             previewMode: widget.employerPreview,
             isBookmarked: _isBookmarked,
             bookmarkBusy: _bookmarkBusy,
+            hasApplied: _hasApplied,
+            canWithdrawApplication: _canWithdraw,
             onInquire: _inquire,
             onApply: _apply,
+            onWithdrawApply: _withdraw,
             onBookmark: _bookmark,
           ),
         ],

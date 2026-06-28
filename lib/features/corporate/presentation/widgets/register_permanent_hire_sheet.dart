@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/hiring/hiring_application.dart';
@@ -16,13 +17,8 @@ Future<PermanentEmploymentRecord?> showRegisterPermanentHireSheet(
   );
   final salaryController = TextEditingController(text: '2500000');
 
-  final confirmed = await showModalBottomSheet<bool>(
+  final confirmed = await showAdaptiveSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (context) {
       return Padding(
         padding: EdgeInsets.only(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/korean_calendar.dart';
 import 'package:map/core/widgets/scroll_time_picker.dart';
@@ -12,12 +13,20 @@ class WorkScheduleSelectorField extends StatefulWidget {
     super.key,
     required this.controller,
     this.dailyOnly = false,
+    this.firstStartDateOnly = false,
+    this.workPeriodNegotiable = false,
+    this.onWorkPeriodNegotiableChanged,
     this.onDailyScheduleCommitted,
   });
 
   final TextEditingController controller;
   /// 일용직 — 탭 없이 달력에서 근무일만 하루씩 선택
   final bool dailyOnly;
+  /// 정규직 — 근무기간은 첫 근무 시작일만
+  final bool firstStartDateOnly;
+  /// 정규직 — 첫 근무 시작일 협의 가능
+  final bool workPeriodNegotiable;
+  final ValueChanged<bool>? onWorkPeriodNegotiableChanged;
   /// 일용직 근무일 적용 시 부모에 알림 (급여지급일 자동 설정 등)
   final VoidCallback? onDailyScheduleCommitted;
 
@@ -72,6 +81,20 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
         _loadFromController(forceDailyOnly: false);
       }
       if (mounted) setState(() {});
+    } else if (widget.firstStartDateOnly != oldWidget.firstStartDateOnly) {
+      if (widget.firstStartDateOnly) {
+        final parsed = WorkScheduleCodec.tryParse(widget.controller.text);
+        if (parsed?.firstStartDateOnly != true) {
+          widget.controller.clear();
+        }
+      } else {
+        final parsed = WorkScheduleCodec.tryParse(widget.controller.text);
+        if (parsed?.firstStartDateOnly == true) {
+          widget.controller.clear();
+        }
+      }
+      _loadFromController();
+      if (mounted) setState(() {});
     }
   }
 
@@ -93,11 +116,14 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
       return;
     }
     if (parsed != null && parsed.mode != WorkScheduleMode.dailyPick) {
-      _spec = parsed;
+      _spec = parsed.copyWith(
+        firstStartDateOnly:
+            widget.firstStartDateOnly || parsed.firstStartDateOnly,
+      );
     } else if (parsed == null) {
-      _spec = WorkScheduleSpec();
+      _spec = WorkScheduleSpec(firstStartDateOnly: widget.firstStartDateOnly);
     } else {
-      _spec = WorkScheduleSpec();
+      _spec = WorkScheduleSpec(firstStartDateOnly: widget.firstStartDateOnly);
     }
   }
 
@@ -105,7 +131,10 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
     if (_spec.mode == WorkScheduleMode.dailyPick) {
       _spec = _spec.withDerivedDailyBounds();
     }
-    widget.controller.text = WorkScheduleCodec.encode(_spec);
+    widget.controller.text = WorkScheduleCodec.encode(
+      _spec,
+      workPeriodNegotiable: widget.workPeriodNegotiable,
+    );
     if (_spec.mode == WorkScheduleMode.dailyPick) {
       widget.onDailyScheduleCommitted?.call();
     }
@@ -120,10 +149,18 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
     return '$h:$m';
   }
 
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
   bool _hasCompletePeriod() =>
       _spec.startDate != null && _spec.endDate != null;
 
   (DateTime?, DateTime?) _activePeriodBounds() {
+    if (_spec.firstStartDateOnly) {
+      if (_spec.startDate == null) return (null, null);
+      final s = _dateOnly(_spec.startDate!);
+      return (s, s);
+    }
     if (_spec.startDate == null) return (null, null);
     if (_spec.endDate == null) {
       final s = _dateOnly(_spec.startDate!);
@@ -258,11 +295,60 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
         .withDerivedDailyBounds();
   }
 
+  void _selectFirstStartDay(DateTime normalized) {
+    if (_spec.startDate != null &&
+        _dateOnly(_spec.startDate!) == normalized) {
+      _spec = _spec.copyWith(clearStartDate: true, clearEndDate: true);
+    } else {
+      _spec = _spec.copyWith(startDate: normalized, clearEndDate: true);
+    }
+  }
+
+  void _toggleRegularExclusion(DateTime day) {
+    final normalized = _dateOnly(day);
+    if (_spec.startDate == null) return;
+    final s = _dateOnly(_spec.startDate!);
+    if (normalized.isBefore(s)) return;
+
+    final excluded = Set<DateTime>.from(_spec.customExcludedDates);
+    final exists = excluded.any(
+      (d) =>
+          d.year == normalized.year &&
+          d.month == normalized.month &&
+          d.day == normalized.day,
+    );
+    if (exists) {
+      excluded.removeWhere(
+        (d) =>
+            d.year == normalized.year &&
+            d.month == normalized.month &&
+            d.day == normalized.day,
+      );
+    } else {
+      excluded.add(normalized);
+    }
+    _spec = _spec.copyWith(customExcludedDates: excluded);
+  }
+
   void _selectDay(BuildContext context, DateTime day) {
     final normalized = _dateOnly(day);
 
     if (_spec.mode == WorkScheduleMode.dailyPick) {
       _toggleDailyWorkDay(normalized);
+      return;
+    }
+
+    if (_spec.firstStartDateOnly) {
+      if (_spec.mode == WorkScheduleMode.customDates) {
+        if (_spec.startDate == null) {
+          _spec = _spec.copyWith(startDate: normalized, clearEndDate: true);
+          return;
+        }
+        if (normalized.isBefore(_dateOnly(_spec.startDate!))) return;
+        _toggleRegularExclusion(normalized);
+        return;
+      }
+      _selectFirstStartDay(normalized);
       return;
     }
 
@@ -382,27 +468,35 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
     if (widget.dailyOnly && _spec.mode != WorkScheduleMode.dailyPick) {
       _spec = _emptyDailySpec();
     }
+    if (widget.firstStartDateOnly && !_spec.firstStartDateOnly) {
+      _spec = _spec.copyWith(
+        firstStartDateOnly: true,
+        clearEndDate: true,
+      );
+    }
 
     final calendarScrollController = ScrollController();
     final calendarMonths = _monthsToShow();
 
-    await showModalBottomSheet<void>(
+    await showAdaptiveSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             void refresh() => setSheetState(() {});
 
-            final preview = WorkScheduleCodec.encode(_spec);
+            final preview = WorkScheduleCodec.encode(
+              _spec,
+              workPeriodNegotiable: widget.workPeriodNegotiable,
+            );
             final cycle = _spec.rotatingCycle;
             final isCustomPreset =
                 _spec.rotatingPresetId == RotatingShiftPreset.customDirect.id;
             final isDaily = _spec.mode == WorkScheduleMode.dailyPick;
+            final isRegular = _spec.firstStartDateOnly;
+            final scheduleComplete = _spec.isCompleteFor(
+              workPeriodNegotiable: widget.workPeriodNegotiable,
+            );
 
             return SafeArea(
               child: SingleChildScrollView(
@@ -680,7 +774,9 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                     ],
                     if (!isDaily && _spec.mode == WorkScheduleMode.customDates) ...[
                       Text(
-                        '시작일·종료일을 탭한 뒤, 근무 제외일만 탭해 끄세요.',
+                        isRegular
+                            ? '첫 근무 시작일을 선택한 뒤, 제외할 날짜를 탭하세요.'
+                            : '시작일·종료일을 탭한 뒤, 근무 제외일만 탭해 끄세요.',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary.withValues(alpha: 0.9),
@@ -699,7 +795,9 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '달력은 위아래 스크롤만 사용합니다. 첫 탭=시작일, 둘째 탭=종료일(같은 날 가능).',
+                        isRegular
+                            ? '달력에서 첫 근무 시작일을 선택하세요. (같은 날 다시 탭하면 해제)'
+                            : '달력은 위아래 스크롤만 사용합니다. 첫 탭=시작일, 둘째 탭=종료일(같은 날 가능).',
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textSecondary.withValues(alpha: 0.85),
@@ -707,7 +805,9 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                       ),
                       SizedBox(
                         height: 22,
-                        child: _spec.startDate != null && _spec.endDate == null
+                        child: !isRegular &&
+                                _spec.startDate != null &&
+                                _spec.endDate == null
                             ? Text(
                                 '근무 종료일을 선택하세요',
                                 textAlign: TextAlign.center,
@@ -718,7 +818,18 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                                       AppColors.primary.withValues(alpha: 0.9),
                                 ),
                               )
-                            : null,
+                            : isRegular && _spec.startDate != null
+                                ? Text(
+                                    '첫 근무 ${_fmtDate(_spec.startDate!)}',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.9),
+                                    ),
+                                  )
+                                : null,
                       ),
                       const SizedBox(height: 8),
                     ] else ...[
@@ -947,7 +1058,7 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                           color: AppColors.textSecondary.withValues(alpha: 0.85),
                         ),
                       ),
-                    if (_spec.isComplete && _spec.countWorkDays() > 0) ...[
+                    if (_spec.isComplete && _spec.countWorkDays() > 0 && !isRegular) ...[
                       const SizedBox(height: 4),
                       Text(
                         '기간 내 근무 ${_spec.countWorkDays()}일',
@@ -958,11 +1069,40 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                         ),
                       ),
                     ],
+                    if (isRegular) ...[
+                      const SizedBox(height: 12),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        value: widget.workPeriodNegotiable,
+                        onChanged: (value) {
+                          widget.onWorkPeriodNegotiableChanged?.call(
+                            value ?? false,
+                          );
+                          refresh();
+                        },
+                        title: const Text(
+                          '협의가능',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '첫 근무 시작일을 선택하지 않아도 협의로 표시할 수 있습니다.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: _spec.isComplete
+                      onPressed: scheduleComplete
                           ? () {
                               if (!isDaily &&
+                                  !isRegular &&
                                   _spec.endDate == null &&
                                   _spec.startDate != null) {
                                 _spec =

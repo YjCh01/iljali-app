@@ -1,15 +1,19 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/legal/business_disclosure.dart';
 import 'package:map/core/widgets/app_back_button.dart';
+import 'package:map/core/legal/widgets/business_disclosure_footer.dart';
+import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 
 /// 고객센터 — FAQ + 문의 이메일
 class CustomerSupportPage extends StatelessWidget {
   const CustomerSupportPage({super.key});
 
-  static const supportEmail = 'support@iljari.co.kr';
+  static const supportEmail = BusinessDisclosure.email;
+  static const supportPhone = BusinessDisclosure.phone;
 
   static List<(String, String)> get _faqs => [
     (
@@ -19,7 +23,7 @@ class CustomerSupportPage extends StatelessWidget {
     ),
     (
       '일자리 알림핀이란?',
-      '근무지 기준 1km 반경으로 공고를 노출·PUSH하는 유료 상품입니다. '
+      '근무지 기준 ${PushPackageCatalog.pushRadiusLabel} 반경으로 공고를 노출·PUSH하는 유료 상품입니다. '
           '가입 시 2회, 사업자 인증 완료 시 5회 보너스가 지급됩니다.',
     ),
     (
@@ -77,8 +81,18 @@ class CustomerSupportPage extends StatelessWidget {
                     color: AppColors.primary.withValues(alpha: 0.95),
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  supportPhone,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary.withValues(alpha: 0.9),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
+                  '이메일 문의를 우선으로 안내드립니다.\n'
                   '평일 10:00–18:00 (공휴일 제외)\n'
                   '앱 내 채팅·지원 문의는 해당 공고 채팅방을 이용해 주세요.',
                   style: TextStyle(
@@ -146,6 +160,8 @@ class CustomerSupportPage extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 20),
+          const BusinessDisclosureFooter(),
         ],
       ),
     );

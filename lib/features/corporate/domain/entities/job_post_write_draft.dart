@@ -1,5 +1,6 @@
 import 'package:map/core/constants/labor_constants.dart';
 
+import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
@@ -7,6 +8,8 @@ import 'package:map/features/corporate/domain/entities/push_notification_setting
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
+
+import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
 
 
 
@@ -21,6 +24,8 @@ class JobPostWriteDraft {
     this.workplaceAddress,
 
     this.jobDescription = '',
+
+    this.descriptionBody = const JobPostDescriptionBody(),
 
     this.hourlyWage = LaborConstants.defaultHourlyWageText,
 
@@ -38,11 +43,17 @@ class JobPostWriteDraft {
 
     this.paymentDayOfMonth,
 
+    this.workPeriodNegotiable = false,
+
     this.notificationSettings,
 
     this.importSourceLabel,
 
     this.workCategoryId,
+
+    this.requiredResumeItems = const [],
+
+    this.requiredCredentialIds = const [],
 
   });
 
@@ -53,6 +64,8 @@ class JobPostWriteDraft {
   final String? workplaceAddress;
 
   final String jobDescription;
+
+  final JobPostDescriptionBody descriptionBody;
 
   final String hourlyWage;
 
@@ -70,12 +83,18 @@ class JobPostWriteDraft {
 
   final int? paymentDayOfMonth;
 
+  final bool workPeriodNegotiable;
+
   final JobPostNotificationSettings? notificationSettings;
 
   /// 외부 플랫폼 가져오기 출처 (예: 알바몬에서 가져옴)
   final String? importSourceLabel;
 
   final String? workCategoryId;
+
+  final List<ResumeItemKind> requiredResumeItems;
+
+  final List<String> requiredCredentialIds;
 
 
 
@@ -99,6 +118,8 @@ class JobPostWriteDraft {
 
     int? paymentDayOfMonth,
 
+    bool? workPeriodNegotiable,
+
     JobPostNotificationSettings? notificationSettings,
 
     JobEmploymentType? employmentType,
@@ -108,6 +129,10 @@ class JobPostWriteDraft {
     String? importSourceLabel,
 
     String? workCategoryId,
+
+    List<ResumeItemKind>? requiredResumeItems,
+
+    List<String>? requiredCredentialIds,
 
   }) {
 
@@ -135,11 +160,19 @@ class JobPostWriteDraft {
 
       paymentDayOfMonth: paymentDayOfMonth ?? this.paymentDayOfMonth,
 
+      workPeriodNegotiable: workPeriodNegotiable ?? this.workPeriodNegotiable,
+
       notificationSettings: notificationSettings ?? this.notificationSettings,
 
       importSourceLabel: importSourceLabel ?? this.importSourceLabel,
 
       workCategoryId: workCategoryId ?? this.workCategoryId,
+
+      requiredResumeItems:
+          requiredResumeItems ?? this.requiredResumeItems,
+
+      requiredCredentialIds:
+          requiredCredentialIds ?? this.requiredCredentialIds,
 
     );
 

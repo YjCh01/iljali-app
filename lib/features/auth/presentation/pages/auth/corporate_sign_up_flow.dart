@@ -4,8 +4,7 @@ import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/widgets/push_wallet_bonus_feedback.dart';
 import 'package:map/core/session/auth_session.dart';
-import 'package:map/core/session/auth_user.dart';
-import 'package:map/core/session/member_type.dart';
+import 'package:map/features/auth/data/repositories/corporate_auth_repository.dart';
 import 'package:map/features/auth/domain/usecases/validate_sign_up_form_usecase.dart';
 import 'package:map/features/auth/presentation/widgets/auth_form_card.dart';
 import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart';
@@ -13,17 +12,19 @@ import 'package:map/features/auth/presentation/widgets/auth_scaffold.dart';
 import 'package:map/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:map/core/compliance/business_entity_type.dart';
+import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/core/compliance/outsourcing_policy.dart';
+import 'package:map/core/legal/legal_highlighted_text.dart';
 import 'package:map/core/compliance/domain/business_verification_request.dart';
 import 'package:map/core/compliance/services/business_verification_service.dart';
 import 'package:map/core/compliance/services/mock_nts_business_api_service.dart';
 import 'package:map/core/compliance/services/nts_service_factory.dart';
 import 'package:map/core/compliance/verified_business_record.dart';
 import 'package:map/features/auth/domain/usecases/corporate_sign_up_verification_gate.dart';
+import 'package:map/core/legal/legal_consent_catalog.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/data/repositories/corporate_account_registry.dart';
 import 'package:map/features/corporate/domain/entities/push_wallet_load_outcome.dart';
-import 'package:map/features/corporate/domain/services/corporate_org_join_service.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 
 enum _CorporateSignUpStep {
@@ -34,7 +35,7 @@ enum _CorporateSignUpStep {
   codeConfirm,
 }
 
-/// 기업회원 다단계 가입 — 계정 → 기업정보 → 담당부서/담당자 → 4자리 코드
+/// 기업회원 다단계 가입 — 계정 → 기업정보 → 담당부서/담당자 → 담당자 코드
 class CorporateSignUpFlow extends StatefulWidget {
   const CorporateSignUpFlow({super.key});
 
@@ -219,6 +220,66 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
     }
   }
 
+  Future<void> _registerProvisionalSignup() async {
+    if (!_policyAccepted) {
+      setState(() => _verificationError = '이용 제한 약관에 동의해 주세요.');
+      _snack('아웃소싱·인력공급 이용 제한 약관에 동의해 주세요.');
+      return;
+    }
+
+    final request = BusinessVerificationRequest(
+      businessRegistrationNumber: _businessRegController.text,
+      representativeName: _representativeController.text,
+      openingDate: _openingDateController.text,
+      companyName: _companyController.text.trim(),
+    );
+    final fieldError = request.validate();
+    if (fieldError != null) {
+      setState(() => _verificationError = fieldError);
+      _snack(fieldError);
+      return;
+    }
+
+    setState(() {
+      _verifying = true;
+      _verificationError = null;
+    });
+
+    try {
+      final service = BusinessVerificationService();
+      final record = await service.registerProvisionalBusiness(
+        request: request,
+        entityType: _entityType,
+        certificateImageRef: _certificateImageRef,
+      );
+      if (!mounted) return;
+      setState(() {
+        _verificationRecord = record;
+        _verifying = false;
+      });
+      if (record.requiresAdminReview) {
+        _snack('미인증 가입 완료. 사업자등록증 검토 후 유료 서비스를 이용할 수 있습니다.');
+      } else {
+        _snack('미인증 회원으로 등록되었습니다. 무료 공고를 이용해 보세요.');
+      }
+      setState(() => _step = _CorporateSignUpStep.handler);
+    } on BusinessVerificationException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _verifying = false;
+        _verificationError = e.message;
+      });
+      _snack(e.message);
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _verifying = false;
+        _verificationError = '미인증 가입 처리 중 오류가 발생했습니다.';
+      });
+      _snack('미인증 가입에 실패했습니다.');
+    }
+  }
+
   Future<void> _runBusinessVerification() async {
     if (!_policyAccepted) {
       setState(() => _verificationError = '이용 제한 약관에 동의해 주세요.');
@@ -257,7 +318,12 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         _verifying = false;
       });
       if (record.requiresAdminReview) {
-        _snack('업종 검토 대상입니다. 관리자 승인 후 일부 기능이 제한될 수 있습니다.');
+        final reason = record.adminReviewReason ?? '';
+        if (reason.contains('대표자명') || reason.contains('OCR')) {
+          _snack('국세청 확인 완료. 등록증 대표자명은 관리자가 검토합니다.');
+        } else {
+          _snack('업종 검토 대상입니다. 관리자 승인 후 일부 기능이 제한될 수 있습니다.');
+        }
       } else {
         _snack('국세청 사업자 확인이 완료되었습니다.');
       }
@@ -287,11 +353,9 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   }
 
   Future<void> _assignHandlerCode() async {
-    if (!_verificationGate.canProceedToHandler(
-      hasVerifiedRecord: _verificationRecord != null,
-    )) {
+    if (!_verificationGate.canProceedToHandler(record: _verificationRecord)) {
       final message = _verificationGate.handlerBlockedMessage(
-        hasVerifiedRecord: _verificationRecord != null,
+        record: _verificationRecord,
       );
       _snack(message ?? '사업자 확인이 필요합니다.');
       setState(() => _step = _CorporateSignUpStep.verification);
@@ -328,6 +392,10 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
               certificateImageRef: record.certificateImageRef,
               industryName: record.industryName,
               policyAcceptedAt: DateTime.now(),
+              termsVersionAccepted: LegalConsentCatalog.termsVersion,
+              privacyVersionAccepted: LegalConsentCatalog.privacyVersion,
+              outsourcingPolicyVersionAccepted:
+                  LegalConsentCatalog.outsourcingPolicyVersion,
             );
       if (!mounted) return;
       setState(() {
@@ -347,44 +415,50 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
     if (profile == null) return;
 
     if (!_verificationGate.canCompleteSignUp(
-      hasVerifiedRecord: _verificationRecord != null,
+      record: _verificationRecord,
       hasAssignedProfile: true,
     )) {
       final message = _verificationGate.completeBlockedMessage(
-        hasVerifiedRecord: _verificationRecord != null,
+        record: _verificationRecord,
         hasAssignedProfile: true,
       );
       _snack(message ?? '가입을 완료할 수 없습니다.');
       return;
     }
-    await AuthSession.instance.signIn(
-      AuthUser(
-        name: _nameController.text.trim(),
+    setState(() => _submitting = true);
+    try {
+      await CorporateAuthRepository.signUp(
         email: _emailController.text.trim(),
-        phone: _phoneController.text.trim().isEmpty
-            ? null
-            : _phoneController.text.trim(),
-        memberType: MemberType.corporate,
-        corporateProfile: profile,
-      ),
-    );
+        password: _passwordController.text,
+        displayName: _nameController.text.trim(),
+        phone: _phoneController.text.trim(),
+        profile: profile,
+      );
 
-    await const CorporateOrgJoinService().syncCurrentUser();
+      final signedIn = AuthSession.instance.currentUser?.corporateProfile;
+      PushWalletLoadOutcome? walletOutcome;
+      if (signedIn != null) {
+        walletOutcome = await PushWalletService().loadWalletDetailed(signedIn);
+      }
 
-    final signedIn = AuthSession.instance.currentUser?.corporateProfile;
-    PushWalletLoadOutcome? walletOutcome;
-    if (signedIn != null) {
-      walletOutcome = await PushWalletService().loadWalletDetailed(signedIn);
+      if (!mounted) return;
+      if (walletOutcome != null) {
+        showPushWalletBonusSnackBar(context, walletOutcome);
+      }
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.corporateWelcomeOnboarding,
+        (_) => false,
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      final message = error
+          .toString()
+          .replaceFirst('ArgumentError: ', '')
+          .replaceFirst('IljariApiException: ', '');
+      _snack(message.isEmpty ? '가입에 실패했습니다.' : message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
-
-    if (!mounted) return;
-    if (walletOutcome != null) {
-      showPushWalletBonusSnackBar(context, walletOutcome);
-    }
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.corporateWelcomeOnboarding,
-      (_) => false,
-    );
   }
 
   @override
@@ -702,7 +776,8 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         const SizedBox(height: 8),
         Text(
           '입력하신 정보로 국세청(공공데이터포털) 사업자등록번호 진위확인을 진행합니다. '
-          '홈택스 로그인 없이 대표자명·개업연월일을 대조합니다.',
+          '신규 사업장 등 국세청에 아직 반영되지 않은 경우 미인증 회원으로 가입할 수 있으며, '
+          '무료 공고 등록 후 사업자등록증 제출·승인 시 유료 서비스를 이용할 수 있습니다.',
           style: TextStyle(
             fontSize: 14,
             height: 1.4,
@@ -782,13 +857,32 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                OutsourcingPolicy.termsBody.trim(),
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.45,
-                  color: AppColors.textSecondary.withValues(alpha: 0.95),
-                ),
+              FutureBuilder<String>(
+                future: rootBundle.loadString(OutsourcingPolicy.termsAssetPath),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const SizedBox(
+                      height: 48,
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    );
+                  }
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return Text(
+                      '약관을 불러오지 못했습니다.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary.withValues(alpha: 0.95),
+                      ),
+                    );
+                  }
+                  return LegalHighlightedText(raw: snapshot.data!);
+                },
               ),
             ],
           ),
@@ -799,8 +893,13 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
           onChanged: (value) =>
               setState(() => _policyAccepted = value ?? false),
           title: const Text(
-            '아웃소싱·인력공급 이용 제한 약관에 동의합니다.',
+            '서비스 이용약관·개인정보처리방침 및 아웃소싱 이용 제한 약관에 동의합니다.',
             style: TextStyle(fontSize: 13),
+          ),
+          subtitle: TextButton(
+            onPressed: () =>
+                Navigator.of(context).pushNamed(AppRoutes.legalDocuments),
+            child: const Text('이용약관·개인정보 전문 보기'),
           ),
           controlAffinity: ListTileControlAffinity.leading,
         ),
@@ -815,9 +914,18 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              record.requiresAdminReview
-                  ? '업종「${record.industryName}」— 관리자 검토·Enterprise 가입 필요'
-                  : '검증 완료 · ${record.industryName ?? ''}',
+              switch (record.status) {
+                BusinessVerificationStatus.pending =>
+                  record.requiresAdminReview
+                      ? '미인증 · 사업자등록증 검토 대기'
+                      : '미인증 가입 — 무료 공고 이용 가능',
+                BusinessVerificationStatus.adminReviewRequired when
+                      record.requiresAdminReview =>
+                  record.industryName?.isNotEmpty == true
+                      ? '업종「${record.industryName}」— 관리자 검토·Enterprise 가입 필요'
+                      : '사업자등록증 검토 대기 — 승인 후 유료 서비스 이용',
+                _ => '검증 완료 · ${record.industryName ?? ''}',
+              },
               style: const TextStyle(fontSize: 13, height: 1.4),
             ),
           ),
@@ -828,16 +936,32 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
             _verificationError!,
             style: const TextStyle(color: Colors.red, fontSize: 13),
           ),
+          const SizedBox(height: 4),
+          Text(
+            '신규 사업장이면 국세청 조회 없이 미인증 가입 후 무료 공고를 이용할 수 있습니다.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: AppColors.textSecondary.withValues(alpha: 0.9),
+            ),
+          ),
         ],
         const SizedBox(height: 20),
         AuthPrimaryButton(
           label: _verifying
-              ? '국세청 확인 중...'
+              ? '확인 중...'
               : record == null
                   ? '국세청 확인 후 다음'
                   : '다음 — 담당자 정보',
           onPressed: _verifying ? () {} : _continueFromVerification,
         ),
+        if (record == null) ...[
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _verifying ? null : _registerProvisionalSignup,
+            child: const Text('국세청 미조회 · 미인증 회원으로 가입'),
+          ),
+        ],
       ],
     );
   }
@@ -857,7 +981,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         ),
         const SizedBox(height: 8),
         Text(
-          '같은 기업의 담당자마다 4자리 하위 코드가 자동 발급됩니다.',
+          '같은 기업의 담당자마다 6자리 코드가 자동 발급됩니다. (로그인용 아님)',
           style: TextStyle(
             fontSize: 14,
             height: 1.4,
@@ -920,7 +1044,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
                 style: const TextStyle(
                   fontSize: 42,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 6,
+                  letterSpacing: 4,
                   color: AppColors.primary,
                 ),
               ),

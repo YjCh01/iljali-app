@@ -3,6 +3,7 @@ import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
+import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
@@ -87,8 +88,7 @@ void main() {
       workplace: const WorkplaceAddress(roadAddress: '서울 마포구 월드컵북로 1'),
       hourlyWage: '12000',
       workSchedule: '주5일 09:00~18:00',
-      summary: '요약',
-      jobDescription: '상세',
+      descriptionBody: const JobPostDescriptionBody(text: '상세'),
       paymentSchedule: SalaryPaymentAbsoluteDate(DateTime(2026, 6, 1)),
       workerCategory: WorkerCategory.daily,
       registeredBy: profile,

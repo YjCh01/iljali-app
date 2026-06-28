@@ -1,0 +1,6 @@
+app_identifier("kr.co.iljari.app")
+# apple_id("your@apple.id") # App Store Connect Apple ID
+
+for_platform :android do
+  package_name("kr.co.iljari.app")
+end

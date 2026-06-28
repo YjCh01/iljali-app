@@ -92,7 +92,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
     setState(() {
       _selected = WorkplaceAddressMapper.fromDaumPostcode(
         result,
-        coordinate: coordinate ?? WorkplaceAddressQc.sampleCoordinate,
+        coordinate: coordinate,
       );
       _queryController.text = road;
       _detailController.clear();

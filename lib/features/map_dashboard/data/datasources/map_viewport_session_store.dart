@@ -66,4 +66,6 @@ abstract final class MapViewportSessionKeys {
   static const pushTicketUse = 'push_ticket_use_map';
 
   static const extraPushConfirm = 'extra_push_confirm_map';
+
+  static const seekerHomeMap = 'seeker_home_map';
 }

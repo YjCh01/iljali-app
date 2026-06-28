@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/trust/employer_trust_service.dart';
 import 'package:map/core/trust/presentation/employer_trust_badge_row.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
@@ -18,6 +19,9 @@ class EmployerTrustSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!ProductFeatureFlags.isEmployerTrustDisplayEnabled) {
+      return const SizedBox.shrink();
+    }
     final key = companyKey ?? profile?.companyKey;
     if (key == null || key.isEmpty) return const SizedBox.shrink();
 

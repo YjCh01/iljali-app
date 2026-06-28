@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
@@ -37,14 +38,8 @@ class ShuttleRouteStopEditorSheet extends StatefulWidget {
     List<CommuteRouteStop> siblingStops = const [],
     bool isLastStopHint = false,
   }) {
-    return showModalBottomSheet<CommuteRouteStop>(
+    return showAdaptiveSheet<CommuteRouteStop>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom,
@@ -66,14 +61,8 @@ class ShuttleRouteStopEditorSheet extends StatefulWidget {
     List<CommuteRouteStop> siblingStops = const [],
     bool isLastStopHint = false,
   }) {
-    return showModalBottomSheet<CommuteRouteStop>(
+    return showAdaptiveSheet<CommuteRouteStop>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom,

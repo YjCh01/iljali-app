@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
@@ -21,13 +22,8 @@ Future<void> showCorporateJobPostOptionalServicesSheet(
   ValueChanged<CorporateJobPost>? onPostUpdated,
 }) {
   final resolvedWorkplace = workplace ?? workplaceFromJobPost(post);
-  return showModalBottomSheet<void>(
+  return showAdaptiveSheet<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.background,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
     builder: (sheetContext) {
       return CorporateJobPostOptionalServicesSheet(
         post: post,

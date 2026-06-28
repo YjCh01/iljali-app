@@ -1,54 +1,28 @@
-# 일자리 (map)
+# 일자리 (iljari.app)
 
-지도 기반 일용직·현장 채용 Flutter 앱 + FastAPI 컴플라이언스 서버.
+## 주소
 
-## 빠른 시작
+| | URL |
+|--|-----|
+| 웹 | http://www.iljari.app |
+| API | http://api.iljari.app |
 
-```powershell
-cd d:\1jari
-flutter pub get
-flutter run -d chrome          # 웹 — NAVER_MAP_CLIENT_ID 있으면 실지도, 없으면 mock
-flutter run -d windows         # PC (mock 지도)
-$env:NAVER_MAP_CLIENT_ID='YOUR_WEB_CLIENT_ID'; .\scripts\dev-run.ps1
-```
+## 환경
 
-서버 (선택):
+| | server (기본) | local (UI 개발) |
+|--|----------------|-----------------|
+| 설정 | 그냥 실행 | `ILJARI_ENV=local` |
+| 용도 | 테스트·실서비스 | 맥 hot reload |
 
-```powershell
-cd d:\1jari\server
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
+[docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md)
 
-API URL 설정 (선택):
+## 실행
 
-```powershell
-flutter run -d chrome --dart-define=COMPLIANCE_API_URL=http://127.0.0.1:8000
-```
+`.command` 목록: [docs/COMMAND_LAUNCHERS.md](docs/COMMAND_LAUNCHERS.md)
 
-## 개발 테스트 계정
-
-시작 화면 → **개발 테스트 로그인**
-
-| 역할 | 이메일 | 비밀번호 |
-|------|--------|----------|
-| 기업 α | corp-alpha@test.iljari.co.kr | Test1234! |
-| 기업 β | corp-beta@test.iljari.co.kr | Test1234! |
-| 구직 α | seeker-alpha@test.iljari.co.kr | Test1234! |
-| 구직 β | seeker-beta@test.iljari.co.kr | Test1234! |
-
-로그인 시 시드 공고·지원·채팅·근태 데이터가 자동 주입됩니다.
-
-## 검증
-
-```powershell
-flutter analyze
-flutter test
-```
-
-## 문서
-
-- [PUSH_PACKAGE_PRICING.md](PUSH_PACKAGE_PRICING.md) — 알림핀 요금 (가입 2 + 검증 5)
-- [SERVICE_READINESS.md](SERVICE_READINESS.md) — 서비스 오픈 체크리스트
+| 일상 | 파일 |
+|------|------|
+| 구직자 웹 | `실서비스_웹_개인회원.command` |
+| 기업 웹 | `실서비스_웹_기업회원.command` |
+| 맥에서 UI 수정 | `개발_웹_개인회원.command` |
+| 실기기 앱 | `실서비스_앱_개인회원_안드로이드.command` 등 |

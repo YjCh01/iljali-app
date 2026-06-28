@@ -4,14 +4,14 @@ import 'package:map/features/corporate/domain/services/push_optimization_service
 
 void main() {
   group('PushOptimizationService', () {
-    test('recommends 1km with extra bases when history is sparse', () async {
+    test('recommends 700m with extra bases when history is sparse', () async {
       final rec = await PushOptimizationService().recommend(
         companyKey: 'nonexistent_company_key',
       );
       expect(rec.suggestedRadius, PushRadiusTier.standardFree1km);
       expect(rec.suggestedBaseCount, greaterThan(1));
       expect(rec.expectedReach, greaterThan(0));
-      expect(rec.headlineLabel, contains('1km'));
+      expect(rec.headlineLabel, contains('700m'));
       expect(rec.reason, isNot(contains('3km')));
       expect(rec.confidencePercent, inInclusiveRange(0, 100));
     });

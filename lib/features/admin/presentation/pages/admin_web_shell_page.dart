@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:map/features/admin/domain/admin_ops_controller.dart';
 import 'package:map/features/admin/presentation/panels/admin_audit_panel.dart';
+import 'package:map/features/admin/presentation/panels/admin_chat_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_dashboard_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_jobs_panel.dart';
+import 'package:map/features/admin/presentation/panels/admin_map_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_members_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_qc_panel.dart';
-import 'package:map/features/admin/presentation/panels/admin_wallet_panel.dart';
 import 'package:map/features/admin/presentation/widgets/admin_web_scaffold.dart';
 
 /// 관리자 웹 콘솔 — Mac 16:9 넓은 화면 최적화
@@ -44,10 +45,12 @@ class _AdminWebShellPageState extends State<AdminWebShellPage> {
     switch (_section) {
       case AdminNavSection.dashboard:
         return AdminDashboardPanel(controller: _controller);
-      case AdminNavSection.wallet:
-        return AdminWalletPanel(controller: _controller);
+      case AdminNavSection.map:
+        return AdminMapPanel(controller: _controller);
       case AdminNavSection.members:
         return AdminMembersPanel(controller: _controller);
+      case AdminNavSection.chat:
+        return AdminChatPanel(controller: _controller);
       case AdminNavSection.jobs:
         return AdminJobsPanel(controller: _controller);
       case AdminNavSection.qc:

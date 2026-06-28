@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/hiring/attendance_proximity_service.dart';
@@ -223,6 +224,7 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
   }
 
   Future<bool> _canRateEmployer(HiringApplication shift) async {
+    if (!ProductFeatureFlags.isSeekerEmployerRatingEnabled) return false;
     if (shift.companyKey == null || shift.companyKey!.isEmpty) return false;
     if (shift.status != HiringApplicationStatus.commissionPaid &&
         shift.status != HiringApplicationStatus.checkedIn) {
@@ -249,13 +251,16 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
           color: AppColors.primary,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            children: const [
-              SizedBox(height: 120),
+            children: [
+              const SizedBox(height: 120),
               EmptyStateCard(
                 icon: Icons.event_available_outlined,
-                title: '출근 예정 일정이 없습니다',
-                message:
-                    'PUSH 알림을 받고 지원한 뒤\n기업과 채팅하거나 즉시 확정되면\n여기에 일정이 표시됩니다.',
+                title: ProductFeatureFlags.isHiringCommissionEnabled
+                    ? '출근 예정 일정이 없습니다'
+                    : '근무 일정이 없습니다',
+                message: ProductFeatureFlags.isHiringCommissionEnabled
+                    ? 'PUSH 알림을 받고 지원한 뒤\n기업과 채팅하거나 즉시 확정되면\n여기에 일정이 표시됩니다.'
+                    : '공고에 지원한 뒤 기업과 채팅으로\n일정을 조율할 수 있습니다.\n(출근 확인·수수료는 메인 앱에서 제공하지 않습니다)',
               ),
             ],
           ),

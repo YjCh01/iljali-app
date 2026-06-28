@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/corporate_payment_delegate_info.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_line_item.dart';
@@ -9,13 +10,8 @@ Future<bool?> showJobPostPaymentRequestSheet({
   required List<JobPostPaymentLineItem> items,
 }) {
   if (items.isEmpty) return Future.value(null);
-  return showModalBottomSheet<bool>(
+  return showAdaptiveSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (context) {
       final total = items.fold<int>(0, (sum, item) => sum + item.amountKrw);
       return SafeArea(

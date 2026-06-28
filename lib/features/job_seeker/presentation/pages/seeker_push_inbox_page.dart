@@ -1,6 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/session/auth_session.dart';
+import 'package:map/core/hiring/local_hiring_repository.dart';
+import 'package:map/features/hiring/presentation/pages/application_chat_page.dart';
+import 'package:map/features/job_seeker/presentation/pages/tabs/individual_my_jobs_tab.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
@@ -162,10 +166,47 @@ class _SeekerPushInboxPageState extends State<SeekerPushInboxPage>
       onApplied: null,
     );
     if (!applied || !mounted) return;
+
+    final email = AuthSession.instance.currentUser?.email;
+    String? chatApplicationId;
+    if (email != null) {
+      final hiring = await LocalHiringRepository.create();
+      final apps = await hiring.fetchForSeeker(email);
+      for (final app in apps.reversed) {
+        if (app.postId == post.id) {
+          chatApplicationId = app.id;
+          break;
+        }
+      }
+    }
+
+    if (!mounted) return;
+    if (chatApplicationId != null) {
+      await Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.home,
+        (_) => false,
+        arguments: const {
+          'seekerTabIndex': 2,
+          'seekerMyJobsSegment': 0,
+        },
+      );
+      if (!context.mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              ApplicationChatPage(applicationId: chatApplicationId!),
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context).pushNamedAndRemoveUntil(
       AppRoutes.home,
       (_) => false,
-      arguments: const {'seekerTabIndex': 3},
+      arguments: const {
+        'seekerTabIndex': 2,
+        'seekerMyJobsSegment': 0,
+      },
     );
   }
 

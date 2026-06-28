@@ -11,6 +11,9 @@ class JobPostActionGrid extends StatelessWidget {
     this.isBookmarked = false,
     this.bookmarkBusy = false,
     this.previewMode = false,
+    this.hasApplied = false,
+    this.canWithdrawApplication = false,
+    this.onWithdrawApply,
   });
 
   final VoidCallback onInquire;
@@ -19,6 +22,9 @@ class JobPostActionGrid extends StatelessWidget {
   final bool isBookmarked;
   final bool bookmarkBusy;
   final bool previewMode;
+  final bool hasApplied;
+  final bool canWithdrawApplication;
+  final VoidCallback? onWithdrawApply;
 
   @override
   Widget build(BuildContext context) {
@@ -53,11 +59,26 @@ class JobPostActionGrid extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _ActionTile(
-                  icon: Icons.send_rounded,
-                  label: '지원하기',
-                  onTap: previewMode ? null : onApply,
-                  accent: !previewMode,
+                  icon: canWithdrawApplication
+                      ? Icons.cancel_outlined
+                      : hasApplied
+                          ? Icons.check_circle_outline
+                          : Icons.send_rounded,
+                  label: canWithdrawApplication
+                      ? '지원취소'
+                      : hasApplied
+                          ? '지원됨'
+                          : '지원하기',
+                  onTap: previewMode
+                      ? null
+                      : canWithdrawApplication
+                          ? onWithdrawApply
+                          : hasApplied
+                              ? null
+                              : onApply,
+                  accent: !previewMode && !hasApplied,
                   muted: previewMode,
+                  danger: canWithdrawApplication,
                 ),
               ),
               const SizedBox(width: 10),
@@ -88,6 +109,7 @@ class _ActionTile extends StatelessWidget {
     this.accent = false,
     this.highlighted = false,
     this.muted = false,
+    this.danger = false,
   });
 
   final IconData icon;
@@ -96,19 +118,24 @@ class _ActionTile extends StatelessWidget {
   final bool accent;
   final bool highlighted;
   final bool muted;
+  final bool danger;
 
   @override
   Widget build(BuildContext context) {
-    final bg = accent
-        ? AppColors.primary
-        : highlighted
-            ? AppColors.primaryLight.withValues(alpha: 0.22)
-            : AppColors.background;
-    final fg = accent
-        ? Colors.white
-        : highlighted
+    final bg = danger
+        ? Colors.red.shade50
+        : accent
             ? AppColors.primary
-            : AppColors.textPrimary;
+            : highlighted
+                ? AppColors.primaryLight.withValues(alpha: 0.22)
+                : AppColors.background;
+    final fg = danger
+        ? Colors.red.shade800
+        : accent
+            ? Colors.white
+            : highlighted
+                ? AppColors.primary
+                : AppColors.textPrimary;
 
     return Material(
       color: muted ? AppColors.background.withValues(alpha: 0.6) : bg,

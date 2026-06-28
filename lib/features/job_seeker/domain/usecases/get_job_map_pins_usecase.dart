@@ -6,5 +6,6 @@ class GetJobMapPinsUseCase {
 
   final JobMapPinsDataSource _dataSource;
 
-  Future<List<JobMapPin>> call() => _dataSource.fetchActiveJobPins();
+  Future<List<JobMapPin>> call({bool includeClosedGhosts = true}) =>
+      _dataSource.fetchActiveJobPins(includeClosedGhosts: includeClosedGhosts);
 }

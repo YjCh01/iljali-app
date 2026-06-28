@@ -14,13 +14,17 @@ abstract final class JobMapWebMarkerFactory {
     final tier = pin.displayTier;
     final color = isSelected
         ? const Color(0xFFFF6F00)
-        : isOwn
-            ? AppColors.primary
-            : tier.pinColor;
-    final label = tier == JobMapPinDisplayTier.standard ? '1' : tier.shapeGlyph;
+        : pin.isClosedGhost
+            ? tier.pinColor.withValues(alpha: 0.72)
+            : isOwn
+                ? AppColors.primary
+                : tier.pinColor;
+    final label = tier == JobMapPinDisplayTier.standard
+        ? '1'
+        : tier.shapeGlyph;
 
     return NaverMapWebMarkerSpec(
-      id: pin.post.id,
+      id: pin.mapMarkerId,
       latitude: pin.latitude,
       longitude: pin.longitude,
       colorHex: NaverMapWebColors.hex(color),
@@ -40,7 +44,9 @@ abstract final class JobMapWebMarkerFactory {
           (pin) => fromPin(
             pin,
             isOwn: ownPostIds?.contains(pin.post.id) ?? false,
-            isSelected: selectedPostId == pin.post.id,
+            isSelected: selectedPostId != null &&
+                (selectedPostId == pin.post.id ||
+                    selectedPostId == pin.mapMarkerId),
           ),
         )
         .toList();

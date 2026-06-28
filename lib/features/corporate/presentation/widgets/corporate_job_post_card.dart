@@ -5,6 +5,7 @@ import 'package:map/features/corporate/domain/entities/push_notification_setting
 import 'package:map/features/corporate/domain/utils/extra_push_availability.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/job_post_exposure_status_labels.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_display_labels.dart';
 import 'package:map/features/corporate/presentation/widgets/urgent_hire_brand.dart';
@@ -87,7 +88,7 @@ class CorporateJobPostCard extends StatelessWidget {
                   children: [
                     _StatusBadge(status: post.status),
                     const SizedBox(width: 8),
-                    _EmploymentTypeBadge(type: post.employmentType),
+                    _WorkerCategoryBadge(category: post.effectiveWorkerCategory),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -251,33 +252,35 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _EmploymentTypeBadge extends StatelessWidget {
-  const _EmploymentTypeBadge({required this.type});
+class _WorkerCategoryBadge extends StatelessWidget {
+  const _WorkerCategoryBadge({required this.category});
 
-  final JobEmploymentType type;
+  final WorkerCategory category;
 
   @override
   Widget build(BuildContext context) {
-    final isPermanent = type == JobEmploymentType.permanent;
+    final isRegular = category == WorkerCategory.regular;
+    final isContract = category == WorkerCategory.contract;
+    final highlighted = isRegular || isContract;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: isPermanent
+        color: highlighted
             ? AppColors.primary.withValues(alpha: 0.1)
             : AppColors.background,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isPermanent
+          color: highlighted
               ? AppColors.primary.withValues(alpha: 0.35)
               : AppColors.searchBarBorder,
         ),
       ),
       child: Text(
-        type.label,
+        category.label,
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: isPermanent ? AppColors.primary : AppColors.textSecondary,
+          color: highlighted ? AppColors.primary : AppColors.textSecondary,
         ),
       ),
     );

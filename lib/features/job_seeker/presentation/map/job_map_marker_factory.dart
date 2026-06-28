@@ -18,19 +18,21 @@ abstract final class JobMapMarkerFactory {
     else if (isOwn) size *= 1.06;
 
     final marker = NClusterableMarker(
-      id: pin.post.id,
+      id: pin.mapMarkerId,
       position: NLatLng(pin.latitude, pin.longitude),
       tags: {
-        'type': 'job_post',
+        'type': pin.isClosedGhost ? 'closed_ghost' : 'job_post',
         'pin_tier': tier.name,
         if (isOwn) 'own': '1',
         if (isSelected) 'selected': '1',
       },
       iconTintColor: isSelected
           ? const Color(0xFFFF6F00)
-          : isOwn
-              ? AppColors.primary
-              : tier.pinColor,
+          : pin.isClosedGhost
+              ? tier.pinColor.withValues(alpha: 0.72)
+              : isOwn
+                  ? AppColors.primary
+                  : tier.pinColor,
       size: Size(size, size),
       caption: NOverlayCaption(
         text: tier == JobMapPinDisplayTier.standard
@@ -62,7 +64,9 @@ abstract final class JobMapMarkerFactory {
             pin,
             onTap: onTap,
             isOwn: ownPostIds?.contains(pin.post.id) ?? false,
-            isSelected: selectedPostId == pin.post.id,
+            isSelected: selectedPostId != null &&
+                (selectedPostId == pin.post.id ||
+                    selectedPostId == pin.mapMarkerId),
           ),
         )
         .toSet();

@@ -46,7 +46,7 @@ class _AdminDashboardPanelState extends State<AdminDashboardPanel> {
               title: '서버 연결 필요',
               subtitle: 'Admin 실행.command 또는 QC 실행.command 로 시작하세요.',
               child: Text(
-                'COMPLIANCE_API_URL=http://127.0.0.1:8000 · ADMIN_API_KEY=qc-admin-dev-key',
+                'COMPLIANCE_API_URL=http://api.iljari.app · ADMIN_API_KEY=iljari-admin-dev-key',
                 style: TextStyle(fontSize: 13),
               ),
             )

@@ -10,14 +10,14 @@ source "scripts/server_dev.sh"
 
 WEB_PORT=8081
 API_PORT=8000
-ADMIN_KEY=qc-admin-dev-key
-API_URL="http://localhost:${API_PORT}"
+API_URL="$(iljari_resolve_compliance_api_url "${API_PORT}")"
+ADMIN_KEY="$(iljari_resolve_admin_api_key)"
 
 echo
 echo "========================================"
 echo "  iljari Corporate Web QC (900px+ 우측 탭)"
-echo "  Dev login: corp-alpha@iljari.test"
-echo "  API : ${API_URL}"
+echo "  Dev login: corp-alpha@test.iljari.co.kr / Test1234!"
+iljari_print_api_banner "${API_URL}"
 echo "  App : http://localhost:${WEB_PORT}"
 echo "========================================"
 echo
@@ -32,15 +32,12 @@ free_port() {
 }
 
 free_port "${WEB_PORT}"
-free_port "${API_PORT}"
-
-if [[ ! -f server/.env ]]; then
+if iljari_use_local_api && [[ ! -f server/.env ]]; then
   cp -f server/.env.example server/.env
 fi
 
-iljari_ensure_server_env
-iljari_start_api_server "${API_PORT}"
-sleep 2
+echo "[API] 준비..."
+iljari_ensure_api_ready "${API_URL}" "${API_PORT}"
 
 flutter pub get
 naver_sync_flutter_defines || true

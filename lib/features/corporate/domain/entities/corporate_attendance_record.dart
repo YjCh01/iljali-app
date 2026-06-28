@@ -15,6 +15,7 @@ class CorporateAttendanceRecord {
     this.seekerEmail,
     this.employmentType = JobEmploymentType.daily,
     this.genderLabel = '-',
+    this.ageLabel = '-',
     this.birthDateLabel = '-',
     this.workDate,
     this.workAgreedAt,
@@ -37,6 +38,7 @@ class CorporateAttendanceRecord {
   final JobEmploymentType employmentType;
   final String workerName;
   final String genderLabel;
+  final String ageLabel;
   final String birthDateLabel;
   final String jobTitle;
   final String workDateLabel;

@@ -22,10 +22,12 @@ class WorkSchedulePreviewModel {
 abstract final class WorkSchedulePreviewFormatter {
   static WorkSchedulePreviewModel? fromRaw(String raw) {
     final spec = WorkScheduleCodec.tryParse(raw);
-    if (spec == null || !spec.isComplete) return null;
+    if (spec == null) return null;
+    if (!spec.isComplete && !spec.firstStartDateOnly) return null;
 
     final dayTime =
         '${_padTime(spec.dayStart)}~${_padTime(spec.dayEnd)}';
+    final regularPrefix = spec.firstStartDateOnly ? '정규 · ' : '';
 
     return switch (spec.mode) {
       WorkScheduleMode.dailyPick => () {
@@ -55,10 +57,15 @@ abstract final class WorkSchedulePreviewFormatter {
               .where((e) => spec.weekdays.contains(e.key))
               .map((e) => e.value)
               .join('');
+          final periodLine = spec.firstStartDateOnly
+              ? (spec.startDate != null
+                  ? '첫 근무 ${_fmtDate(spec.startDate!)}'
+                  : '첫 근무 · 협의')
+              : '${_fmtDate(spec.startDate!)} ~ ${_fmtDate(spec.endDate!)}';
           return WorkSchedulePreviewModel(
-            headline: '주${spec.weekdays.length}일($days)',
+            headline: '$regularPrefix주${spec.weekdays.length}일($days)',
             lines: [
-              '${_fmtDate(spec.startDate!)} ~ ${_fmtDate(spec.endDate!)}',
+              periodLine,
               dayTime,
             ],
           );
@@ -68,10 +75,15 @@ abstract final class WorkSchedulePreviewFormatter {
           final label = preset?.title ?? '교대';
           final nightTime =
               '${_padTime(spec.nightStart)}~${_padTime(spec.nightEnd)}';
+          final periodLine = spec.firstStartDateOnly
+              ? (spec.startDate != null
+                  ? '첫 근무 ${_fmtDate(spec.startDate!)}'
+                  : '첫 근무 · 협의')
+              : '${_fmtDate(spec.startDate!)} ~ ${_fmtDate(spec.endDate!)}';
           return WorkSchedulePreviewModel(
-            headline: '교대 · $label',
+            headline: '$regularPrefix교대 · $label',
             lines: [
-              '${_fmtDate(spec.startDate!)} ~ ${_fmtDate(spec.endDate!)}',
+              periodLine,
               '주 $dayTime · 야 $nightTime',
             ],
           );
@@ -79,11 +91,17 @@ abstract final class WorkSchedulePreviewFormatter {
       WorkScheduleMode.customDates => () {
           final excluded = spec.customExcludedDates.toList()
             ..sort((a, b) => a.compareTo(b));
+          final periodLine = spec.firstStartDateOnly
+              ? (spec.startDate != null
+                  ? '첫 근무 ${_fmtDate(spec.startDate!)}'
+                  : '첫 근무 · 협의')
+              : '${_fmtDate(spec.startDate!)} ~ ${_fmtDate(spec.endDate!)}';
+          final workDays = spec.countWorkDays();
           return WorkSchedulePreviewModel(
-            headline: '맞춤 · $dayTime · ${spec.countWorkDays()}일',
-            lines: [
-              '${_fmtDate(spec.startDate!)} ~ ${_fmtDate(spec.endDate!)}',
-            ],
+            headline: spec.firstStartDateOnly
+                ? '$regularPrefix맞춤 · $dayTime'
+                : '맞춤 · $dayTime · $workDays일',
+            lines: [periodLine],
             chips: excluded.map((d) => '제외 ${_fmtChipDate(d)}').toList(),
           );
         }(),
