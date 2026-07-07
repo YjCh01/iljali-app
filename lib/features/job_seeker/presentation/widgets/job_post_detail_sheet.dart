@@ -3,15 +3,14 @@ import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
-import 'package:map/core/utils/external_maps_launcher.dart';
-import 'package:map/core/geo/device_location_service.dart';
-import 'package:map/core/geo/location_consent_service.dart';
+import 'package:map/features/job_seeker/domain/services/job_post_directions_launcher.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/hiring/selected_shift_dates.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/hiring/presentation/widgets/seeker_attendance_lock_dialog.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/job_seeker/data/repositories/job_application_repository.dart';
 import 'package:map/features/job_seeker/data/repositories/job_bookmark_vault_repository.dart';
@@ -39,6 +38,7 @@ import 'package:map/features/job_seeker/presentation/widgets/resume_disclosure_d
 import 'package:map/features/credential/domain/entities/credential_catalog.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_resume_content.dart';
 import 'package:map/features/job_seeker/domain/services/seeker_application_withdraw_service.dart';
+import 'package:map/features/job_seeker/domain/policies/seeker_job_actions_policy.dart';
 import 'package:map/features/job_seeker/presentation/utils/seeker_shell_access.dart';
 import 'package:map/features/job_seeker/presentation/widgets/seeker_login_prompt_sheet.dart';
 
@@ -56,6 +56,7 @@ class JobPostDetailSheet extends StatefulWidget {
     this.embeddedInPage = false,
     this.onBookmarkStateChanged,
     this.onApplicationStateChanged,
+    this.employerPreview = false,
   });
 
   final JobMapPin pin;
@@ -68,6 +69,7 @@ class JobPostDetailSheet extends StatefulWidget {
   final bool embeddedInPage;
   final ValueChanged<bool>? onBookmarkStateChanged;
   final VoidCallback? onApplicationStateChanged;
+  final bool employerPreview;
 
   @override
   State<JobPostDetailSheet> createState() => JobPostDetailSheetState();
@@ -84,6 +86,11 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   bool get vaultBusy => _vaultBusy;
   bool get hasApplied => _hasApplied;
   bool get canWithdrawApplication => _canWithdraw;
+
+  bool get _showSeekerActions =>
+      SeekerJobActionsPolicy.showSeekerActionUi(
+        employerPreview: widget.employerPreview,
+      );
 
   Future<void> applyFromExternal() => _apply();
   Future<void> withdrawFromExternal() => _withdrawApplication();
@@ -223,6 +230,7 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   }
 
   Future<void> _apply() async {
+    if (!_showSeekerActions) return;
     await showJobApplyDialog(
       context,
       widget.pin,
@@ -251,38 +259,11 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   }
 
   Future<void> _openDirections() async {
-    final post = widget.pin.post;
-    final destLabel = post.warehouseName.trim().isNotEmpty
-        ? post.warehouseName
-        : post.title;
-    final destLat = post.workplaceLatitude ??
-        (widget.pin.latitude != 0 ? widget.pin.latitude : null);
-    final destLng = post.workplaceLongitude ??
-        (widget.pin.longitude != 0 ? widget.pin.longitude : null);
-
-    await LocationConsentService.ensureGranted(
+    await JobPostDirectionsLauncher.openWalkingFromHome(
       context,
-      trigger: LocationConsentTrigger.mapBrowse,
+      widget.pin,
+      employerPreview: widget.employerPreview,
     );
-
-    final origin = await DeviceLocationService.getCurrentPosition();
-    final opened = await openNaverDirections(
-      destinationLabel: destLabel,
-      destinationLatitude: destLat,
-      destinationLongitude: destLng,
-      originLatitude: origin?.latitude,
-      originLongitude: origin?.longitude,
-      mode: NaverDirectionsMode.car,
-    );
-    if (!context.mounted) return;
-    if (!opened) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(mapsSearchCopiedMessage(destLabel)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
   }
 
   Future<void> _openShuttleBooking(CommuteRoute route) async {
@@ -525,15 +506,18 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
                   ),
                 ],
                 const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _openDirections,
-                    icon: const Icon(Icons.directions_car_outlined, size: 18),
-                    label: const Text('길찾기'),
+                if (_showSeekerActions)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _openDirections,
+                      icon: const Icon(Icons.directions_walk, size: 18),
+                      label: const Text('길찾기'),
+                    ),
                   ),
-                ),
-                if (widget.vaultRepo != null && !widget.embeddedInPage) ...[
+                if (widget.vaultRepo != null &&
+                    !widget.embeddedInPage &&
+                    _showSeekerActions) ...[
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
@@ -586,7 +570,7 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
                           ),
                         ),
                       ),
-                      if (_canWithdraw) ...[
+                      if (_showSeekerActions && _canWithdraw) ...[
                         const SizedBox(width: 8),
                         Expanded(
                           child: OutlinedButton(
@@ -608,28 +592,30 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
                           ),
                         ),
                       ],
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: _hasApplied ? null : _apply,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor:
-                                AppColors.primaryLight.withValues(alpha: 0.35),
-                            disabledForegroundColor: Colors.white70,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      if (_showSeekerActions) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: _hasApplied ? null : _apply,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor:
+                                  AppColors.primaryLight.withValues(alpha: 0.35),
+                              disabledForegroundColor: Colors.white70,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _hasApplied ? '지원 완료' : '지원하기',
+                              style: const TextStyle(fontWeight: FontWeight.w700),
                             ),
                           ),
-                          child: Text(
-                            _hasApplied ? '지원 완료' : '지원하기',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ],
@@ -753,11 +739,7 @@ Future<bool> showJobApplyDialog(
   VoidCallback? onApplied,
   ShuttleBookingSelection? presetShuttleSelection,
 }) async {
-  if (AuthSession.instance.currentUser == null) {
-    await SeekerLoginPromptSheet.show(
-      context,
-      message: '지원하려면 개인회원 로그인 또는 회원가입이 필요합니다.',
-    );
+  if (!await SeekerJobActionsPolicy.ensureCanApply(context)) {
     return false;
   }
 
@@ -806,6 +788,8 @@ Future<bool> showJobApplyDialog(
     workSchedule: pin.post.workSchedule,
     workerCategory: pin.post.effectiveWorkerCategory,
     hasShuttle: shuttleRoute != null,
+    workScheduleNegotiable: pin.post.workScheduleNegotiable ||
+        WorkScheduleNegotiable.isLabel(pin.post.workSchedule),
     shuttleRoute: shuttleRoute,
   );
 
@@ -820,10 +804,13 @@ Future<bool> showJobApplyDialog(
   }
 
   final shuttleSel = flowResult.shuttleSelection ?? presetShuttleSelection;
-  final shiftDateIso = SelectedShiftDates.encode(flowResult.selectedDates);
+  final shiftDateIso = flowResult.scheduleNegotiable
+      ? ''
+      : SelectedShiftDates.encode(flowResult.selectedDates);
   String? bookingId;
   if (shuttleSel != null && shuttleRoute != null) {
-    final shuttleDateIso = SelectedShiftDates.encode([flowResult.primaryDate]);
+    final shuttleDay = flowResult.primaryDate ?? DateTime.now();
+    final shuttleDateIso = SelectedShiftDates.encode([shuttleDay]);
     bookingId = 'book_${DateTime.now().millisecondsSinceEpoch}';
     final booking = ShuttleBooking(
       id: bookingId,

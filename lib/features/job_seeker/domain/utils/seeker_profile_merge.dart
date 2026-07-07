@@ -73,9 +73,10 @@ abstract final class SeekerProfileMerge {
       experienceSummary:
           _nonEmpty(primary.experienceSummary, secondary.experienceSummary),
       resume: resume,
-      credentialHoldings: primary.credentialHoldings.isNotEmpty
-          ? primary.credentialHoldings
-          : secondary.credentialHoldings,
+      credentialHoldings: _mergeCredentialHoldings(
+        primary.credentialHoldings,
+        secondary.credentialHoldings,
+      ),
       termsAcceptedAt: primary.termsAcceptedAt ?? secondary.termsAcceptedAt,
       termsVersionAccepted: _nonEmpty(
         primary.termsVersionAccepted,
@@ -129,5 +130,24 @@ abstract final class SeekerProfileMerge {
     if (left.isNotEmpty) return left;
     final right = b?.trim() ?? '';
     return right.isNotEmpty ? right : null;
+  }
+
+  static List<SeekerCredentialHolding> _mergeCredentialHoldings(
+    List<SeekerCredentialHolding> primary,
+    List<SeekerCredentialHolding> secondary,
+  ) {
+    final byId = <String, SeekerCredentialHolding>{};
+    for (final holding in [...primary, ...secondary]) {
+      if (holding.credentialId.isEmpty) continue;
+      final existing = byId[holding.credentialId];
+      if (existing == null) {
+        byId[holding.credentialId] = holding;
+        continue;
+      }
+      if (!existing.isComplete && holding.isComplete) {
+        byId[holding.credentialId] = holding;
+      }
+    }
+    return byId.values.toList();
   }
 }

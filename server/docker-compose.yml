@@ -30,6 +30,7 @@ services:
       - ./nginx/api-proxy.conf:/etc/nginx/conf.d/20-api.conf:ro
       - ./nginx/api-proxy-ssl.conf:/etc/nginx/conf.d/21-api-ssl.conf:ro
       - ./nginx/web-variants.conf:/etc/nginx/snippets/web-variants.conf:ro
+      - ./nginx/admin-ip-allow.conf:/etc/nginx/snippets/admin-ip-allow.conf:ro
     depends_on:
       - api
     restart: unless-stopped

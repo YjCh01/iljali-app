@@ -4,6 +4,8 @@ import 'dart:js_util' as js_util;
 
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/map_constants.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_vertical_zoom_rail.dart';
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/core/geo/map_viewport_bounds.dart';
 
 Future<void>? _scriptLoadFuture;
@@ -165,7 +167,7 @@ Object _mapOptions({
   final options = js_util.newObject();
   js_util.setProperty(options, 'center', center);
   js_util.setProperty(options, 'zoom', zoom);
-  js_util.setProperty(options, 'zoomControl', true);
+  js_util.setProperty(options, 'zoomControl', false);
   if (width != null && height != null && width > 0 && height > 0) {
     final sizeCtor = js_util.getProperty<Object>(_mapsNamespace(), 'Size');
     js_util.setProperty(
@@ -229,9 +231,17 @@ Object? _strokeStyleType(String style) {
   }
 }
 
-Object _markerHtmlIcon(Object maps, String markerHtml, double size) {
+Object _markerHtmlIcon(
+  Object maps,
+  String markerHtml,
+  double width,
+  double height, {
+  bool tipAnchor = true,
+}) {
   final pointCtor = js_util.getProperty<Object>(maps, 'Point');
-  final anchor = js_util.callConstructor(pointCtor, [size / 2, size / 2]);
+  final anchorX = width / 2;
+  final anchorY = tipAnchor ? height : height / 2;
+  final anchor = js_util.callConstructor(pointCtor, [anchorX, anchorY]);
   final icon = js_util.newObject();
   js_util.setProperty(icon, 'content', markerHtml);
   js_util.setProperty(icon, 'anchor', anchor);
@@ -280,6 +290,12 @@ typedef NaverMapWebIdleCallback = void Function();
 typedef NaverMapWebTapCallback = void Function(double lat, double lng);
 typedef NaverMapWebCenterCallback = void Function(double lat, double lng);
 
+enum MapPinMarkerKind {
+  workplace,
+  notification,
+  busStop,
+}
+
 class NaverMapWebMarkerSpec {
   const NaverMapWebMarkerSpec({
     required this.id,
@@ -287,19 +303,25 @@ class NaverMapWebMarkerSpec {
     required this.longitude,
     required this.colorHex,
     required this.label,
+    this.borderColorHex = '#FFFFFF',
     this.isSelected = false,
     this.isOwn = false,
-    this.size = 28,
+    this.kind = MapPinMarkerKind.workplace,
+    this.size = 40,
+    this.height = 52,
   });
 
   final String id;
   final double latitude;
   final double longitude;
   final String colorHex;
+  final String borderColorHex;
   final String label;
   final bool isSelected;
   final bool isOwn;
+  final MapPinMarkerKind kind;
   final double size;
+  final double height;
 }
 
 class NaverMapWebCircleSpec {
@@ -428,6 +450,11 @@ class NaverMapWebController {
     );
   }
 
+  Future<void> setZoom(double zoom) async {
+    if (_disposed) return;
+    js_util.callMethod(_map, 'setZoom', [zoom.round()]);
+  }
+
   void dispose() {
     _disposed = true;
   }
@@ -452,6 +479,9 @@ class NaverMapWebWidget extends StatefulWidget {
     this.onMapTap,
     this.onMarkerTap,
     this.onInitFailed,
+    this.showZoomControls = true,
+    this.minZoom = 6,
+    this.maxZoom = 21,
   });
 
   final String clientId;
@@ -470,6 +500,9 @@ class NaverMapWebWidget extends StatefulWidget {
   final NaverMapWebTapCallback? onMapTap;
   final void Function(String markerId)? onMarkerTap;
   final VoidCallback? onInitFailed;
+  final bool showZoomControls;
+  final double minZoom;
+  final double maxZoom;
 
   @override
   State<NaverMapWebWidget> createState() => _NaverMapWebWidgetState();
@@ -487,10 +520,12 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
   bool _mapReady = false;
   String? _error;
   ({double lat, double lng})? _lastReportedCenter;
+  double _zoom = MapConstants.defaultZoom;
 
   @override
   void initState() {
     super.initState();
+    _zoom = widget.initialZoom;
   }
 
   @override
@@ -639,6 +674,7 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
   }
 
   void _handleIdle() {
+    unawaited(_syncZoomFromMap());
     widget.onCameraIdle?.call();
     if (!widget.centerEditable || widget.onCenterChanged == null) return;
 
@@ -685,21 +721,22 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
     }
 
     for (final spec in widget.markers) {
-      final size = spec.isSelected ? spec.size * 1.15 : spec.size;
-      final border = spec.isSelected ? '#FF6F00' : '#FFFFFF';
-      final safeLabel = spec.label
-          .replaceAll('&', '&amp;')
-          .replaceAll('<', '&lt;')
-          .replaceAll('>', '&gt;');
-      final markerHtml =
-          '<div style="width:${size}px;height:${size}px;border-radius:50%;'
-          'background:${spec.colorHex};border:2.5px solid $border;'
-          'display:flex;align-items:center;justify-content:center;'
-          'color:#fff;font-weight:800;font-size:11px;'
-          'box-shadow:0 2px 8px rgba(0,0,0,.35);cursor:pointer;">'
-          '$safeLabel</div>';
+      final width = spec.size;
+      final height = spec.height;
+      final style = switch (spec.kind) {
+        MapPinMarkerKind.busStop => MapPinStyle.busStop,
+        MapPinMarkerKind.notification => MapPinStyle.notification,
+        MapPinMarkerKind.workplace => MapPinStyle.workplace,
+      };
+      final markerHtml = TeardropMapPinArt.pinHtml(
+        style: style,
+        bodyHex: spec.colorHex,
+        width: width,
+        height: height,
+        selected: spec.isSelected,
+      );
 
-      final icon = _markerHtmlIcon(maps, markerHtml, size);
+      final icon = _markerHtmlIcon(maps, markerHtml, width, height);
       final existing = _markerHandles[spec.id];
       if (existing != null) {
         js_util.callMethod(existing, 'setPosition', [
@@ -796,6 +833,21 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
     }
   }
 
+  Future<void> _syncZoomFromMap() async {
+    final controller = _controller;
+    if (controller == null || !controller.isReady) return;
+    final camera = await controller.getCameraPosition();
+    final next = camera.zoom.clamp(widget.minZoom, widget.maxZoom);
+    if (!mounted || (_zoom - next).abs() < 0.01) return;
+    setState(() => _zoom = next);
+  }
+
+  Future<void> _applyZoom(double zoom) async {
+    final next = zoom.clamp(widget.minZoom, widget.maxZoom);
+    setState(() => _zoom = next);
+    await _controller?.setZoom(next);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -838,6 +890,17 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
                     ),
                   ],
                 ),
+              ),
+            ),
+          if (_mapReady && widget.showZoomControls)
+            Positioned(
+              left: 12,
+              top: MediaQuery.paddingOf(context).top + 52,
+              child: MapVerticalZoomRail(
+                zoom: _zoom,
+                minZoom: widget.minZoom,
+                maxZoom: widget.maxZoom,
+                onZoomChanged: (value) => unawaited(_applyZoom(value)),
               ),
             ),
         ],

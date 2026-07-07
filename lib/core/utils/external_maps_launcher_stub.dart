@@ -1,6 +1,9 @@
 import 'package:flutter/services.dart';
 
-enum NaverDirectionsMode { car, transit, walk }
+import 'package:map/core/utils/naver_directions_url.dart';
+
+export 'package:map/core/utils/naver_directions_url.dart'
+    show NaverDirectionsMode;
 
 Future<bool> openNaverDirections({
   required String destinationLabel,
@@ -8,6 +11,7 @@ Future<bool> openNaverDirections({
   double? destinationLongitude,
   double? originLatitude,
   double? originLongitude,
+  String? originLabel,
   NaverDirectionsMode mode = NaverDirectionsMode.car,
 }) async {
   final trimmed = destinationLabel.trim();

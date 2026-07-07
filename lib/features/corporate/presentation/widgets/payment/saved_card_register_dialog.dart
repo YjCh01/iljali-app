@@ -62,7 +62,7 @@ class _SavedCardRegisterDialogState extends State<_SavedCardRegisterDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'PG 연동 전 MVP — 카드 뒤 4자리와 브랜드만 저장합니다.\n'
+            '카드 뒤 4자리와 브랜드만 저장합니다.\n'
             '실제 카드번호·CVC는 PG 화면에서만 입력됩니다.',
             style: TextStyle(
               fontSize: 12,

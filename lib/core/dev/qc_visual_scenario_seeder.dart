@@ -22,7 +22,7 @@ abstract final class QcVisualScenario {
 
 abstract final class QcVisualScenarioSeeder {
   static Future<void> ensureAfterSync() async {
-    if (!EnvConfig.isComplianceApiEnabled && !EnvConfig.qcMode) return;
+    if (!EnvConfig.qcMode) return;
 
     final post = await _resolvePost();
     if (post == null) return;

@@ -3,6 +3,7 @@ import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/job_seeker/data/repositories/job_bookmark_vault_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/features/job_seeker/domain/policies/seeker_job_actions_policy.dart';
 import 'package:map/features/job_seeker/domain/services/job_post_inquiry_service.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_post_action_grid.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_post_detail_sheet.dart';
@@ -16,6 +17,7 @@ class JobPostDetailPage extends StatefulWidget {
     this.shuttleRoute,
     this.onApplied,
     this.employerPreview = false,
+    this.showActionGrid = true,
     this.onShowRouteOnMap,
   });
 
@@ -24,6 +26,9 @@ class JobPostDetailPage extends StatefulWidget {
   final CommuteRoute? shuttleRoute;
   final VoidCallback? onApplied;
   final bool employerPreview;
+
+  /// false — 공고 본문만 (기업회원 타사 공고 열람 등)
+  final bool showActionGrid;
   final VoidCallback? onShowRouteOnMap;
 
   @override
@@ -120,20 +125,25 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
                   });
                 },
                 onApplicationStateChanged: _syncSheetState,
+                employerPreview: widget.employerPreview,
               ),
             ),
           ),
-          JobPostActionGrid(
-            previewMode: widget.employerPreview,
-            isBookmarked: _isBookmarked,
-            bookmarkBusy: _bookmarkBusy,
-            hasApplied: _hasApplied,
-            canWithdrawApplication: _canWithdraw,
-            onInquire: _inquire,
-            onApply: _apply,
-            onWithdrawApply: _withdraw,
-            onBookmark: _bookmark,
-          ),
+          if (SeekerJobActionsPolicy.showSeekerActionUi(
+                employerPreview: widget.employerPreview,
+              ) &&
+              widget.showActionGrid)
+            JobPostActionGrid(
+              previewMode: widget.employerPreview,
+              isBookmarked: _isBookmarked,
+              bookmarkBusy: _bookmarkBusy,
+              hasApplied: _hasApplied,
+              canWithdrawApplication: _canWithdraw,
+              onInquire: _inquire,
+              onApply: _apply,
+              onWithdrawApply: _withdraw,
+              onBookmark: _bookmark,
+            ),
         ],
       ),
     );

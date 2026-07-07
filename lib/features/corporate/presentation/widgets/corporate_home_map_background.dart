@@ -1,30 +1,53 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:map/core/constants/app_colors.dart';
+
+import 'package:map/core/geo/map_viewport_bounds.dart';
 
 import 'package:map/core/job_board/job_board_refresh.dart';
 
 import 'package:map/core/session/auth_session.dart';
 
+import 'package:map/core/constants/map_constants.dart';
+import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
-
-import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 
 import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
 
 import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
 
+import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_overlay.dart';
 
 import 'package:map/features/corporate/domain/services/corporate_shuttle_density_loader.dart';
 
+import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
+
+import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
+
 import 'package:map/features/corporate/presentation/widgets/corporate_home_naver_map.dart';
+
+import 'package:map/features/job_seeker/data/datasources/closed_ghost_route_local_data_source.dart';
+import 'package:map/features/job_seeker/domain/entities/closed_ghost_route.dart';
 
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
 
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 
 import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase.dart';
+
+import 'package:map/features/job_seeker/domain/utils/job_map_viewport_filter.dart';
+
+import 'package:map/features/job_seeker/domain/utils/mock_map_viewport.dart';
+
+import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
+
+import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
+
+import 'package:map/features/map_dashboard/presentation/widgets/map_floating_insets.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_search_area_button.dart';
 
 
 
@@ -38,6 +61,8 @@ class CorporateHomeMapBackground extends StatefulWidget {
 
     this.focusPostId,
 
+    this.focusPost,
+
     this.selectedPostId,
 
     this.onSelectedPinChanged,
@@ -49,6 +74,8 @@ class CorporateHomeMapBackground extends StatefulWidget {
 
 
   final String? focusPostId;
+
+  final CorporateJobPost? focusPost;
 
   final String? selectedPostId;
 
@@ -70,6 +97,8 @@ class CorporateHomeMapBackground extends StatefulWidget {
 
 class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground> {
 
+  static const _sheetMinFraction = 0.26;
+
   static const _postsSource = CorporateJobPostLocalDataSourceImpl();
 
 
@@ -80,15 +109,31 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
 
 
-  List<JobMapPin> _allPins = [];
+  List<JobMapPin> _catalogPins = [];
+
+  List<JobMapPin> _displayPins = [];
 
   List<CorporateShuttleMapOverlay> _shuttleOverlays = [];
 
+  List<ClosedGhostRoute> _ghostRoutes = const [];
+
+  List<CorporateJobPost> _ownPosts = [];
+
   Set<String> _ownPostIds = {};
+
+  MapViewportBounds? _activeViewport;
 
   bool _loading = true;
 
   bool _showAllPins = true;
+
+  bool _areaSearchPending = false;
+
+  bool _areaSearchLoading = false;
+
+  bool _cameraPromptReady = false;
+
+  bool _skipNextAreaSearchPrompt = false;
 
   JobMapPin? _centerOnPin;
 
@@ -130,14 +175,13 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
     super.didUpdateWidget(oldWidget);
 
-    if (widget.focusPostId != oldWidget.focusPostId &&
-
+    if ((widget.focusPostId != oldWidget.focusPostId ||
+            widget.focusPost != oldWidget.focusPost) &&
         widget.focusPostId != null) {
-
       _appliedFocusPostId = null;
-
-      _applyFocusPostId();
-
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_applyFocusPostId());
+      });
     }
 
   }
@@ -146,50 +190,121 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
   void _onProfileChanged() => _load();
 
-
-
-  JobMapPin? _findPinByPostId(String postId) {
-
-    for (final pin in _allPins) {
-
-      if (pin.post.id == postId) return pin;
-
-    }
-
-    return null;
-
-  }
-
-
-
-  void _applyFocusPostId() {
-
+  Future<void> _applyFocusPostId() async {
     final id = widget.focusPostId;
+    if (id == null || _appliedFocusPostId == id) return;
 
-    if (id == null || _loading || _appliedFocusPostId == id) return;
+    CorporateJobPost? post = widget.focusPost;
+    if (post == null || post.id != id) {
+      for (final candidate in _ownPosts) {
+        if (candidate.id == id) {
+          post = candidate;
+          break;
+        }
+      }
+    }
+    post ??= await _postsSource.findById(id);
+    if (post == null) return;
 
-
-
-    final pin = _findPinByPostId(id);
-
-    if (pin == null || !_ownPostIds.contains(id)) return;
-
-
+    if (_loading) {
+      await _load();
+      if (!mounted) return;
+    }
 
     _appliedFocusPostId = id;
 
+    final coordinate =
+        await JobPostWorkplaceResolver.resolveMapWorkplaceCoordinateAsync(post);
+
+    final usedFallbackCenter = isLikelyDefaultPushMapCenter(coordinate) &&
+        post.warehouseName.trim().isNotEmpty &&
+        !isDefaultPushMapAddressLabel(post.warehouseName);
+
+    if (!isLikelyDefaultPushMapCenter(coordinate) &&
+        (post.workplaceLatitude == null ||
+            post.workplaceLongitude == null ||
+            isLikelyDefaultPushMapCenter(
+              GeoCoordinate(
+                latitude: post.workplaceLatitude!,
+                longitude: post.workplaceLongitude!,
+              ),
+            ))) {
+      await _postsSource.updateJobPost(
+        post.copyWith(
+          workplaceLatitude: coordinate.latitude,
+          workplaceLongitude: coordinate.longitude,
+        ),
+      );
+      post = post.copyWith(
+        workplaceLatitude: coordinate.latitude,
+        workplaceLongitude: coordinate.longitude,
+      );
+    }
+
+    final pin = JobMapPin(
+      post: post,
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+      companyName: post.registeredBy?.companyName ?? post.warehouseName,
+      displayTier: post.effectiveMapPinTier,
+    );
+
+    if (!mounted) return;
+
+    MapViewportSessionStore.instance.rememberCoordinate(
+      MapViewportSessionKeys.corporateHome,
+      center: coordinate,
+      zoom: MapConstants.defaultZoom,
+    );
+
     setState(() {
-
       _centerOnPin = pin;
-
       _showAllPins = true;
-
+      _activeViewport = null;
+      if (!_ownPostIds.contains(id)) {
+        _ownPosts = [..._ownPosts, post!];
+        _ownPostIds = {..._ownPostIds, id};
+      }
     });
+    _applyPinVisibility();
+
+    await _focusMapWhenReady(
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+    );
+
+    if (!mounted) return;
+
+    if (usedFallbackCenter) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '근무지 주소를 찾지 못했습니다. 공고수정에서 근무지를 확인해 주세요.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
 
     widget.onSelectedPinChanged?.call(pin);
-
     widget.onFocusConsumed?.call();
+  }
 
+  Future<void> _focusMapWhenReady({
+    required double latitude,
+    required double longitude,
+  }) async {
+    for (var attempt = 0; attempt < 80; attempt++) {
+      if (MapCameraHolder.instance.isReady) {
+        await MapCameraHolder.instance.focusPin(
+          latitude: latitude,
+          longitude: longitude,
+          zoom: MapConstants.defaultZoom,
+        );
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
   }
 
 
@@ -198,7 +313,7 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
     JobBoardRefresh.consumeIfDirty();
 
-    final pins = await _getPins(includeClosedGhosts: false);
+    final pins = await _getPins(includeClosedGhosts: true);
 
     final posts = await _getPosts();
 
@@ -214,15 +329,16 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
     );
 
+    final ghostRoutes =
+        await const ClosedGhostRouteLocalDataSourceImpl().fetchAll();
+
     final companyKey =
 
         AuthSession.instance.currentUser?.corporateProfile?.companyKey;
 
 
 
-    final ownActive = posts.where((post) {
-
-      if (post.status == CorporateJobPostStatus.closed) return false;
+    final ownPosts = posts.where((post) {
 
       if (companyKey == null) return true;
 
@@ -234,15 +350,19 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
 
 
-    final ownIds = ownActive.map((p) => p.id).toSet();
+    final ownIds = ownPosts.map((p) => p.id).toSet();
 
     if (!mounted) return;
 
     setState(() {
 
-      _allPins = pins;
+      _catalogPins = pins;
+
+      _ownPosts = ownPosts;
 
       _shuttleOverlays = shuttleOverlays;
+
+      _ghostRoutes = ghostRoutes;
 
       _ownPostIds = ownIds;
 
@@ -250,35 +370,192 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
     });
 
+    _applyPinVisibility();
+
     _applyFocusPostId();
 
   }
 
 
 
-  List<JobMapPin> get _visiblePins {
+  void _applyPinVisibility() {
 
-    if (_showAllPins) return _allPins;
+    var pins = _catalogPins;
 
-    return _allPins.where((p) => _ownPostIds.contains(p.post.id)).toList();
+    if (!_showAllPins) {
+
+      pins = pins.where((p) => _ownPostIds.contains(p.post.id)).toList();
+
+    }
+
+    if (_activeViewport != null && _centerOnPin == null) {
+
+      pins = filterPinsInViewport(
+
+        pins: pins,
+
+        viewport: _activeViewport!,
+
+        latitude: (pin) => pin.latitude,
+
+        longitude: (pin) => pin.longitude,
+
+      );
+
+    }
+
+    setState(() => _displayPins = pins);
 
   }
 
 
+
+  Future<MapViewportBounds> _resolveViewport() async {
+
+    return MapCameraHolder.instance.getViewportBounds();
+
+  }
+
+
+
+  Future<void> _searchThisArea() async {
+
+    if (_areaSearchLoading) return;
+
+    setState(() {
+
+      _areaSearchLoading = true;
+
+      _areaSearchPending = false;
+
+    });
+
+    try {
+
+      MapViewportBounds viewport;
+
+      try {
+
+        viewport = await _resolveViewport().timeout(
+
+          const Duration(seconds: 4),
+
+          onTimeout: () => _activeViewport ?? MockMapViewport.initial(),
+
+        );
+
+      } catch (_) {
+
+        viewport = _activeViewport ?? MockMapViewport.initial();
+
+      }
+
+      if (!mounted) return;
+
+      setState(() => _activeViewport = viewport);
+
+      _applyPinVisibility();
+
+    } finally {
+
+      if (mounted) setState(() => _areaSearchLoading = false);
+
+    }
+
+  }
+
+
+
+  void _markAreaSearchPending() {
+
+    if (!_cameraPromptReady || _loading || _areaSearchLoading) return;
+
+    if (_skipNextAreaSearchPrompt) {
+
+      _skipNextAreaSearchPrompt = false;
+
+      return;
+
+    }
+
+    if (_areaSearchPending) return;
+
+    setState(() => _areaSearchPending = true);
+
+  }
+
+
+
+  Future<void> _handleMapReady() async {
+
+    MapViewportBounds viewport;
+
+    try {
+
+      viewport = await _resolveViewport().timeout(
+
+        const Duration(seconds: 4),
+
+        onTimeout: () => MockMapViewport.initial(),
+
+      );
+
+    } catch (_) {
+
+      viewport = MockMapViewport.initial();
+
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+
+      _activeViewport = viewport;
+
+      _cameraPromptReady = true;
+
+      _skipNextAreaSearchPrompt = true;
+
+    });
+
+    _applyPinVisibility();
+
+  }
+
+
+
+  double _areaSearchButtonBottom(BuildContext context) =>
+      MapFloatingInsets.draggableSheetSearchButtonBottom(
+        context,
+        sheetMinFraction: _sheetMinFraction,
+      );
 
   void _onPinTap(JobMapPin pin) {
+
     setState(() => _centerOnPin = pin);
+
     widget.onSelectedPinChanged?.call(pin);
+
   }
 
+
+
   void _onShuttleStopTap(CorporateShuttleMapOverlay overlay) {
+
     ScaffoldMessenger.of(context).showSnackBar(
+
       SnackBar(
+
         content: Text('셔틀 노선 · ${overlay.route.routeName}'),
+
         behavior: SnackBarBehavior.floating,
+
         duration: const Duration(seconds: 2),
+
       ),
+
     );
+
   }
 
 
@@ -306,14 +583,46 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
         else
 
           CorporateHomeNaverMap(
-            pins: _visiblePins,
+            pins: _displayPins,
             ownPostIds: _ownPostIds,
             shuttleOverlays: _shuttleOverlays,
+            ghostRoutes: _ghostRoutes,
             onPinTap: _onPinTap,
             onShuttleStopTap: _onShuttleStopTap,
             selectedPostId: widget.selectedPostId,
             centerOnPin: _centerOnPin,
             onMapBackgroundTap: () => widget.onSelectedPinChanged?.call(null),
+            onCameraIdle: _cameraPromptReady ? _markAreaSearchPending : null,
+            onMapReady: _handleMapReady,
+            myLocationButtonBottom:
+                MapFloatingInsets.myLocationAboveDraggableSheet(
+              context,
+              sheetMinFraction: _sheetMinFraction,
+            ),
+          ),
+
+        if (!_loading && _areaSearchPending)
+
+          Positioned(
+
+            left: 0,
+
+            right: 0,
+
+            bottom: _areaSearchButtonBottom(context),
+
+            child: Center(
+
+              child: MapSearchAreaButton(
+
+                loading: _areaSearchLoading,
+
+                onPressed: _searchThisArea,
+
+              ),
+
+            ),
+
           ),
 
         Positioned(
@@ -330,7 +639,13 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
               label: _showAllPins ? '주변 공고 포함' : '내 공고만',
 
-              onTap: () => setState(() => _showAllPins = !_showAllPins),
+              onTap: () {
+
+                setState(() => _showAllPins = !_showAllPins);
+
+                _applyPinVisibility();
+
+              },
 
             ),
 
@@ -429,5 +744,4 @@ class _MapFilterChip extends StatelessWidget {
   }
 
 }
-
 

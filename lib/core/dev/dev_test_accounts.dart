@@ -161,7 +161,6 @@ final class DevTestAccount {
       requiresAdminReview: false,
       adminReviewApproved: false,
       policyAcceptedAt: DateTime(2026, 1, 1),
-      businessHeadOfficeAddress: '경기도 화성시 동탄대로 123',
     );
   }
 

@@ -1,0 +1,121 @@
+================================================================================
+  일자리(iljari.app) — 실서비스 QC·데모 데이터 점검 결과
+================================================================================
+  점검일: 2026-06-28
+  목적: 다날·PG·본인인증 정식화 전 QC 잔존 데이터 차단
+
+
+■ 요약
+────────────────────────────────────────────────────────────────────────────
+  🔴 즉시 조치 (코드 수정 완료 — 배포 필요)
+  🟠 서버 .env / DB 수동 확인 필요
+  🟢 안전 (릴리즈에서 비활성)
+
+
+================================================================================
+  🔴 코드에서 막은 것 (이번에 수정함)
+================================================================================
+
+  1. QcVisualScenarioSeeder
+     문제: api.iljari.app 연결만 되어도 QC 지원·채팅 시나리오가 로컬에 주입됨
+     조치: QC_MODE=true 일 때만 동작하도록 변경
+
+  2. QcAuthService (seeker-0001@qc.iljari.co.kr / QcTest1234!)
+     문제: debug + 실서버 API 조합에서 QC 비번 로그인 가능했음
+     조치: kDebugMode && QC_MODE 일 때만 허용
+
+  3. 결제 mock 폴백 (RemotePaymentsGatewayService)
+     문제: 서버 통신 실패 시 자동으로 MOCK 결제 성공
+     조치: release 빌드에서는 실패 반환 (mock 폴백 제거)
+
+  4. PaymentGatewayFactory
+     문제: release에서 API 미설정 시 Mock PG
+     조치: release는 RemotePaymentsGatewayService 우선
+
+  5. QcSyncBootstrap 프로필 placeholder
+     문제: 동기화된 공고에 'QC기업'·'QC담당'·handler 9999 표시
+     조치: 실제 company_name 사용, 빈 필드로 정리
+
+  6. 서버 비밀번호 QC_LEGACY (QcTest1234!)
+     문제: password_hash 없는 모든 계정이 QC 비번으로 로그인 가능
+     조치: seeker-XXXX@qc.iljari.co.kr 이메일만 허용
+
+  7. 서버 OCR mock
+     문제: CLOVA 미설정 시 가짜 OCR(대표자 mock) 반환
+     조치: REQUIRE_CLOVA_OCR=true 시 503 (staging env.example 반영)
+
+
+================================================================================
+  🟠 반드시 직접 확인할 것 (서버·DB)
+================================================================================
+
+  【프로덕션 DB에 QC 시드가 들어가 있으면 삭제】
+  seed_qc.py / seed_ncp_server.sh 로 넣은 데이터:
+    • 공고: qc_post_real_001, qc_post_real_002 ([QC] 물류센터…)
+    • 기업: 테스트기업 알파 (BRN 1000000001), 베타 (1000000002)
+    • 구직자: seeker-0001@qc.iljari.co.kr ~ seeker-1000@qc.iljari.co.kr
+    • 이메일 도메인: @qc.iljari.co.kr, recruit-alpha@qc.iljari.co.kr
+
+  → Admin 콘솔에서 해당 공고·회원 삭제 또는 DB 정리 필요
+  → 한 번도 seed_ncp_server.sh 안 썼으면 서버 공고는 실데이터만일 수 있음
+
+  【server/.env 운영 필수값】
+    REQUIRE_NTS_API_KEY=true     ← NTS mock 차단
+    REQUIRE_CLOVA_OCR=true       ← OCR mock 차단
+    SMS_PROVIDER=aligo           ← OTP 123456 mock 탈출
+    ADMIN_API_KEY=강한_랜덤키    ← 기본 iljari-admin-dev-key 교체
+    TOSS_SECRET_KEY / WEBHOOK    ← mock 결제 차단
+
+  【웹 빌드 variant】
+    iljari.app 메인: QC_MODE=false (build_web_ncp.sh site) ✅
+    /seeker/, /qc/, /admin/ 서브경로: QC_MODE=true — 내부용만
+
+  【레거시 주소】
+    경기도 화성시 동탄대로 123 — 코드에서 무시 처리됨
+    내정보·DB에 저장된 사용자 프로필은 수동 삭제 필요할 수 있음
+
+
+================================================================================
+  🟢 릴리즈에서 안전한 것 (추가 조치 불필요)
+================================================================================
+
+  • DevExperienceFlags — kDebugMode && QC_MODE 일 때만 QC UI
+  • LoginQcQuickPanel — debug 전용, release 앱에 안 보임
+  • Mock OCR (클라이언트) — CLOVA 없을 때 debug+QC만
+  • 공고 가져오기 데모 URL — DevExperienceFlags 일 때만
+  • workplace_address_qc 강남 샘플 — DevExperienceFlags 또는 데스크톱 수동입력 시
+  • QcDemoAddresses 동탄대로 — legacy 필터로 실서비스 흐름에서 제외
+  • Admin seed API — ADMIN_API_KEY 필요 (키만 강하게 바꾸면 됨)
+  • fixtures/jobs.example.json — assets에 있으나 release UI에서 자동 로드 안 함
+    (Admin 패널에서만 수동 불러오기)
+
+
+================================================================================
+  약관 사업자명 변경 (이번에 적용)
+================================================================================
+
+  언리얼리 → 아라컴퍼니
+  사업자등록번호: 540-31-00894
+  대표: 최영진
+  주소: 서울 송파구 오금로11길 55, 현대빌딩 2층 비즈센터
+  문의: iljariapp@gmail.com · 1644-5701
+
+  반영 위치:
+    lib/core/legal/business_disclosure.dart
+    assets/legal/*.md
+    store/legal/*.md
+
+  ※ 약관 버전 legal_consent_catalog → 2026-06-28 (재동의 게이트)
+
+
+================================================================================
+  정식화 전 체크리스트 (다날·PG·본인인증)
+================================================================================
+
+  [ ] 프로덕션 DB QC 회원·공고 정리 → ./scripts/purge_qc_server.sh --yes (API 배포 후)
+  [ ] server .env REQUIRE_* + Aligo + Toss + CLOVA + NTS
+  [ ] ADMIN_API_KEY 교체
+  [ ] 이번 코드 배포 (한방배포)
+  [ ] iljari.app 에서 [QC] 공고·테스트기업 알파 지도에 안 보이는지 확인
+  [ ] 가입 OTP가 123456이 아닌지 확인
+  [ ] 결제 시 mock 아닌 토스 checkout 뜨는지 확인

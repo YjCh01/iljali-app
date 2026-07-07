@@ -38,12 +38,16 @@ class AdminOpsApiClient {
 
   Future<Map<String, dynamic>> grantWallet({
     required String companyKey,
-    required int packageCredits,
+    int packageCredits = 0,
+    int shuttleStopCredits = 0,
+    int pushTicketCredits = 0,
     int? locationSlots,
   }) async =>
       _post('/v1/admin/ops/wallet/grant', {
         'company_key': companyKey,
         'package_credits': packageCredits,
+        'shuttle_stop_credits': shuttleStopCredits,
+        'push_ticket_credits': pushTicketCredits,
         if (locationSlots != null) 'location_slots': locationSlots,
       });
 
@@ -132,6 +136,65 @@ class AdminOpsApiClient {
   ) async =>
       _post('/v1/admin/ops/jobs/bulk', {'posts': posts});
 
+  /// 알바몬 등 URL 목록 → 스크래핑 후 공고 일괄 등록
+  Future<Map<String, dynamic>> bulkImportJobUrls({
+    String? urlText,
+    List<String>? urls,
+    String companyKey = '5403100894',
+    String companyName = '아라컴퍼니',
+    String postedByEmail = '',
+    String postedByName = '',
+    bool activateJobPin = true,
+  }) async =>
+      _post('/v1/admin/ops/jobs/bulk-import-urls', {
+        if (urlText != null && urlText.trim().isNotEmpty) 'url_text': urlText,
+        if (urls != null && urls.isNotEmpty) 'urls': urls,
+        'company_key': companyKey,
+        'company_name': companyName,
+        'posted_by_email': postedByEmail,
+        'posted_by_name': postedByName,
+        'activate_job_pin': activateJobPin,
+      });
+
+  Future<Map<String, dynamic>> getBusLocationTowerPilot() async =>
+      _decode(await _client.get(
+        Uri.parse('$_baseUrl/v1/admin/ops/pilot/bus-location-tower'),
+        headers: _headers,
+      ));
+
+  Future<Map<String, dynamic>> searchBusLocationTowerCandidates({
+    required String phone,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/v1/admin/ops/pilot/bus-location-tower/candidates',
+    ).replace(queryParameters: {'phone': phone.trim()});
+    return _decode(await _client.get(uri, headers: _headers));
+  }
+
+  Future<Map<String, dynamic>> setBusLocationTowerPilot({
+    required String seekerEmail,
+    required bool enabled,
+    String companyKey = '',
+    String companyName = '',
+    String routeId = '',
+    String routeName = '',
+    String note = '',
+    String workStartTime = '',
+  }) async =>
+      _post('/v1/admin/ops/pilot/bus-location-tower', {
+        'seeker_email': seekerEmail.trim().toLowerCase(),
+        'enabled': enabled,
+        'company_key': companyKey.trim(),
+        'company_name': companyName.trim(),
+        'route_id': routeId.trim(),
+        'route_name': routeName.trim(),
+        'note': note,
+        'work_start_time': workStartTime.trim(),
+      });
+
+  Future<Map<String, dynamic>> stopBusLocationTowerToday() async =>
+      _post('/v1/admin/ops/pilot/bus-location-tower/stop-today', {});
+
   Future<Map<String, dynamic>> distributeApplications({
     required String postId,
     int maxApplications = 100,
@@ -200,6 +263,58 @@ class AdminOpsApiClient {
     );
     _decode(response);
   }
+
+  Future<List<Map<String, dynamic>>> listGhostRoutes() async {
+    final body = _decode(await _client.get(
+      Uri.parse('$_baseUrl/v1/admin/ops/ghost-routes'),
+      headers: _headers,
+    ));
+    final list = body['ghost_routes'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> createGhostRoute({
+    required double workplaceLatitude,
+    required double workplaceLongitude,
+    required List<Map<String, double>> stops,
+    String label = '',
+  }) async =>
+      _post('/v1/admin/ops/ghost-routes', {
+        'workplace_latitude': workplaceLatitude,
+        'workplace_longitude': workplaceLongitude,
+        'stops': stops,
+        'label': label,
+      });
+
+  Future<void> deleteGhostRoute(String routeId) async {
+    final response = await _client.delete(
+      Uri.parse('$_baseUrl/v1/admin/ops/ghost-routes/$routeId'),
+      headers: _headers,
+    );
+    _decode(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listAnnouncements() async {
+    final body = _decode(await _client.get(
+      Uri.parse('$_baseUrl/v1/admin/ops/announcements'),
+      headers: _headers,
+    ));
+    final list = body['announcements'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> createAnnouncement({
+    required String title,
+    required String body,
+    String audience = 'all',
+    bool pushRequested = true,
+  }) async =>
+      _post('/v1/admin/ops/announcements', {
+        'title': title,
+        'body': body,
+        'audience': audience,
+        'push_requested': pushRequested,
+      });
 
   Future<List<Map<String, dynamic>>> listApplications({
     String? seekerEmail,
@@ -300,6 +415,21 @@ class AdminOpsApiClient {
         'reason': reason,
         'action': 'lift',
       });
+
+  Future<List<Map<String, dynamic>>> listWorkplaceMismatchPending() async {
+    final body = _decode(await _client.get(
+      Uri.parse('$_baseUrl/v1/admin/ops/compliance/workplace-mismatch/pending'),
+      headers: _headers,
+    ));
+    final list = body['flags'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> approveStatedWorkplacePost(int flagId) async =>
+      _post(
+        '/v1/admin/ops/compliance/workplace-mismatch/$flagId/approve-stated-workplace',
+        {},
+      );
 
   Future<Map<String, dynamic>> _post(
     String path,

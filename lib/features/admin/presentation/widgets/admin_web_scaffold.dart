@@ -9,8 +9,10 @@ enum AdminNavSection {
   map('공고 지도', Icons.map_outlined),
   members('회원·이용권', Icons.people_outline),
   chat('채팅 열람', Icons.forum_outlined),
+  announcements('공지 발송', Icons.campaign_outlined),
   jobs('공고·핀', Icons.push_pin_outlined),
   qc('QC 시드', Icons.science_outlined),
+  pilot('파일럿', Icons.directions_bus_outlined),
   audit('감사 로그', Icons.receipt_long_outlined),
   compliance('컴플라이언스', Icons.verified_user_outlined);
 

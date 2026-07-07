@@ -38,6 +38,18 @@ class QcMemberRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class MemberSocialLinkRow(Base):
+    __tablename__ = "member_social_links"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(16), index=True)
+    provider_user_id: Mapped[str] = mapped_column(String(128), index=True)
+    member_id: Mapped[str] = mapped_column(String(32), index=True)
+    email: Mapped[str] = mapped_column(String(200), default="")
+    display_name: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class CompanySanctionRow(Base):
     __tablename__ = "company_sanctions"
 
@@ -97,4 +109,27 @@ class ClosedGhostPinRow(Base):
     longitude: Mapped[float] = mapped_column()
     label: Mapped[str] = mapped_column(String(200), default="")
     source_post_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ClosedGhostRouteRow(Base):
+    __tablename__ = "closed_ghost_routes"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    label: Mapped[str] = mapped_column(String(200), default="")
+    workplace_latitude: Mapped[float] = mapped_column()
+    workplace_longitude: Mapped[float] = mapped_column()
+    stops_json: Mapped[str] = mapped_column(Text, default="[]")
+    ghost_pin_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AdminAnnouncementRow(Base):
+    __tablename__ = "admin_announcements"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+    audience: Mapped[str] = mapped_column(String(16), default="all", index=True)
+    push_requested: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

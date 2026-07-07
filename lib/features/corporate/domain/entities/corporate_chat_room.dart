@@ -2,6 +2,7 @@
 enum CorporateChatRoomKind {
   applicant,
   officialNotice,
+  adminNotice,
 }
 
 /// 채팅방 목록용 엔티티
@@ -29,6 +30,10 @@ class CorporateChatRoom {
   final String? jobPostId;
 
   bool get isOfficialNotice => kind == CorporateChatRoomKind.officialNotice;
+
+  bool get isAdminNotice => kind == CorporateChatRoomKind.adminNotice;
+
+  bool get isReadOnlyNotice => isOfficialNotice || isAdminNotice;
 }
 
 /// 6번 탭 — 예약 메뉴

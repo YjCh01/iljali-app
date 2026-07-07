@@ -6,6 +6,8 @@ abstract final class JobPostImportCopy {
   static const ctaLabel = '다른 곳에 올린 공고 쉽게 가져오기';
   static const pageTitle = '공고 가져오기';
   static const registerFromImport = '가져온 내용으로 등록하기';
+  static const inlineFormHint =
+      '가져온 내용이 아래 작성 폼에 채워집니다. 확인·수정 후 등록해 주세요.';
 }
 
 /// AI 기능 표시용 스파클 아이콘 (텍스트 "AI" 대신 사용)

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/utils/premium_wage_pin_policy.dart';
 
-/// 지도 공고 핀 — 일반(회색) · 고시급(하늘) · 유료(보라)
+/// 지도 공고 핀 — 활성(파랑) · 마감유령(회색). 등급별 색상은 추후 기업 설정.
 enum JobMapPinDisplayTier {
   /// 기본 무료 공고
   standard,
@@ -47,24 +47,18 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
       };
 
   Color get pinColor => switch (this) {
-        JobMapPinDisplayTier.standard => AppColors.textSecondary,
-        JobMapPinDisplayTier.premiumWage => const Color(0xFF29B6F6),
-        JobMapPinDisplayTier.packageActive => const Color(0xFF9B86F0),
-        JobMapPinDisplayTier.closedGhost => const Color(0xFF9E9E9E),
+        JobMapPinDisplayTier.closedGhost => MapPinColors.ghost,
+        _ => MapPinColors.active,
       };
 
   Color get pinLightColor => switch (this) {
-        JobMapPinDisplayTier.standard => const Color(0xFFBDBDBD),
-        JobMapPinDisplayTier.premiumWage => const Color(0xFFB3E5FC),
-        JobMapPinDisplayTier.packageActive => const Color(0xFFD4CBFB),
         JobMapPinDisplayTier.closedGhost => const Color(0xFFE0E0E0),
+        _ => MapPinColors.active.withValues(alpha: 0.55),
       };
 
   Color get pinBorderColor => switch (this) {
-        JobMapPinDisplayTier.standard => Colors.white,
-        JobMapPinDisplayTier.premiumWage => const Color(0xFFE1F5FE),
-        JobMapPinDisplayTier.packageActive => const Color(0xFFF3EEFF),
         JobMapPinDisplayTier.closedGhost => const Color(0xFFEEEEEE),
+        _ => MapPinColors.active,
       };
 
   double get markerSize => switch (this) {

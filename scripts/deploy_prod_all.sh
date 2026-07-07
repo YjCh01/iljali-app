@@ -141,7 +141,14 @@ deploy_web_variant() {
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   echo "[Web 1/4] Flutter build..."
-  ./scripts/build_web_ncp.sh "${variant}"
+  if ! ./scripts/build_web_ncp.sh "${variant}"; then
+    echo "❌ Flutter build failed — ${variant} (업로드 생략)"
+    return 1
+  fi
+  if [[ ! -f "build/web-deploy/${variant}/.iljari_build_ok" ]]; then
+    echo "❌ 빌드 산출물 없음 — ${variant} (업로드 생략)"
+    return 1
+  fi
 
   echo "[Web 2/4] tar..."
   iljari_tar_create "${tar}" -C "build/web-deploy/${variant}" .
@@ -173,8 +180,10 @@ deploy_app() {
   chmod +x ./scripts/build_prod_app.sh
   local app_args=()
   [[ "${STORE_UPLOAD_STRICT}" == 1 ]] && app_args+=(--upload)
-  if ! ./scripts/build_prod_app.sh "${app_args[@]}"; then
-    return 1
+  if [[ ${#app_args[@]} -eq 0 ]]; then
+    ./scripts/build_prod_app.sh || return 1
+  else
+    ./scripts/build_prod_app.sh "${app_args[@]}" || return 1
   fi
   return 0
 }
@@ -207,6 +216,9 @@ if [[ "${FAILED}" == 0 ]]; then
   fi
 else
   echo "  ⚠️  일부 단계 실패 — 위 로그 확인"
+  [[ "${DO_API}" == 1 ]] && echo "  (API·웹이 ✅면 서비스·카카오 로그인 테스트는 가능)"
+  echo "  Android Java 오류 → 도구_Java설치.command"
+  echo "  iOS CocoaPods/SSL 오류 → 도구_CocoaPods설치.command (CA 인증서 자동 설치)"
   echo "  SSL/nginx: 도구_사이트완료.command"
 fi
 echo "========================================"

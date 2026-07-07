@@ -8,7 +8,7 @@ abstract final class CredentialCatalog {
     id: 'construction_safety_basic',
     label: '건설업 기초안전보건교육 이수증',
     category: CredentialCategory.constructionManufacturing,
-    aliases: ['건설안전', '기초안전보건', '안전교육', '4시간', '보건증'],
+    aliases: ['건설안전', '기초안전보건', '안전교육', '4시간'],
   );
 
   static const specialHealthExam = CredentialDefinition(
@@ -89,6 +89,8 @@ abstract final class CredentialCatalog {
     category: CredentialCategory.facilitySecurity,
     aliases: ['범죄경력', '성범죄', '아동학대', '경비채용'],
     requiresPhoto: false,
+    guideDocumentId: 'criminal_record_consent',
+    summary: '경비·시설 채용 시 범죄경력 확인 동의',
   );
 
   // ── 미화 및 요양·돌봄 ──
@@ -113,6 +115,32 @@ abstract final class CredentialCatalog {
     aliases: ['보육', '보육교사', '어린이집', '유치원'],
   );
 
+  // ── 식품·외식·제조 ──
+  static const healthCertificate = CredentialDefinition(
+    id: 'health_certificate',
+    label: '보건증 (건강진단결과서)',
+    category: CredentialCategory.foodService,
+    summary: '식품·요식업 종사 필수 · e보건소·보건소·병원 발급',
+    aliases: [
+      '보건',
+      '보건증',
+      '건강진단결과서',
+      '건강진단',
+      '건강증명서',
+      '위생교육',
+      '식품위생',
+      '외식',
+      '조리',
+      '식품',
+      '식품제조',
+      '요식업',
+      'HACCP',
+      '감염병',
+      '보건소',
+      'e보건소',
+    ],
+  );
+
   static const List<CredentialDefinition> all = [
     constructionSafetyBasic,
     specialHealthExam,
@@ -128,6 +156,7 @@ abstract final class CredentialCatalog {
     latentTbScreening,
     caregiverCert,
     childcareTeacherCert,
+    healthCertificate,
   ];
 
   static CredentialDefinition? findById(String? id) {

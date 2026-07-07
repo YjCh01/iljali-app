@@ -1,3 +1,4 @@
+import 'package:map/core/config/free_exposure_launch_policy.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
@@ -5,6 +6,8 @@ import 'package:map/features/corporate/domain/entities/corporate_member_profile.
 import 'package:map/features/corporate/domain/entities/exposure_activation_credit_mode.dart';
 import 'package:map/features/corporate/domain/entities/push_dispatch_target.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/entities/exposure_activation_source.dart';
+import 'package:map/features/corporate/domain/services/promo_exposure_activation_helper.dart';
 import 'package:map/features/corporate/domain/services/exposure_activation_service.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 
@@ -55,16 +58,18 @@ class ShuttleOverlayActivationResult {
 /// 공고에 연결된 셔틀 노선의 지도 오버레이를 유료 활성화
 class ShuttleOverlayActivationService {
   ShuttleOverlayActivationService({
-    PushWalletService? walletService,
     ExposureActivationService? exposureActivationService,
     CorporateJobPostLocalDataSource? dataSource,
+    PromoExposureActivationHelper? promoHelper,
   })  : _exposureActivationService =
             exposureActivationService ?? ExposureActivationService(),
         _dataSource =
-            dataSource ?? const CorporateJobPostLocalDataSourceImpl();
+            dataSource ?? const CorporateJobPostLocalDataSourceImpl(),
+        _promoHelper = promoHelper ?? PromoExposureActivationHelper();
 
   final ExposureActivationService _exposureActivationService;
   final CorporateJobPostLocalDataSource _dataSource;
+  final PromoExposureActivationHelper _promoHelper;
 
   Future<ShuttleOverlayActivationResult> activate({
     required CorporateJobPost post,
@@ -85,6 +90,22 @@ class ShuttleOverlayActivationService {
       );
     }
 
+    if (await FreeExposureLaunchPolicy.isActive()) {
+      final quota = await _promoHelper.tryConsume(
+        companyKey: profile.companyKey,
+        count: 1,
+      );
+      if (!quota.success) {
+        return ShuttleOverlayActivationResult.fail(quota.message ?? '한도 초과');
+      }
+      final updated = post.copyWith(
+        hasShuttleRouteOverlay: true,
+        shuttleOverlayActivationSource: ExposureActivationSource.promo,
+      );
+      await _dataSource.updateJobPost(updated);
+      return ShuttleOverlayActivationResult.success(updated);
+    }
+
     final consume = await _exposureActivationService.consumeCredit(
       profile: profile,
       mode: mode,
@@ -96,7 +117,10 @@ class ShuttleOverlayActivationService {
       );
     }
 
-    final updated = post.copyWith(hasShuttleRouteOverlay: true);
+    final updated = post.copyWith(
+      hasShuttleRouteOverlay: true,
+      shuttleOverlayActivationSource: ExposureActivationSource.credit,
+    );
     await _dataSource.updateJobPost(updated);
 
     PushDispatchTarget? pushTarget;

@@ -44,6 +44,7 @@ class JobPostWriteDraft {
     this.paymentDayOfMonth,
 
     this.workPeriodNegotiable = false,
+    this.workScheduleNegotiable = false,
 
     this.notificationSettings,
 
@@ -85,6 +86,8 @@ class JobPostWriteDraft {
 
   final bool workPeriodNegotiable;
 
+  final bool workScheduleNegotiable;
+
   final JobPostNotificationSettings? notificationSettings;
 
   /// 외부 플랫폼 가져오기 출처 (예: 알바몬에서 가져옴)
@@ -119,6 +122,7 @@ class JobPostWriteDraft {
     int? paymentDayOfMonth,
 
     bool? workPeriodNegotiable,
+    bool? workScheduleNegotiable,
 
     JobPostNotificationSettings? notificationSettings,
 
@@ -161,6 +165,8 @@ class JobPostWriteDraft {
       paymentDayOfMonth: paymentDayOfMonth ?? this.paymentDayOfMonth,
 
       workPeriodNegotiable: workPeriodNegotiable ?? this.workPeriodNegotiable,
+      workScheduleNegotiable:
+          workScheduleNegotiable ?? this.workScheduleNegotiable,
 
       notificationSettings: notificationSettings ?? this.notificationSettings,
 

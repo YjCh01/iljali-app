@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -8,7 +8,10 @@ from app.schemas import (
     ContactEventRequest,
     VerifyBusinessRequest,
     VerifyBusinessResponse,
+    WorkplaceMismatchReportRequest,
 )
+from app.services.workplace_mismatch_service import report_workplace_mismatch
+from app.routers.job_board import _assert_employer_company, _resolve_bearer
 from app.services.entitlement_service import (
     evaluate_contact,
     get_or_create_company,
@@ -168,3 +171,25 @@ def log_contact_event(body: ContactEventRequest, db: Session = Depends(get_db)):
         access = evaluate_contact(db, company)
 
     return ContactEntitlementResponse(**access)
+
+
+@router.post("/workplace-mismatch")
+def report_workplace_mismatch_flag(
+    body: WorkplaceMismatchReportRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, body.company_key)
+    flag = report_workplace_mismatch(
+        db,
+        company_key=body.company_key,
+        company_name=body.company_name,
+        head_office_address=body.head_office_address,
+        workplace_address=body.workplace_address,
+        post_id=body.post_id,
+        post_title=body.post_title,
+        distance_meters=body.distance_meters,
+        reason=body.reason,
+    )
+    return {"flag": flag}

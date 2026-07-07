@@ -71,6 +71,38 @@ class AbuseFlagResponse(BaseModel):
     created_at: datetime
 
 
+class WorkplaceMismatchReportRequest(BaseModel):
+    company_key: str
+    company_name: str = ""
+    head_office_address: str = ""
+    workplace_address: str = ""
+    post_id: str = ""
+    post_title: str = ""
+    distance_meters: int | None = None
+    reason: str | None = None
+
+
+class WorkplaceMismatchFlagResponse(BaseModel):
+    id: int
+    company_key: str
+    company_name: str = ""
+    post_id: str = ""
+    post_title: str = ""
+    head_office_address: str = ""
+    workplace_address: str = ""
+    distance_meters: int | None = None
+    review_status: str = "pending"
+    message: str = ""
+    severity: str = "high"
+    created_at: datetime | None = None
+
+
+class WorkplaceMismatchApproveResponse(BaseModel):
+    flag: WorkplaceMismatchFlagResponse
+    post_id: str
+    post_status: str
+
+
 class BusinessRecordResponse(BaseModel):
     company_key: str
     company_name: str

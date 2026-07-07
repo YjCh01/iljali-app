@@ -1,11 +1,11 @@
 {
-    "name": "map",
-    "short_name": "map",
+    "name": "일자리",
+    "short_name": "일자리",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#7C5CFC",
+    "theme_color": "#7C5CFC",
+    "description": "지도 기반 일자리 매칭",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

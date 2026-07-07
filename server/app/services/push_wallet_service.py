@@ -45,6 +45,7 @@ def wallet_to_response(
     return EmployerPushWalletResponse(
         company_key=company_key,
         package_credits=wallet.package_credits,
+        push_ticket_credits=wallet.push_ticket_credits,
         cash_balance_krw=wallet.cash_balance_krw,
         signup_bonus_remaining=wallet.signup_bonus_remaining,
         location_slots_from_packages=wallet.location_slots_from_packages,

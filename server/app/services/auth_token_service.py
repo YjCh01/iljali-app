@@ -70,3 +70,80 @@ def verify_phone_verified_token(token: str, *, phone: str, purpose: str) -> bool
     if payload.get("purpose") != purpose:
         return False
     return payload.get("phone") == phone
+
+
+def issue_email_verified_token(email: str, *, purpose: str) -> str:
+    normalized = email.strip().lower()
+    return issue_token(
+        {
+            "typ": "email_verified",
+            "purpose": purpose,
+            "email": normalized,
+        },
+        ttl_sec=PHONE_VERIFY_TTL_SEC,
+    )
+
+
+def verify_email_verified_token(token: str, *, email: str, purpose: str) -> bool:
+    payload = verify_token(token)
+    if payload is None:
+        return False
+    if payload.get("typ") != "email_verified":
+        return False
+    if payload.get("purpose") != purpose:
+        return False
+    return payload.get("email") == email.strip().lower()
+
+
+def issue_oauth_state_token(
+    *,
+    provider: str,
+    member_type: str,
+    action: str,
+    app_redirect: str,
+) -> str:
+    return issue_token(
+        {
+            "typ": "oauth_state",
+            "provider": provider,
+            "member_type": member_type,
+            "action": action,
+            "app_redirect": app_redirect,
+        },
+        ttl_sec=600,
+    )
+
+
+def verify_oauth_state_token(token: str) -> dict[str, Any] | None:
+    payload = verify_token(token)
+    if payload is None or payload.get("typ") != "oauth_state":
+        return None
+    return payload
+
+
+def issue_social_signup_token(
+    *,
+    provider: str,
+    provider_user_id: str,
+    email: str,
+    display_name: str,
+    member_type: str,
+) -> str:
+    return issue_token(
+        {
+            "typ": "social_signup",
+            "provider": provider,
+            "provider_user_id": provider_user_id,
+            "email": email.strip().lower(),
+            "display_name": display_name.strip(),
+            "member_type": member_type,
+        },
+        ttl_sec=PHONE_VERIFY_TTL_SEC,
+    )
+
+
+def verify_social_signup_token(token: str) -> dict[str, Any] | None:
+    payload = verify_token(token)
+    if payload is None or payload.get("typ") != "social_signup":
+        return None
+    return payload

@@ -4,7 +4,7 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_display_labels.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 
-/// 지도 핀 탭 시 — 네이버 지도 스타일 압축 공고 카드
+/// 지도 핀 탭 시 — 압축 공고 카드
 class JobMapPinCalloutCard extends StatelessWidget {
   const JobMapPinCalloutCard({
     super.key,
@@ -12,12 +12,16 @@ class JobMapPinCalloutCard extends StatelessWidget {
     required this.onClose,
     required this.onViewDetail,
     this.employerPreview = false,
+    this.compact = false,
   });
+
+  static const maxCompactWidth = 380.0;
 
   final JobMapPin pin;
   final VoidCallback onClose;
   final VoidCallback onViewDetail;
   final bool employerPreview;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -26,18 +30,24 @@ class JobMapPinCalloutCard extends StatelessWidget {
         ? post.summary.trim()
         : post.effectiveDescriptionBody.calloutSnippet;
 
+    final titleSize = compact ? 15.0 : 18.0;
+    final outerMargin = compact
+        ? const EdgeInsets.symmetric(horizontal: 16)
+        : const EdgeInsets.fromLTRB(12, 0, 12, 10);
+    final radius = compact ? 14.0 : 16.0;
+
     return Material(
       color: Colors.transparent,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        margin: outerMargin,
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.14),
-              blurRadius: 18,
-              offset: const Offset(0, 4),
+              color: Colors.black.withValues(alpha: compact ? 0.1 : 0.14),
+              blurRadius: compact ? 12 : 18,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -46,7 +56,7 @@ class JobMapPinCalloutCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
+              padding: EdgeInsets.fromLTRB(compact ? 12 : 16, compact ? 10 : 14, 4, 0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -59,10 +69,10 @@ class JobMapPinCalloutCard extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 post.title,
-                                maxLines: 2,
+                                maxLines: compact ? 1 : 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 18,
+                                style: TextStyle(
+                                  fontSize: titleSize,
                                   fontWeight: FontWeight.w800,
                                   height: 1.25,
                                 ),
@@ -72,8 +82,8 @@ class JobMapPinCalloutCard extends StatelessWidget {
                               Container(
                                 margin: const EdgeInsets.only(left: 6),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
+                                  horizontal: 7,
+                                  vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary.withValues(alpha: 0.12),
@@ -90,27 +100,31 @@ class JobMapPinCalloutCard extends StatelessWidget {
                               ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          pin.companyName,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary.withValues(alpha: 0.95),
+                        if (!compact) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            pin.companyName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary.withValues(alpha: 0.95),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: onClose,
-                    icon: const Icon(Icons.close_rounded, size: 22),
+                    icon: Icon(Icons.close_rounded, size: compact ? 20 : 22),
                     visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                   ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              padding: EdgeInsets.fromLTRB(compact ? 12 : 16, compact ? 6 : 10, compact ? 12 : 16, 0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -121,13 +135,15 @@ class JobMapPinCalloutCard extends StatelessWidget {
                         _MetaLine(
                           icon: Icons.place_outlined,
                           text: CorporateJobPostDisplayValues.siteLocation(post),
+                          compact: compact,
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: compact ? 2 : 4),
                         _MetaLine(
                           icon: Icons.payments_outlined,
                           text: CorporateJobPostDisplayValues.salary(post),
+                          compact: compact,
                         ),
-                        if (snippet.isNotEmpty) ...[
+                        if (!compact && snippet.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Text(
                             snippet,
@@ -143,13 +159,20 @@ class JobMapPinCalloutCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  _TierBadge(tier: pin.displayTier.name, post: post),
+                  if (!compact) ...[
+                    const SizedBox(width: 10),
+                    _TierBadge(tier: pin.displayTier.name, post: post),
+                  ],
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              padding: EdgeInsets.fromLTRB(
+                compact ? 12 : 16,
+                compact ? 8 : 12,
+                compact ? 12 : 16,
+                compact ? 10 : 14,
+              ),
               child: Row(
                 children: [
                   TextButton(
@@ -159,21 +182,25 @@ class JobMapPinCalloutCard extends StatelessWidget {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text(
+                    child: Text(
                       '공고 상세보기',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: compact ? 13 : 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.primary,
                       ),
                     ),
                   ),
                   const Text(' · ', style: TextStyle(color: AppColors.textSecondary)),
-                  Text(
-                    employerPreview ? '구직자 화면 미리보기' : post.status.label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary.withValues(alpha: 0.85),
+                  Flexible(
+                    child: Text(
+                      employerPreview ? '구직자 화면 미리보기' : post.status.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: compact ? 11 : 12,
+                        color: AppColors.textSecondary.withValues(alpha: 0.85),
+                      ),
                     ),
                   ),
                 ],
@@ -187,24 +214,29 @@ class JobMapPinCalloutCard extends StatelessWidget {
 }
 
 class _MetaLine extends StatelessWidget {
-  const _MetaLine({required this.icon, required this.text});
+  const _MetaLine({
+    required this.icon,
+    required this.text,
+    this.compact = false,
+  });
 
   final IconData icon;
   final String text;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: AppColors.textSecondary),
+        Icon(icon, size: compact ? 14 : 15, color: AppColors.textSecondary),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             text,
-            maxLines: 2,
+            maxLines: compact ? 1 : 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, height: 1.35),
+            style: TextStyle(fontSize: compact ? 11 : 12, height: 1.35),
           ),
         ),
       ],

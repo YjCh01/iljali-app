@@ -1,5 +1,7 @@
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
+
+export 'hiring_application_status.dart';
 import 'package:map/features/attendance/domain/entities/check_in_method.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
@@ -181,6 +183,7 @@ class HiringApplication {
       employmentType == JobEmploymentType.permanent;
 
   HiringApplication copyWith({
+    String? id,
     String? postTitle,
     String? companyName,
     String? seekerName,
@@ -231,7 +234,7 @@ class HiringApplication {
     bool clearScheduleChangedAt = false,
   }) {
     return HiringApplication(
-      id: id,
+      id: id ?? this.id,
       postId: postId,
       postTitle: postTitle ?? this.postTitle,
       companyName: companyName ?? this.companyName,

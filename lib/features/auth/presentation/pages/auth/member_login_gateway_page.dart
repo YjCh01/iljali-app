@@ -4,6 +4,7 @@ import 'package:map/core/branding/iljari_icon_painter.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/session/member_type.dart';
+import 'package:map/core/legal/widgets/site_legal_footer.dart';
 import 'package:map/features/auth/presentation/widgets/dev_test_login_panel.dart';
 import 'package:map/features/auth/presentation/widgets/member_type_login_button.dart';
 
@@ -44,46 +45,67 @@ class MemberLoginGatewayPage extends StatelessWidget {
           : null,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: canPop ? 8 : 40),
-              Center(
-                child: IljariAppIcon(
-                  size: 100,
-                  borderRadius: BorderRadius.circular(24),
-                ),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: canPop ? 8 : 40),
+                  Center(
+                    child: IljariAppIcon(
+                      size: 100,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    '일자리',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 38,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const IljariAdCampaignCopy(),
+                  const SizedBox(height: 28),
+                  MemberAuthSection(
+                    memberType: MemberType.corporate,
+                    onLogin: () => _goToLogin(context, MemberType.corporate),
+                    onSignUp: () => _goToSignUp(context, MemberType.corporate),
+                  ),
+                  const SizedBox(height: 14),
+                  MemberAuthSection(
+                    memberType: MemberType.individual,
+                    onLogin: () => _goToLogin(context, MemberType.individual),
+                    onSignUp: () => _goToSignUp(context, MemberType.individual),
+                  ),
+                  const SizedBox(height: 20),
+                  const DevTestLoginPanel(),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => Navigator.of(context)
+                        .pushNamed(AppRoutes.publicPricing),
+                    child: const Text(
+                      '유료 서비스 요금 안내',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const SiteLegalFooter(variant: SiteLegalFooterVariant.dark),
+                  const SizedBox(height: 24),
+                ],
               ),
-              const SizedBox(height: 20),
-              const Text(
-                '일자리',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 38,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const IljariAdCampaignCopy(),
-              const SizedBox(height: 32),
-              MemberAuthSection(
-                memberType: MemberType.corporate,
-                onLogin: () => _goToLogin(context, MemberType.corporate),
-                onSignUp: () => _goToSignUp(context, MemberType.corporate),
-              ),
-              const SizedBox(height: 16),
-              MemberAuthSection(
-                memberType: MemberType.individual,
-                onLogin: () => _goToLogin(context, MemberType.individual),
-                onSignUp: () => _goToSignUp(context, MemberType.individual),
-              ),
-              const SizedBox(height: 20),
-              const DevTestLoginPanel(),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
       ),

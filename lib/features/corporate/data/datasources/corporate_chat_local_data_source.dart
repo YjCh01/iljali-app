@@ -9,6 +9,7 @@ import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/chat/domain/services/admin_announcement_room_service.dart';
 import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
 import 'package:map/features/corporate/domain/services/exposure_renewal_service.dart';
 
@@ -61,7 +62,8 @@ class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
         await ExposureRenewalNoticeService().fetchNoticeRooms(
       companyKey: companyKey,
     );
-    final rooms = <CorporateChatRoom>[...noticeRooms];
+    final adminNotices = await AdminAnnouncementRoomService.fetchNoticeRooms();
+    final rooms = <CorporateChatRoom>[...adminNotices, ...noticeRooms];
     final userEmail = AuthSession.instance.currentUser?.email ?? '';
     for (final app in applications) {
       if (app.status == HiringApplicationStatus.rejected ||

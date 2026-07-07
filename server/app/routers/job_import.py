@@ -13,6 +13,19 @@ from app.services.job_post_scraper import detect_platform, fetch_job_post
 router = APIRouter(prefix="/v1/job-import", tags=["job-import"])
 
 
+def _description_body_payload(
+    *,
+    description_html: str,
+    description_images: list[str],
+) -> dict:
+    body: dict = {}
+    if description_html.strip():
+        body["html"] = description_html.strip()
+    if description_images:
+        body["images"] = description_images
+    return body
+
+
 class JobImportRequest(BaseModel):
     url: Optional[str] = None
     text: Optional[str] = None
@@ -78,17 +91,23 @@ async def parse_job_import(body: JobImportRequest):
                 "work_schedule": "",
                 "workplace": None,
                 "job_description": "",
+                "description_body": {},
                 "raw_text": "",
                 "platform": platform,
                 "confidence": 0.0,
                 "message": scraped.error,
             }
+        desc_body = _description_body_payload(
+            description_html=scraped.description_html,
+            description_images=scraped.description_images,
+        )
         return {
             "title": scraped.title,
             "hourly_wage": scraped.hourly_wage,
             "work_schedule": scraped.work_schedule,
             "workplace": scraped.workplace,
             "job_description": scraped.job_description,
+            "description_body": desc_body,
             "raw_text": scraped.raw_text,
             "platform": platform,
             "confidence": scraped.confidence,

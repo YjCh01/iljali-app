@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/config/free_exposure_launch_policy.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
@@ -11,6 +12,8 @@ import 'package:map/features/corporate/domain/entities/corporate_payment_prefere
 import 'package:map/features/corporate/domain/services/corporate_payment_navigation_helper.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/services/exposure_activation_service.dart';
+import 'package:map/features/corporate/domain/entities/exposure_activation_source.dart';
+import 'package:map/features/corporate/domain/services/promo_exposure_activation_helper.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 
 class ShuttleStopActivationResult {
@@ -41,15 +44,18 @@ class ShuttleStopActivationService {
     PushWalletService? walletService,
     ExposureActivationService? exposureActivationService,
     CorporateJobPostLocalDataSource? jobPostDataSource,
+    PromoExposureActivationHelper? promoHelper,
   })  : _walletService = walletService ?? PushWalletService(),
         _exposureActivationService =
             exposureActivationService ?? ExposureActivationService(),
         _jobPostDataSource =
-            jobPostDataSource ?? const CorporateJobPostLocalDataSourceImpl();
+            jobPostDataSource ?? const CorporateJobPostLocalDataSourceImpl(),
+        _promoHelper = promoHelper ?? PromoExposureActivationHelper();
 
   final PushWalletService _walletService;
   final ExposureActivationService _exposureActivationService;
   final CorporateJobPostLocalDataSource _jobPostDataSource;
+  final PromoExposureActivationHelper _promoHelper;
 
   Future<ShuttleStopActivationResult> activateSelected({
     required BuildContext context,
@@ -124,6 +130,31 @@ class ShuttleStopActivationService {
       return const ShuttleStopActivationResult(success: false);
     }
 
+    if (await FreeExposureLaunchPolicy.isActive()) {
+      final quota = await _promoHelper.tryConsume(
+        companyKey: profile.companyKey,
+        count: pending.length,
+      );
+      if (!quota.success) {
+        return ShuttleStopActivationResult(
+          success: false,
+          message: quota.message,
+        );
+      }
+      for (final target in pending) {
+        final routeStops = updatedByRouteId[target.routeId]!;
+        routeStops[target.index] =
+            _promoHelper.lockShuttleStopPromo(routeStops[target.index]);
+      }
+      final left = quota.remainingThisMonth;
+      final suffix = left == null ? '' : ' (이번 달 무료 $left회 남음)';
+      return ShuttleStopActivationResult(
+        success: true,
+        updatedStopsByRouteId: updatedByRouteId,
+        message: '${FreeExposureLaunchPolicy.promoActivationMessage}$suffix',
+      );
+    }
+
     ExposureActivationCreditMode? preferredMode;
     var remaining = List<({String routeId, int index})>.from(pending);
 
@@ -162,8 +193,10 @@ class ShuttleStopActivationService {
 
       final target = remaining.removeAt(0);
       final routeStops = updatedByRouteId[target.routeId]!;
-      routeStops[target.index] =
-          routeStops[target.index].copyWith(exposureActivated: true);
+      routeStops[target.index] = _promoHelper.lockShuttleStop(
+        routeStops[target.index],
+        source: ExposureActivationSource.credit,
+      );
     }
 
     if (remaining.isEmpty) {
@@ -224,8 +257,10 @@ class ShuttleStopActivationService {
 
     for (final target in remaining) {
       final routeStops = updatedByRouteId[target.routeId]!;
-      routeStops[target.index] =
-          routeStops[target.index].copyWith(exposureActivated: true);
+      routeStops[target.index] = _promoHelper.lockShuttleStop(
+        routeStops[target.index],
+        source: ExposureActivationSource.payment,
+      );
     }
 
     return ShuttleStopActivationResult(

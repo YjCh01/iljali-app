@@ -1,11 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/entities/work_schedule_spec.dart';
 import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
 import 'package:map/features/corporate/presentation/widgets/work_schedule_selector_field.dart';
 
 void main() {
   group('WorkScheduleCodec', () {
+    test('round-trips fixed weekdays with per-weekday hours', () {
+      final spec = WorkScheduleSpec(
+        mode: WorkScheduleMode.fixedWeekdays,
+        startDate: DateTime(2026, 6, 1),
+        endDate: DateTime(2026, 6, 30),
+        weekdays: {0, 1, 2, 3, 4, 5},
+        weekdayHoursByIndex: {
+          0: const DailyDayHours(
+            start: TimeOfDay(hour: 9, minute: 0),
+            end: TimeOfDay(hour: 18, minute: 0),
+          ),
+          5: const DailyDayHours(
+            start: TimeOfDay(hour: 9, minute: 0),
+            end: TimeOfDay(hour: 13, minute: 0),
+          ),
+        },
+        dayStart: const TimeOfDay(hour: 9, minute: 0),
+        dayEnd: const TimeOfDay(hour: 18, minute: 0),
+      );
+      final encoded = WorkScheduleCodec.encode(spec);
+      expect(encoded, contains('요일='));
+      expect(encoded, contains('토@09:00~13:00'));
+
+      final parsed = WorkScheduleCodec.tryParse(encoded)!;
+      expect(parsed.hasVariedWeekdayHours, isTrue);
+      expect(
+        parsed.hoursForWeekday(5).end,
+        const TimeOfDay(hour: 13, minute: 0),
+      );
+      expect(
+        parsed.hoursForWeekday(0).end,
+        const TimeOfDay(hour: 18, minute: 0),
+      );
+    });
+
     test('round-trips fixed weekdays', () {
       final encoded = WorkScheduleCodec.encode(
         WorkScheduleSpec(
@@ -234,6 +270,18 @@ void main() {
       );
       expect(encoded, startsWith('정규·'));
       expect(encoded, contains('주5일(월화수목금)'));
+    });
+
+    test('workScheduleNegotiable skips calendar requirement', () {
+      final spec = WorkScheduleSpec(
+        mode: WorkScheduleMode.dailyPick,
+        firstStartDateOnly: false,
+      );
+      expect(spec.isCompleteFor(workScheduleNegotiable: true), isTrue);
+      expect(
+        WorkScheduleCodec.encode(spec, workScheduleNegotiable: true),
+        WorkScheduleNegotiable.label,
+      );
     });
   });
 

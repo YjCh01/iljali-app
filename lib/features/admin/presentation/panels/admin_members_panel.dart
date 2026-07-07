@@ -4,6 +4,7 @@ import 'package:map/core/admin/admin_api_errors.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/admin/domain/admin_ops_controller.dart';
 import 'package:map/features/admin/presentation/widgets/admin_company_verification_card.dart';
+import 'package:map/features/admin/presentation/widgets/admin_credit_stepper.dart';
 import 'package:map/features/admin/presentation/widgets/admin_sanction_card.dart';
 import 'package:map/features/admin/presentation/widgets/admin_web_scaffold.dart';
 
@@ -26,8 +27,10 @@ class _AdminMembersPanelState extends State<AdminMembersPanel> {
   final _searchCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _companyKeyCtrl = TextEditingController();
-  final _creditsCtrl = TextEditingController(text: '30');
-  final _slotsCtrl = TextEditingController(text: '30');
+
+  int _recruitmentPinGrant = 1;
+  int _shuttleStopPinGrant = 1;
+  int _pushTicketGrant = 1;
 
   _MemberTab _tab = _MemberTab.corporate;
   _CorporateSort _corporateSort = _CorporateSort.brn;
@@ -71,8 +74,6 @@ class _AdminMembersPanelState extends State<AdminMembersPanel> {
     _searchCtrl.dispose();
     _emailCtrl.dispose();
     _companyKeyCtrl.dispose();
-    _creditsCtrl.dispose();
-    _slotsCtrl.dispose();
     super.dispose();
   }
 
@@ -201,11 +202,20 @@ class _AdminMembersPanelState extends State<AdminMembersPanel> {
   Future<void> _grantWallet() async {
     final key = _companyKeyCtrl.text.trim();
     if (key.isEmpty) return;
+    if (_recruitmentPinGrant <= 0 &&
+        _shuttleStopPinGrant <= 0 &&
+        _pushTicketGrant <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('부여할 수량을 1개 이상 선택해 주세요.')),
+      );
+      return;
+    }
     await widget.controller.run(
       () => widget.controller.client.grantWallet(
         companyKey: key,
-        packageCredits: int.tryParse(_creditsCtrl.text) ?? 0,
-        locationSlots: int.tryParse(_slotsCtrl.text),
+        packageCredits: _recruitmentPinGrant,
+        shuttleStopCredits: _shuttleStopPinGrant,
+        pushTicketCredits: _pushTicketGrant,
       ),
       successMessage: '이용권 부여 완료',
     );
@@ -624,7 +634,7 @@ class _AdminMembersPanelState extends State<AdminMembersPanel> {
               title: '회원·이용권 처리',
               subtitle: '왼쪽에서 기업 또는 구인자를 선택하세요',
               child: Text(
-                '기업 선택 → 이용권 부여 · 구인자 선택 → 제재 처리',
+                '기업 선택 → 알림핀·정류장·PUSH 부여 · 구인자 선택 → 제재 처리',
                 style: TextStyle(
                   fontSize: 13,
                   color: AppColors.textSecondary.withValues(alpha: 0.9),
@@ -633,7 +643,7 @@ class _AdminMembersPanelState extends State<AdminMembersPanel> {
             ),
           if (hasCompany) ...[
             AdminCard(
-              title: '기업 이용권',
+              title: '기업 이용권 · 핀',
               subtitle: _selectedCompanyName ?? _selectedCompanyKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -642,24 +652,23 @@ class _AdminMembersPanelState extends State<AdminMembersPanel> {
                     label: '사업자번호 (BRN)',
                     controller: _companyKeyCtrl,
                   ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AdminField(
-                          label: '패키지 횟수',
-                          controller: _creditsCtrl,
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: AdminField(
-                          label: '거점 슬롯',
-                          controller: _slotsCtrl,
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                    ],
+                  AdminCreditStepper(
+                    label: '일자리 알림핀',
+                    subtitle: '근무지·모집지역 노출 · PUSH 발송',
+                    value: _recruitmentPinGrant,
+                    onChanged: (v) => setState(() => _recruitmentPinGrant = v),
+                  ),
+                  AdminCreditStepper(
+                    label: '정류장 표시핀',
+                    subtitle: '셔틀 정류장 지도 노출',
+                    value: _shuttleStopPinGrant,
+                    onChanged: (v) => setState(() => _shuttleStopPinGrant = v),
+                  ),
+                  AdminCreditStepper(
+                    label: 'PUSH 알림권',
+                    subtitle: '알림핀·정류장 1곳 PUSH 1회',
+                    value: _pushTicketGrant,
+                    onChanged: (v) => setState(() => _pushTicketGrant = v),
                   ),
                   Wrap(
                     spacing: 8,
@@ -667,7 +676,7 @@ class _AdminMembersPanelState extends State<AdminMembersPanel> {
                     children: [
                       FilledButton(
                         onPressed: !c.apiReady || c.busy ? null : _grantWallet,
-                        child: const Text('이용권 부여'),
+                        child: const Text('선택 수량 부여'),
                       ),
                       OutlinedButton(
                         onPressed: !c.apiReady || c.busy ? null : _loadWallet,
@@ -801,7 +810,8 @@ class _WalletSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('패키지: ${data['package_credits']}'),
+          Text('일자리 알림핀(노출): ${data['package_credits']}'),
+          Text('PUSH 알림권: ${data['push_ticket_credits'] ?? 0}'),
           Text('사용 가능 푸시: ${data['available_push_credits']}'),
           Text(
             '거점 슬롯: ${data['total_location_slots'] ?? data['location_slots_from_packages']}',

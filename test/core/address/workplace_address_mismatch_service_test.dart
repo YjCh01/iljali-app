@@ -20,9 +20,10 @@ void main() {
       profile: profile,
     );
     expect(result.allowed, isTrue);
+    expect(result.notifyAdmin, isFalse);
   });
 
-  test('flags different-address workplace', () {
+  test('different-address workplace posts live and notifies admin', () {
     const profile = CorporateMemberProfile(
       companyName: '테스트',
       businessRegistrationNumber: '1234567890',
@@ -37,7 +38,25 @@ void main() {
       workplace: workplace,
       profile: profile,
     );
-    expect(result.allowed, isFalse);
-    expect(result.requiresAdminReview, isTrue);
+    expect(result.allowed, isTrue);
+    expect(result.notifyAdmin, isTrue);
+  });
+
+  test('missing head office still allows post and notifies admin', () {
+    const profile = CorporateMemberProfile(
+      companyName: '테스트',
+      businessRegistrationNumber: '1234567890',
+      department: '채용',
+      contactPersonName: '담당',
+      handlerCode: '1111',
+    );
+    const workplace = WorkplaceAddress(roadAddress: '경기 안성시 대덕면 소동산길 3-29');
+
+    final result = WorkplaceAddressMismatchService.evaluate(
+      workplace: workplace,
+      profile: profile,
+    );
+    expect(result.allowed, isTrue);
+    expect(result.notifyAdmin, isTrue);
   });
 }

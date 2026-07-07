@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:map/core/config/dev_experience_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
@@ -397,28 +398,20 @@ class _CorporateNotificationPaymentPageState
 
                 const SizedBox(height: 12),
 
-                Padding(
-
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-
-                  child: Text(
-
-                    '현재는 테스트용 mock 결제입니다. 실제 PG 연동 시 가맹점 키·API Secret·웹훅 URL이 서버에 필요합니다.',
-
-                    style: TextStyle(
-
-                      fontSize: 11,
-
-                      height: 1.45,
-
-                      color: AppColors.textSecondary.withValues(alpha: 0.85),
-
+                if (DevExperienceFlags.enabled) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'QC 모드 — mock 결제입니다.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.45,
+                        color: AppColors.textSecondary.withValues(alpha: 0.85),
+                      ),
                     ),
-
                   ),
-
-                ),
-
+                  const SizedBox(height: 12),
+                ],
                 const SizedBox(height: 20),
 
               ],

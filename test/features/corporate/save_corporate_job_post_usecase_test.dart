@@ -62,7 +62,7 @@ void main() {
     expect(stored?.status, CorporateJobPostStatus.recruiting);
   });
 
-  test('blocks post save when workplace mismatches head office', () async {
+  test('allows post save when workplace mismatches head office', () async {
     const profile = CorporateMemberProfile(
       companyName: '테스트',
       businessRegistrationNumber: '1231231231',
@@ -94,10 +94,11 @@ void main() {
       registeredBy: profile,
     );
 
-    expect(result.isSuccess, isFalse);
+    expect(result.isSuccess, isTrue);
+    expect(result.post?.warehouseName, contains('마포구'));
     expect(
       AuthSession.instance.currentUser?.corporateProfile?.requiresAdminReview,
-      isTrue,
+      isFalse,
     );
   });
 }

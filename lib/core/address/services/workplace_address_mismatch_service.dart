@@ -4,9 +4,9 @@ import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 
-/// 사업자 소재지 vs 공고 실근무지 검증
+/// 사업자 소재지 vs 공고 실근무지 — 공고 등록은 막지 않고 어드민 알림만
 abstract final class WorkplaceAddressMismatchService {
-  /// 허용 거리(m) — 소재지 기준 실근무지 반경
+  /// 허용 거리(m) — 이내면 어드민 알림 없음
   static const maxDistanceMeters = 2000;
 
   static WorkplaceAddressMismatchResult evaluate({
@@ -19,11 +19,10 @@ abstract final class WorkplaceAddressMismatchService {
 
     final headOffice = profile.businessHeadOfficeAddress?.trim();
     if (headOffice == null || headOffice.isEmpty) {
-      return const WorkplaceAddressMismatchResult.blocked(
-        reason: '사업자 본사 주소를 먼저 등록해야 공고를 올릴 수 있습니다.',
-        distanceMeters: 0,
+      return WorkplaceAddressMismatchResult.notifyAdmin(
+        reason: '본사 주소 미등록 상태에서 다른 근무지로 공고 등록',
         headOfficeAddress: '',
-        workplaceAddress: '',
+        workplaceAddress: workplace.roadAddress,
       );
     }
 
@@ -37,10 +36,9 @@ abstract final class WorkplaceAddressMismatchService {
           note: '소재지 ${dist.round()}m 이내',
         );
       }
-      return WorkplaceAddressMismatchResult.blocked(
-        reason: '실근무지가 사업자 소재지(${headOffice})에서 '
-            '${(dist / 1000).toStringAsFixed(1)}km 떨어져 있습니다. '
-            '소재지와 동일·인근(2km)만 등록할 수 있습니다.',
+      return WorkplaceAddressMismatchResult.notifyAdmin(
+        reason: '실근무지가 사업자 소재지($headOffice)에서 '
+            '${(dist / 1000).toStringAsFixed(1)}km 떨어져 있습니다.',
         distanceMeters: dist.round(),
         headOfficeAddress: headOffice,
         workplaceAddress: workplace.roadAddress,
@@ -51,9 +49,9 @@ abstract final class WorkplaceAddressMismatchService {
       return const WorkplaceAddressMismatchResult.allowed();
     }
 
-    return WorkplaceAddressMismatchResult.flagged(
+    return WorkplaceAddressMismatchResult.notifyAdmin(
       reason: '실근무지「${workplace.roadAddress}」가 '
-          '사업자 소재지「$headOffice」와 다릅니다. 관리자 검토가 필요합니다.',
+          '사업자 소재지「$headOffice」와 다릅니다.',
       headOfficeAddress: headOffice,
       workplaceAddress: workplace.roadAddress,
     );
@@ -82,7 +80,7 @@ abstract final class WorkplaceAddressMismatchService {
 class WorkplaceAddressMismatchResult {
   const WorkplaceAddressMismatchResult._({
     required this.allowed,
-    required this.requiresAdminReview,
+    required this.notifyAdmin,
     this.reason,
     this.note,
     this.distanceMeters,
@@ -93,38 +91,33 @@ class WorkplaceAddressMismatchResult {
   const WorkplaceAddressMismatchResult.allowed({String? note})
       : this._(
           allowed: true,
-          requiresAdminReview: false,
+          notifyAdmin: false,
           note: note,
         );
 
-  const WorkplaceAddressMismatchResult.flagged({
+  const WorkplaceAddressMismatchResult.notifyAdmin({
     required String reason,
     required String headOfficeAddress,
     required String workplaceAddress,
+    int? distanceMeters,
   }) : this._(
-          allowed: false,
-          requiresAdminReview: true,
-          reason: reason,
-          headOfficeAddress: headOfficeAddress,
-          workplaceAddress: workplaceAddress,
-        );
-
-  const WorkplaceAddressMismatchResult.blocked({
-    required String reason,
-    required int distanceMeters,
-    required String headOfficeAddress,
-    required String workplaceAddress,
-  }) : this._(
-          allowed: false,
-          requiresAdminReview: true,
+          allowed: true,
+          notifyAdmin: true,
           reason: reason,
           distanceMeters: distanceMeters,
           headOfficeAddress: headOfficeAddress,
           workplaceAddress: workplaceAddress,
         );
 
+  /// 공고 등록·게시 허용 여부 (불일치여도 true)
   final bool allowed;
-  final bool requiresAdminReview;
+
+  /// 어드민 근무지·본사 불일치 패널로 전송
+  final bool notifyAdmin;
+
+  @Deprecated('Use notifyAdmin')
+  bool get requiresAdminReview => notifyAdmin;
+
   final String? reason;
   final String? note;
   final int? distanceMeters;

@@ -24,6 +24,7 @@ import 'package:map/features/corporate/presentation/navigation/push_base_point_a
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_card.dart';
 import 'package:map/core/widgets/korean_calendar.dart';
 import 'package:map/features/corporate/domain/utils/daily_worker_policy.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_form.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_optional_services_sheet.dart';
@@ -151,7 +152,9 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
       widget.post.paymentMonthOffset;
   late int? _paymentDayOfMonth = widget.post.paymentDayOfMonth;
   late bool _paymentDateNegotiable = widget.post.paymentDateNegotiable;
-  late bool _workPeriodNegotiable = widget.post.workPeriodNegotiable;
+  late bool _workScheduleNegotiable = widget.post.workScheduleNegotiable ||
+      widget.post.workPeriodNegotiable ||
+      WorkScheduleNegotiable.isLabel(widget.post.workSchedule);
   late JobPostNotificationSettings? _notificationSettings =
       widget.post.notificationSettings;
   late CorporateJobPostStatus _status = _asCopy
@@ -162,7 +165,6 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   bool _submitting = false;
   bool _loadingRegisteredWorkplace = false;
   final _registeredWorkplaceLoader = RegisteredBusinessWorkplaceLoader();
-  late bool _dailyWorkerAcknowledged;
   List<CorporateBranch> _branches = [];
   CorporateBranch? _selectedBranch;
   late String? _shuttleRouteId = widget.post.commuteRouteId;
@@ -179,8 +181,6 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   @override
   void initState() {
     super.initState();
-    _dailyWorkerAcknowledged =
-        widget.post.effectiveWorkerCategory == WorkerCategory.daily;
     _loadBranches();
     if (_asCopy) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -298,11 +298,6 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   }
 
   Future<void> _onWorkerCategoryChanged(WorkerCategory category) async {
-    if (category == WorkerCategory.daily && !_dailyWorkerAcknowledged) {
-      final ok = await DailyWorkerPolicy.showAcknowledgmentDialog(context);
-      if (!ok || !mounted) return;
-      setState(() => _dailyWorkerAcknowledged = true);
-    }
     if (!mounted) return;
     setState(() {
       _workerCategory = category;
@@ -315,14 +310,12 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
       } else if (category.usesMonthlyPaymentDate) {
         _paymentDate = null;
         _paymentDateNegotiable = false;
-        _dailyWorkerAcknowledged = false;
       } else {
         _paymentDate = null;
         _paymentDateNegotiable = false;
-        _dailyWorkerAcknowledged = false;
       }
       if (!category.usesFirstStartDateOnly) {
-        _workPeriodNegotiable = false;
+        // 근무일정 협의는 고용형태와 무관하게 유지
       }
     });
   }
@@ -375,22 +368,27 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
   Future<void> _submit() async {
     if (_submitting) return;
 
-    if (_scheduleController.text.trim().isEmpty) {
+    if (!_workScheduleNegotiable &&
+        _scheduleController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('근무 일·시간을 선택해 주세요.')),
       );
       return;
     }
-    if (_workerCategory.usesFirstStartDateOnly) {
+    if (!_workScheduleNegotiable &&
+        _workerCategory.usesFirstStartDateOnly) {
       final spec = WorkScheduleCodec.tryParse(_scheduleController.text);
       if (spec == null ||
-          !spec.isCompleteFor(workPeriodNegotiable: _workPeriodNegotiable)) {
+          !spec.isCompleteFor(
+            workScheduleNegotiable: _workScheduleNegotiable,
+          )) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('근무 일·시간을 선택해 주세요.')),
         );
         return;
       }
-    } else if (_workerCategory.usesWorkPeriodWithEndDate) {
+    } else if (!_workScheduleNegotiable &&
+        _workerCategory.usesWorkPeriodWithEndDate) {
       final spec = WorkScheduleCodec.tryParse(_scheduleController.text);
       if (spec == null || !spec.isCompleteFor()) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -466,7 +464,9 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         descriptionBody: _descriptionBody,
         paymentSchedule: paymentSchedule,
         workerCategory: _workerCategory,
-        workPeriodNegotiable: _workPeriodNegotiable,
+        workPeriodNegotiable:
+            _workScheduleNegotiable && _workerCategory.usesFirstStartDateOnly,
+        workScheduleNegotiable: _workScheduleNegotiable,
         workCategoryId: _workCategoryId,
         employmentType: _workerCategory.employmentType,
         notificationSettings: notificationSettings,
@@ -499,7 +499,9 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
         descriptionBody: _descriptionBody,
         paymentSchedule: paymentSchedule,
         workerCategory: _workerCategory,
-        workPeriodNegotiable: _workPeriodNegotiable,
+        workPeriodNegotiable:
+            _workScheduleNegotiable && _workerCategory.usesFirstStartDateOnly,
+        workScheduleNegotiable: _workScheduleNegotiable,
         workCategoryId: _workCategoryId,
         status: _status,
         notificationSettings: notificationSettings,
@@ -520,20 +522,9 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
     setState(() => _submitting = false);
 
     if (!result.isSuccess) {
-      final message = result.message ?? '수정에 실패했습니다.';
-      final needsHeadOffice = message.contains('본사 주소');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-          action: needsHeadOffice
-              ? SnackBarAction(
-                  label: '내정보에서 등록',
-                  onPressed: () => Navigator.of(context)
-                      .pushNamed(AppRoutes.corporateMyInfo),
-                )
-              : null,
-        ),
+      showTransientSnackBar(
+        context,
+        result.message ?? '수정에 실패했습니다.',
       );
       return;
     }
@@ -595,14 +586,13 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
           submitLabel: _asCopy ? '복사 등록' : '수정 저장',
           submitting: _submitting,
           onSubmit: _submit,
-          dailyWorkerAcknowledged: _dailyWorkerAcknowledged,
           onDailyScheduleCommitted: _syncDailyPaymentDateFromSchedule,
           paymentDateNegotiable: _paymentDateNegotiable,
           onPaymentDateNegotiableChanged: (value) =>
               setState(() => _paymentDateNegotiable = value),
-          workPeriodNegotiable: _workPeriodNegotiable,
-          onWorkPeriodNegotiableChanged: (value) =>
-              setState(() => _workPeriodNegotiable = value),
+          workScheduleNegotiable: _workScheduleNegotiable,
+          onWorkScheduleNegotiableChanged: (value) =>
+              setState(() => _workScheduleNegotiable = value),
           beforeSubmit: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

@@ -1,9 +1,11 @@
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/features/corporate/domain/entities/exposure_activation_source.dart';
 import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_record.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
 import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
@@ -51,6 +53,7 @@ class CorporateJobPost {
     this.paymentDayOfMonth,
     this.paymentDateNegotiable = false,
     this.workPeriodNegotiable = false,
+    this.workScheduleNegotiable = false,
     this.notificationSettings,
     this.registeredBy,
     this.recruiterEmail,
@@ -64,6 +67,7 @@ class CorporateJobPost {
     this.shuttlePaidStopIdsByRoute = const {},
     this.shuttleExposurePaidAt,
     this.hasShuttleRouteOverlay = false,
+    this.shuttleOverlayActivationSource,
     this.workCategoryId,
     this.workplaceLatitude,
     this.workplaceLongitude,
@@ -110,8 +114,11 @@ class CorporateJobPost {
   /// 일용직 급여지급일 — 구인·구직자 협의
   final bool paymentDateNegotiable;
 
-  /// 정규직 근무기간 — 첫 근무 시작일 협의 가능
+  /// 정규직 근무기간 — 첫 근무 시작일 협의 가능 (레거시)
   final bool workPeriodNegotiable;
+
+  /// 근무 일정 전체 협의 — 달력 선택 없이 등록 가능
+  final bool workScheduleNegotiable;
 
   final JobPostNotificationSettings? notificationSettings;
   final CorporateMemberProfile? registeredBy;
@@ -143,6 +150,9 @@ class CorporateJobPost {
   /// 유료 셔틀 노선 지도 노출 활성화 — true일 때만 구직자 지도에 정류장·노선 표시
   final bool hasShuttleRouteOverlay;
 
+  /// 셔틀 지도 오버레이 활성화 유형
+  final ExposureActivationSource? shuttleOverlayActivationSource;
+
   /// 업무 카테고리 (업적 뱃지) — null이면 AI 자동 분류
   final String? workCategoryId;
 
@@ -167,6 +177,7 @@ class CorporateJobPost {
     int? paymentDayOfMonth,
     bool? paymentDateNegotiable,
     bool? workPeriodNegotiable,
+    bool? workScheduleNegotiable,
     JobPostNotificationSettings? notificationSettings,
     CorporateMemberProfile? registeredBy,
     String? recruiterEmail,
@@ -180,6 +191,8 @@ class CorporateJobPost {
     Map<String, List<String>>? shuttlePaidStopIdsByRoute,
     DateTime? shuttleExposurePaidAt,
     bool? hasShuttleRouteOverlay,
+    ExposureActivationSource? shuttleOverlayActivationSource,
+    bool clearShuttleOverlayActivationSource = false,
     String? workCategoryId,
     double? workplaceLatitude,
     double? workplaceLongitude,
@@ -209,6 +222,8 @@ class CorporateJobPost {
           paymentDateNegotiable ?? this.paymentDateNegotiable,
       workPeriodNegotiable:
           workPeriodNegotiable ?? this.workPeriodNegotiable,
+      workScheduleNegotiable:
+          workScheduleNegotiable ?? this.workScheduleNegotiable,
       notificationSettings: notificationSettings ?? this.notificationSettings,
       registeredBy: registeredBy ?? this.registeredBy,
       recruiterEmail: recruiterEmail ?? this.recruiterEmail,
@@ -226,6 +241,10 @@ class CorporateJobPost {
       shuttleExposurePaidAt: shuttleExposurePaidAt ?? this.shuttleExposurePaidAt,
       hasShuttleRouteOverlay:
           hasShuttleRouteOverlay ?? this.hasShuttleRouteOverlay,
+      shuttleOverlayActivationSource: clearShuttleOverlayActivationSource
+          ? null
+          : shuttleOverlayActivationSource ??
+              this.shuttleOverlayActivationSource,
       workCategoryId: workCategoryId ?? this.workCategoryId,
       workplaceLatitude: workplaceLatitude ?? this.workplaceLatitude,
       workplaceLongitude: workplaceLongitude ?? this.workplaceLongitude,
@@ -259,9 +278,15 @@ extension CorporateJobPostWorkerCategoryX on CorporateJobPost {
     return WorkerCategory.general;
   }
 
-  /// 근무 일정 표시 — 정규직 협의 가능 시 접미
+  /// 근무 일정 표시 — 협의 가능 시 접미
   String get workScheduleDisplayLabel {
     final base = workSchedule.trim();
+    if (workScheduleNegotiable || WorkScheduleNegotiable.isLabel(base)) {
+      if (base.isEmpty || WorkScheduleNegotiable.isLabel(base)) {
+        return WorkScheduleNegotiable.label;
+      }
+      return '$base · ${WorkScheduleNegotiable.label}';
+    }
     if (!workPeriodNegotiable) return base;
     if (base.isEmpty) return '협의가능';
     return '$base · 협의가능';

@@ -97,6 +97,7 @@ abstract final class ShuttleRouteStopPolicy {
         coordinate: workplace.coordinate,
         photoPath: workplace.photoPath,
         exposureActivated: workplace.exposureActivated,
+        arrivalTime: workplace.arrivalTime,
       ),
     ];
   }

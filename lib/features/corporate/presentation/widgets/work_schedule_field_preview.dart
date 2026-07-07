@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/entities/work_schedule_spec.dart';
 import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
 
@@ -21,6 +22,11 @@ class WorkSchedulePreviewModel {
 
 abstract final class WorkSchedulePreviewFormatter {
   static WorkSchedulePreviewModel? fromRaw(String raw) {
+    if (WorkScheduleNegotiable.isLabel(raw)) {
+      return WorkSchedulePreviewModel(
+        headline: WorkScheduleNegotiable.label,
+      );
+    }
     final spec = WorkScheduleCodec.tryParse(raw);
     if (spec == null) return null;
     if (!spec.isComplete && !spec.firstStartDateOnly) return null;
@@ -62,6 +68,20 @@ abstract final class WorkSchedulePreviewFormatter {
                   ? '첫 근무 ${_fmtDate(spec.startDate!)}'
                   : '첫 근무 · 협의')
               : '${_fmtDate(spec.startDate!)} ~ ${_fmtDate(spec.endDate!)}';
+          if (spec.hasVariedWeekdayHours) {
+            final chips = (spec.weekdays.toList()..sort())
+                .map((index) {
+                  final hours = spec.hoursForWeekday(index);
+                  return '${WorkScheduleSpec.weekdayLabels[index]} '
+                      '${_padTime(hours.start)}~${_padTime(hours.end)}';
+                })
+                .toList();
+            return WorkSchedulePreviewModel(
+              headline: '$regularPrefix주${spec.weekdays.length}일($days)',
+              lines: [periodLine],
+              chips: chips,
+            );
+          }
           return WorkSchedulePreviewModel(
             headline: '$regularPrefix주${spec.weekdays.length}일($days)',
             lines: [
@@ -97,6 +117,25 @@ abstract final class WorkSchedulePreviewFormatter {
                   : '첫 근무 · 협의')
               : '${_fmtDate(spec.startDate!)} ~ ${_fmtDate(spec.endDate!)}';
           final workDays = spec.countWorkDays();
+          if (spec.hasVariedWeekdayHours) {
+            final chips = List<int>.generate(7, (i) => i)
+                .map((index) {
+                  final hours = spec.hoursForWeekday(index);
+                  return '${WorkScheduleSpec.weekdayLabels[index]} '
+                      '${_padTime(hours.start)}~${_padTime(hours.end)}';
+                })
+                .toList();
+            return WorkSchedulePreviewModel(
+              headline: spec.firstStartDateOnly
+                  ? '$regularPrefix맞춤 · 요일별 시간'
+                  : '맞춤 · 요일별 시간 · $workDays일',
+              lines: [periodLine],
+              chips: [
+                ...chips,
+                ...excluded.map((d) => '제외 ${_fmtChipDate(d)}'),
+              ],
+            );
+          }
           return WorkSchedulePreviewModel(
             headline: spec.firstStartDateOnly
                 ? '$regularPrefix맞춤 · $dayTime'

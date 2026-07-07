@@ -237,7 +237,7 @@ void main() {
 
     await _pumpFrames(tester);
 
-    expect(find.text('지원자 연락 이용 제한'), findsOneWidget);
+    expect(find.text('인재 검색'), findsOneWidget);
 
 
 
@@ -251,14 +251,7 @@ void main() {
 
     await _pumpFrames(tester);
 
-    expect(find.text('지원자 채팅 이용 제한'), findsOneWidget);
-
-
-
-    await _tapCorporateNav(tester, 5);
-
-    expect(find.text('내정보 관리'), findsWidgets);
-
+    expect(find.textContaining('아직 채팅 중인 지원자가 없습니다'), findsOneWidget);
   });
 
 
@@ -315,7 +308,7 @@ void main() {
 
     await _pumpFrames(tester);
 
-    expect(find.text('지원자 채팅 이용 제한'), findsOneWidget);
+    expect(find.textContaining('아직 채팅 중인 지원자가 없습니다'), findsOneWidget);
 
   });
 

@@ -12,6 +12,8 @@ export ILJARI_ROOT="$(pwd)"
 source scripts/server_dev.sh
 # shellcheck source=scripts/naver_flutter_defines.sh
 source scripts/naver_flutter_defines.sh
+# shellcheck source=scripts/ensure_java.sh
+source scripts/ensure_java.sh
 
 STRICT_UPLOAD=0
 for arg in "$@"; do
@@ -54,6 +56,8 @@ echo ""
 
 flutter pub get
 
+iljari_ensure_java || exit 1
+
 echo "[App 1/3] Android App Bundle (Play Store)..."
 # shellcheck disable=SC2086
 flutter build appbundle --release ${COMMON_DEFINES[@]} ${NAVER_DEFINE}
@@ -69,10 +73,33 @@ cp -f "${APK_SRC}" "releases/iljari-android-latest.apk"
 
 if [[ "$(uname)" == "Darwin" ]]; then
   echo "[App 3/3] iOS release (no codesign — Archive/TestFlight는 Xcode·fastlane)..."
-  # shellcheck disable=SC2086
-  flutter build ios --release --no-codesign ${COMMON_DEFINES[@]} ${NAVER_DEFINE}
+  IOS_BUILD_FAILED=0
+  # shellcheck source=scripts/ensure_cocoapods.sh
+  source scripts/ensure_cocoapods.sh
+  if iljari_ensure_cocoapods --quiet; then
+    # shellcheck source=scripts/ensure_ssl_certs.sh
+    source scripts/ensure_ssl_certs.sh
+    iljari_ensure_ssl_certs || {
+      echo ""
+      echo "⚠️  CA 인증서(SSL) 준비 실패 — iOS pod install 이 실패할 수 있습니다."
+      echo "     scripts/ensure_ssl_certs.sh 수동 실행 후 재시도"
+      echo ""
+    }
+    # shellcheck disable=SC2086
+    if ! flutter build ios --release --no-codesign ${COMMON_DEFINES[@]} ${NAVER_DEFINE}; then
+      IOS_BUILD_FAILED=1
+      echo ""
+      echo "⚠️  iOS 빌드 실패 — Android AAB/APK는 이미 생성됨"
+    fi
+  else
+    IOS_BUILD_FAILED=1
+    echo ""
+    echo "⚠️  CocoaPods 없음 — iOS 빌드 건너뜀"
+    echo "     → 도구_CocoaPods설치.command 더블클릭 후 다시 배포"
+  fi
 else
   echo "[App 3/3] iOS — macOS에서만 빌드 (건너뜀)"
+  IOS_BUILD_FAILED=0
 fi
 
 echo ""
@@ -82,6 +109,7 @@ echo "  APK : ${ILJARI_ROOT}/${APK_OUT}"
 echo "  APK : ${ILJARI_ROOT}/releases/iljari-android-latest.apk"
 if [[ "$(uname)" == "Darwin" ]]; then
   echo "  iOS : ios/ (Xcode Archive → TestFlight)"
+  [[ "${IOS_BUILD_FAILED:-0}" == 1 ]] && echo "        ⚠️ iOS 빌드 실패/건너뜀 — 도구_CocoaPods설치.command"
 fi
 
 UPLOAD_FAILED=0

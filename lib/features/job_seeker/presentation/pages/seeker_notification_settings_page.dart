@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/notifications/push_token_registration_service.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// 구직자 알림 설정 (로컬 mock, SharedPreferences 영속)
+/// 구직자 알림 설정 — 로컬 + 서버 FCM 설정 동기화
 class SeekerNotificationSettingsPage extends StatefulWidget {
   const SeekerNotificationSettingsPage({super.key});
 
@@ -15,8 +15,6 @@ class SeekerNotificationSettingsPage extends StatefulWidget {
 
 class _SeekerNotificationSettingsPageState
     extends State<SeekerNotificationSettingsPage> {
-  static const _keyPrefix = 'seeker_notif_';
-
   bool _pushJobAlerts = true;
   bool _pushChatMessages = true;
   bool _pushApplicationUpdates = true;
@@ -29,20 +27,24 @@ class _SeekerNotificationSettingsPageState
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await PushNotificationPreferences.load();
     if (!mounted) return;
     setState(() {
-      _pushJobAlerts = prefs.getBool('${_keyPrefix}job_alerts') ?? true;
-      _pushChatMessages = prefs.getBool('${_keyPrefix}chat') ?? true;
-      _pushApplicationUpdates =
-          prefs.getBool('${_keyPrefix}application') ?? true;
+      _pushJobAlerts = prefs.jobAlertsEnabled;
+      _pushChatMessages = prefs.chatEnabled;
+      _pushApplicationUpdates = prefs.applicationUpdatesEnabled;
       _loading = false;
     });
   }
 
-  Future<void> _set(String key, bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('$_keyPrefix$key', value);
+  Future<void> _saveAll() async {
+    final value = PushNotificationPreferences(
+      chatEnabled: _pushChatMessages,
+      jobAlertsEnabled: _pushJobAlerts,
+      applicationUpdatesEnabled: _pushApplicationUpdates,
+    );
+    await PushNotificationPreferences.save(value);
+    await PushTokenRegistrationService.syncPreferences(value);
   }
 
   @override
@@ -72,48 +74,38 @@ class _SeekerNotificationSettingsPageState
                 const SizedBox(height: 8),
                 _ToggleTile(
                   title: '일자리 알림',
-                  subtitle: '근처 새 공고·알림핀 PUSH',
+                  subtitle: '근처 새 공고·PUSH 알림권 발송',
                   value: _pushJobAlerts,
-                  onChanged: (v) {
+                  onChanged: (v) async {
                     setState(() => _pushJobAlerts = v);
-                    _set('job_alerts', v);
+                    await _saveAll();
                   },
                 ),
                 _ToggleTile(
                   title: '채팅 메시지',
-                  subtitle: '기업 담당자 답변',
+                  subtitle: '기업 담당자·구직자 답변',
                   value: _pushChatMessages,
-                  onChanged: (v) {
+                  onChanged: (v) async {
                     setState(() => _pushChatMessages = v);
-                    _set('chat', v);
+                    await _saveAll();
                   },
                 ),
                 _ToggleTile(
                   title: '지원 현황',
                   subtitle: '합의·출근·근태 안내',
                   value: _pushApplicationUpdates,
-                  onChanged: (v) {
+                  onChanged: (v) async {
                     setState(() => _pushApplicationUpdates = v);
-                    _set('application', v);
+                    await _saveAll();
                   },
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  '서비스 운영·이벤트 안내는 회원 이용에 포함되며, '
-                  '별도로 끌 수 없습니다. 위 설정은 채용·채팅 등 '
-                  '업무 알림만 조절합니다.',
+                  'PUSH 알림권으로 받는 일자리 알림과 채팅·지원 알림을 '
+                  '각각 켜거나 끌 수 있습니다.',
                   style: TextStyle(
                     fontSize: 11,
                     height: 1.45,
-                    color: AppColors.textSecondary.withValues(alpha: 0.85),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '설정은 이 기기에만 저장됩니다. 실서비스 연동 전 mock입니다.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.4,
                     color: AppColors.textSecondary.withValues(alpha: 0.85),
                   ),
                 ),

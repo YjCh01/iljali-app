@@ -52,6 +52,15 @@ iljari_resolve_web_base_url() {
 }
 
 iljari_resolve_admin_api_key() {
+  local key_file="${ILJARI_ADMIN_KEY_FILE:-${HOME}/Projects Keys/iljari app/iljari-admin-api-key.txt}"
+  if [[ -f "${key_file}" ]]; then
+    local k
+    k="$(head -n 1 "${key_file}" | tr -d '[:space:]')"
+    if [[ -n "${k}" ]]; then
+      echo "${k}"
+      return 0
+    fi
+  fi
   echo "${ADMIN_API_KEY:-${ILJARI_ADMIN_API_KEY:-iljari-admin-dev-key}}"
 }
 

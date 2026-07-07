@@ -3,6 +3,12 @@ import 'package:map/features/credential/domain/entities/credential_definition.da
 
 /// 자격증 검색·연관검색어
 abstract final class CredentialSearchService {
+  /// 「보건」검색 시 항상 노출 — 식품 보건증 + 건설 안전보건교육 (혼동 방지)
+  static const boGeonPinnedIds = [
+    'health_certificate',
+    'construction_safety_basic',
+  ];
+
   static List<CredentialDefinition> search(
     String query, {
     int limit = 12,
@@ -10,6 +16,14 @@ abstract final class CredentialSearchService {
   }) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return [];
+
+    if (_isBoGeonQuery(q)) {
+      return _pinned(
+        boGeonPinnedIds,
+        excludeIds: excludeIds,
+        limit: limit,
+      );
+    }
 
     final scored = <_Scored>[];
     for (final def in CredentialCatalog.all) {
@@ -31,7 +45,32 @@ abstract final class CredentialSearchService {
     return search(query, limit: limit, excludeIds: excludeIds);
   }
 
+  static List<CredentialDefinition> pinnedBoGeon({
+    Set<String> excludeIds = const {},
+  }) =>
+      _pinned(boGeonPinnedIds, excludeIds: excludeIds);
+
+  static List<CredentialDefinition> _pinned(
+    List<String> ids, {
+    required Set<String> excludeIds,
+    int limit = 12,
+  }) {
+    final result = <CredentialDefinition>[];
+    for (final id in ids) {
+      if (excludeIds.contains(id)) continue;
+      final def = CredentialCatalog.findById(id);
+      if (def != null) result.add(def);
+      if (result.length >= limit) break;
+    }
+    return result;
+  }
+
   static int _score(CredentialDefinition def, String q) {
+    if (_isBoGeonQuery(q) &&
+        def.id == CredentialCatalog.constructionSafetyBasic.id) {
+      return 0;
+    }
+
     var score = 0;
     final label = def.label.toLowerCase();
 
@@ -45,7 +84,6 @@ abstract final class CredentialSearchService {
       if (a.contains(q) || q.contains(a)) score += 12 + a.length;
     }
 
-    // 토큰 단위 (공백·특수문자 분리)
     final tokens = q.split(RegExp(r'[\s·/(),]+')).where((t) => t.length >= 2);
     for (final token in tokens) {
       if (label.contains(token)) score += 8;
@@ -55,6 +93,13 @@ abstract final class CredentialSearchService {
     }
 
     return score;
+  }
+
+  static bool _isBoGeonQuery(String q) {
+    if (q == '보건' || q == '보건증') return true;
+    return q.startsWith('건강진단') ||
+        q.startsWith('건강증명') ||
+        q.contains('보건증');
   }
 }
 

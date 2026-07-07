@@ -1,10 +1,12 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/core/theme/app_theme.dart';
+import 'package:map/core/widgets/web_centered_site_frame.dart';
 import 'package:map/features/admin/presentation/pages/admin_compliance_dashboard_page.dart';
 import 'package:map/features/admin/presentation/pages/admin_web_shell_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/find_account_page.dart';
@@ -12,6 +14,7 @@ import 'package:map/features/auth/presentation/pages/auth/login_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/member_login_gateway_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/reset_password_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/signup_page.dart';
+import 'package:map/features/auth/presentation/pages/auth/social_auth_complete_page.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/job_post_write_draft.dart';
 import 'package:map/features/corporate/presentation/navigation/corporate_job_post_flow_result.dart';
@@ -57,6 +60,8 @@ import 'package:map/features/attendance/presentation/pages/corporate_attendance_
 import 'package:map/features/attendance/presentation/pages/corporate_shuttle_attendance_hub_page.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/presentation/pages/shuttle_route_edit_page.dart';
+import 'package:map/features/commute/presentation/pages/bus_location_tower_pilot_page.dart';
+import 'package:map/features/commute/presentation/pages/seeker_my_bus_page.dart';
 import 'package:map/features/commute/presentation/pages/shuttle_stop_activation_page.dart';
 import 'package:map/features/commute/presentation/pages/shuttle_stop_payment_page.dart';
 import 'package:map/features/commute/presentation/pages/shuttle_stop_map_picker_page.dart';
@@ -72,6 +77,7 @@ import 'package:map/features/job_seeker/presentation/pages/seeker_home_address_p
 import 'package:map/features/job_seeker/presentation/pages/seeker_my_credentials_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_resume_section_pages.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_push_inbox_page.dart';
+import 'package:map/features/marketing/presentation/pages/public_pricing_page.dart';
 import 'package:map/features/support/presentation/pages/customer_support_page.dart';
 import 'package:map/features/support/presentation/pages/legal_documents_page.dart';
 import 'package:map/features/listings/presentation/pages/create_listing_page.dart';
@@ -93,10 +99,43 @@ class MapApp extends StatelessWidget {
       theme: AppTheme.light,
       initialRoute: initialRoute,
       onGenerateRoute: _onGenerateRoute,
+      builder: (context, child) {
+        if (child == null) return const SizedBox.shrink();
+        return WebCenteredSiteFrame(child: child);
+      },
     );
   }
 
   Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
+    // 웹 딥링크 — initialRoute만으로는 URL이 안 맞는 경우가 있어 Uri.base 우선
+    if (kIsWeb) {
+      final path = Uri.base.path;
+      if (path.contains('auth/social-complete')) {
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const SocialAuthCompletePage(),
+        );
+      }
+      if (path.contains('payment-success')) {
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const PaymentWebCallbackPage(success: true),
+        );
+      }
+      if (path.contains('payment-fail')) {
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const PaymentWebCallbackPage(success: false),
+        );
+      }
+      if (path.contains('/pricing')) {
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const PublicPricingPage(),
+        );
+      }
+    }
+
     switch (settings.name) {
       case AppRoutes.memberGateway:
         return MaterialPageRoute<void>(
@@ -127,14 +166,20 @@ class MapApp extends StatelessWidget {
           ),
         );
       case AppRoutes.findAccount:
+        final findMemberType = settings.arguments as MemberType?;
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => const FindAccountPage(),
+          builder: (_) => FindAccountPage(
+            initialMemberType: findMemberType ?? MemberType.individual,
+          ),
         );
       case AppRoutes.resetPassword:
+        final resetMemberType = settings.arguments as MemberType?;
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => const ResetPasswordPage(),
+          builder: (_) => ResetPasswordPage(
+            initialMemberType: resetMemberType ?? MemberType.individual,
+          ),
         );
       case AppRoutes.home:
         final args = settings.arguments;
@@ -162,6 +207,11 @@ class MapApp extends StatelessWidget {
         return MaterialPageRoute<void>(
           settings: settings,
           builder: (_) => const PaymentWebCallbackPage(success: false),
+        );
+      case AppRoutes.socialAuthComplete:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const SocialAuthCompletePage(),
         );
       case AppRoutes.search:
         return MaterialPageRoute<void>(
@@ -495,6 +545,16 @@ class MapApp extends StatelessWidget {
           settings: settings,
           builder: (_) => const SeekerNotificationSettingsPage(),
         );
+      case AppRoutes.seekerBusLocationTowerPilot:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const BusLocationTowerPilotPage(),
+        );
+      case AppRoutes.seekerMyBus:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const SeekerMyBusPage(),
+        );
       case AppRoutes.seekerMyDocuments:
         return MaterialPageRoute<void>(
           settings: settings,
@@ -528,6 +588,11 @@ class MapApp extends StatelessWidget {
         return MaterialPageRoute<void>(
           settings: settings,
           builder: (_) => const SeekerHomeAddressPage(),
+        );
+      case AppRoutes.publicPricing:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const PublicPricingPage(),
         );
       case AppRoutes.customerSupport:
         return MaterialPageRoute<void>(

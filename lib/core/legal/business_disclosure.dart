@@ -1,12 +1,12 @@
-/// 전자상거래법·스토어 심사용 사업자 신원 정보 (언리얼리 / 일자리)
+/// 전자상거래법·스토어 심사용 사업자 신원 정보 (아라컴퍼니 / 일자리)
 abstract final class BusinessDisclosure {
-  static const businessName = '언리얼리';
+  static const businessName = '아라컴퍼니';
   static const serviceName = '일자리';
-  static const registrationNumber = '537-58-01045';
+  static const registrationNumber = '540-31-00894';
   static const representative = '최영진';
-  static const address = '경기도 용인시 수지구 용구대로 66, 205-202';
+  static const address = '서울 송파구 오금로11길 55, 현대빌딩 2층 비즈센터';
   static const email = 'iljariapp@gmail.com';
-  static const phone = '1566-0000';
+  static const phone = '1644-5701';
 
   /// 공정거래위원회 사업자정보 공개 조회 (사업자등록번호)
   static String get ftcVerificationUrl =>

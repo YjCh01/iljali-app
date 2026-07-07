@@ -89,14 +89,41 @@ abstract final class LocalIndividualAuthStore {
     return null;
   }
 
-  static Future<List<String>> findMaskedEmailsByPhone(String phone) async {
+  static Future<List<String>> findMaskedEmailsByPhone(
+    String phone, {
+    String displayName = '',
+  }) async {
     final normalizedPhone = _normalizePhone(phone);
+    final targetName = displayName.trim().replaceAll(' ', '');
     final rows = await _loadAll();
-    final emails = rows
-        .where((row) => _normalizePhone(row['phone'] as String) == normalizedPhone)
-        .map((row) => _maskEmail(row['email'] as String))
-        .toList();
+    final emails = <String>[];
+    for (final row in rows) {
+      if (_normalizePhone(row['phone'] as String) != normalizedPhone) continue;
+      if (targetName.isNotEmpty) {
+        final name = (row['displayName'] as String? ?? '').replaceAll(' ', '');
+        if (name != targetName) continue;
+      }
+      emails.add(_maskEmail(row['email'] as String));
+    }
     return emails;
+  }
+
+  static Future<List<String>> findMaskedEmailsByEmail(
+    String email, {
+    String displayName = '',
+  }) async {
+    final normalizedEmail = _normalizeEmail(email);
+    final targetName = displayName.trim().replaceAll(' ', '');
+    final rows = await _loadAll();
+    for (final row in rows) {
+      if (_normalizeEmail(row['email'] as String) != normalizedEmail) continue;
+      if (targetName.isNotEmpty) {
+        final name = (row['displayName'] as String? ?? '').replaceAll(' ', '');
+        if (name != targetName) continue;
+      }
+      return [_maskEmail(row['email'] as String)];
+    }
+    return const [];
   }
 
   static Future<bool> resetPassword({

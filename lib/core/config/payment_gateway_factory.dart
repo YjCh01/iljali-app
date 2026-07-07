@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:map/core/config/env_config.dart';
 import 'package:map/features/corporate/data/services/mock_payment_gateway_service.dart';
 import 'package:map/features/corporate/data/services/remote_payments_gateway_service.dart';
@@ -15,6 +16,9 @@ abstract final class PaymentGatewayFactory {
     }
     if (EnvConfig.isTossPaymentsConfigured) {
       return TossPaymentsGatewayService();
+    }
+    if (kReleaseMode) {
+      return RemotePaymentsGatewayService();
     }
     return const MockPaymentGatewayService();
   }

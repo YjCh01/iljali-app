@@ -16,6 +16,7 @@ import 'package:map/features/corporate/presentation/widgets/corporate_create_job
 import 'package:map/features/corporate/presentation/utils/corporate_shell_access.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_login_prompt_sheet.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_guest_auth_actions.dart';
+import 'package:map/features/corporate/domain/services/promo_exposure_cleanup_service.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_web_scaffold.dart';
 
 /// 기업회원 메인 셸 — 하단 6탭 + 홈 대시보드
@@ -34,6 +35,7 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   String? _applicantsFocusJobPostId;
   String? _applicantsFocusJobTitle;
   String? _mapFocusPostId;
+  CorporateJobPost? _mapFocusPost;
   late List<Widget> _tabs;
 
   @override
@@ -42,7 +44,17 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
     _rebuildTabs();
     if (CorporateShellAccess.isSignedInCorporate) {
       _syncPermanentCommission();
+      _clearPromoExposureIfNeeded();
     }
+  }
+
+  Future<void> _clearPromoExposureIfNeeded() async {
+    final companyKey =
+        AuthSession.instance.currentUser?.corporateProfile?.companyKey;
+    if (companyKey == null || companyKey.isEmpty) return;
+    await PromoExposureCleanupService().clearPromoActivationsIfNeeded(
+      companyKey: companyKey,
+    );
   }
 
   @override
@@ -70,6 +82,7 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
         onOpenJobPosts: () => _requireSignedIn(() => _switchTab(1)),
         onOpenChat: () => _requireSignedIn(() => _switchTab(4)),
         focusPostId: _mapFocusPostId,
+        focusPost: _mapFocusPost,
         onFocusConsumed: _clearMapFocus,
       ),
       CorporateJobPostsTab(
@@ -140,14 +153,18 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   void _viewPostOnMap(CorporateJobPost post) {
     setState(() {
       _mapFocusPostId = post.id;
+      _mapFocusPost = post;
       _currentIndex = 0;
       _rebuildTabs();
     });
   }
 
   void _clearMapFocus() {
-    if (_mapFocusPostId == null) return;
-    setState(() => _mapFocusPostId = null);
+    if (_mapFocusPostId == null && _mapFocusPost == null) return;
+    setState(() {
+      _mapFocusPostId = null;
+      _mapFocusPost = null;
+    });
   }
 
   Future<void> _openProfileSetup() async {

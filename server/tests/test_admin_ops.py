@@ -79,6 +79,25 @@ def test_bulk_jobs_and_sync_bootstrap():
     assert "qc_test_post" in body["post_entitlements"]
 
 
+def test_wallet_grant_three_pin_types():
+    key = "1111111111"
+    r = client.post(
+        "/v1/admin/ops/wallet/grant",
+        headers=ADMIN_HEADERS,
+        json={
+            "company_key": key,
+            "package_credits": 2,
+            "shuttle_stop_credits": 3,
+            "push_ticket_credits": 4,
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["package_credits"] == 5
+    assert body["push_ticket_credits"] == 4
+    assert body["location_slots_from_packages"] == 5
+
+
 def test_corporate_signup_verification_admin_approve():
     signup = client.post(
         "/v1/auth/signup/corporate",
@@ -120,3 +139,34 @@ def test_corporate_signup_verification_admin_approve():
     )
     assert after.json()["needs_admin_approval"] is False
     assert after.json()["has_server_record"] is True
+
+
+def test_jobs_map_uses_workplace_coordinates():
+    from datetime import datetime, timezone
+
+    from app.database import SessionLocal
+    from app.job_sync_models import JobPostRow
+
+    with SessionLocal() as db:
+        db.merge(
+            JobPostRow(
+                id="qc_map_coord_post",
+                title="좌표 테스트",
+                company_name="테스트",
+                company_key="1000000001",
+                warehouse_name="경기 안성시",
+                hourly_wage="10000",
+                work_schedule="09-18",
+                summary="s",
+                workplace_latitude=37.050422,
+                workplace_longitude=127.2309176,
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            )
+        )
+        db.commit()
+
+    maps = client.get("/v1/admin/ops/jobs/map", headers=ADMIN_HEADERS)
+    assert maps.status_code == 200, maps.text
+    job = next(j for j in maps.json()["jobs"] if j["id"] == "qc_map_coord_post")
+    assert job["latitude"] == 37.050422
+    assert job["longitude"] == 127.2309176

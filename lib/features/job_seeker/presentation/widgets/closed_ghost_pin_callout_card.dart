@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/features/job_seeker/presentation/widgets/closed_ghost_pin_feedback.dart';
 
 /// 마감유령핀 탭 시 — 공고 상세 없이 안내만 표시
 class ClosedGhostPinCalloutCard extends StatelessWidget {
@@ -56,36 +57,14 @@ class ClosedGhostPinCalloutCard extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F5F5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      '마감유령핀',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF757575),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    pin.closedGhostMessage,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      height: 1.35,
-                      color: Color(0xFF616161),
-                    ),
-                  ),
-                ],
+              child: Text(
+                ClosedGhostPinFeedback.message,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  height: 1.35,
+                  color: Color(0xFF616161),
+                ),
               ),
             ),
             IconButton(

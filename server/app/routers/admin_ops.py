@@ -5,6 +5,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps.admin_auth import require_admin_api_key
 from app.qc_models import QcMemberRow
+from app.services.admin_bulk_url_import_service import bulk_import_job_urls, extract_urls
+from app.services.pilot_program_service import (
+    bus_location_tower_admin_view,
+    search_bus_location_tower_candidates,
+    stop_bus_location_tower_today,
+    upsert_bus_location_tower,
+)
+from app.services.shuttle_commute_service import admin_participants_view
 from app.services.admin_ops_service import (
     bulk_import_jobs,
     distribute_applications,
@@ -27,6 +35,17 @@ from app.services.ghost_pin_service import (
     delete_ghost_pin,
     list_ghost_pins,
 )
+from app.services.ghost_route_service import (
+    create_ghost_route,
+    delete_ghost_route,
+    list_ghost_routes,
+)
+from app.services.admin_announcement_service import (
+    create_announcement,
+    list_announcements,
+)
+from app.services.admin_grant_revoke_service import revoke_admin_grants
+from app.services.qc_data_purge_service import purge_qc_data
 from app.models import Company
 from app.services.entitlement_service import get_or_create_company, normalize_brn
 from app.services.push_wallet_service import get_or_create_wallet, wallet_to_response
@@ -38,13 +57,19 @@ from app.services.sanction_service import (
     list_sanction_history,
     sanction_status,
 )
+from app.services.workplace_mismatch_service import (
+    approve_stated_workplace_post,
+    list_pending_workplace_mismatch_flags,
+)
 
 router = APIRouter(prefix="/v1/admin/ops", tags=["admin-ops"])
 
 
 class WalletGrantBody(BaseModel):
     company_key: str
-    package_credits: int = Field(ge=0)
+    package_credits: int = Field(default=0, ge=0)
+    shuttle_stop_credits: int = Field(default=0, ge=0)
+    push_ticket_credits: int = Field(default=0, ge=0)
     location_slots: int | None = Field(default=None, ge=0)
 
 
@@ -114,6 +139,25 @@ class GhostPinCreateBody(BaseModel):
     source_post_id: str = ""
 
 
+class GhostRouteStopBody(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class GhostRouteCreateBody(BaseModel):
+    workplace_latitude: float
+    workplace_longitude: float
+    stops: list[GhostRouteStopBody] = Field(default_factory=list)
+    label: str = ""
+
+
+class AdminAnnouncementCreateBody(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1)
+    audience: str = Field(default="all", pattern="^(all|seeker|corporate)$")
+    push_requested: bool = True
+
+
 class SeedSeekersBody(BaseModel):
     count: int = Field(default=1000, ge=1, le=5000)
     start_index: int = Field(default=1, ge=1)
@@ -121,6 +165,27 @@ class SeedSeekersBody(BaseModel):
 
 class BulkJobsBody(BaseModel):
     posts: list[dict]
+
+
+class BulkImportUrlsBody(BaseModel):
+    urls: list[str] = Field(default_factory=list)
+    url_text: str = ""
+    company_key: str = "5403100894"
+    company_name: str = "아라컴퍼니"
+    posted_by_email: str = ""
+    posted_by_name: str = ""
+    activate_job_pin: bool = True
+
+
+class BusLocationTowerPilotBody(BaseModel):
+    seeker_email: str = ""
+    enabled: bool = True
+    company_key: str = ""
+    company_name: str = ""
+    route_id: str = ""
+    route_name: str = ""
+    note: str = ""
+    work_start_time: str = ""
 
 
 class DistributeApplicationsBody(BaseModel):
@@ -158,6 +223,24 @@ def ops_seed_employers(
     return seed_employers(db)
 
 
+@router.post("/purge/qc")
+def ops_purge_qc_data(
+    dry_run: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    return purge_qc_data(db, dry_run=dry_run)
+
+
+@router.post("/wallet/revoke-admin-grants")
+def ops_revoke_admin_grants(
+    dry_run: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    return revoke_admin_grants(db, dry_run=dry_run)
+
+
 @router.get("/health")
 def ops_health(_: str = Depends(require_admin_api_key)):
     return {"status": "ok", "scope": "admin-ops"}
@@ -173,6 +256,8 @@ def ops_wallet_grant(
         db,
         company_key=body.company_key,
         package_credits=body.package_credits,
+        shuttle_stop_credits=body.shuttle_stop_credits,
+        push_ticket_credits=body.push_ticket_credits,
         location_slots=body.location_slots,
     )
 
@@ -448,6 +533,89 @@ def ops_bulk_jobs(
     return bulk_import_jobs(db, body.posts)
 
 
+@router.post("/jobs/bulk-import-urls")
+async def ops_bulk_import_urls(
+    body: BulkImportUrlsBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    urls = body.urls or extract_urls(body.url_text)
+    if not urls:
+        raise HTTPException(status_code=400, detail="url 또는 url_text가 필요합니다.")
+    try:
+        return await bulk_import_job_urls(
+            db,
+            urls=urls,
+            company_key=body.company_key,
+            company_name=body.company_name,
+            posted_by_email=body.posted_by_email,
+            posted_by_name=body.posted_by_name,
+            activate_job_pin=body.activate_job_pin,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/pilot/bus-location-tower")
+def ops_get_bus_location_tower_pilot(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    return bus_location_tower_admin_view(db)
+
+
+@router.get("/pilot/bus-location-tower/candidates")
+def ops_search_bus_location_tower_candidates(
+    phone: str = Query(..., min_length=4),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    try:
+        return search_bus_location_tower_candidates(db, phone=phone)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.put("/pilot/bus-location-tower")
+def ops_set_bus_location_tower_pilot(
+    body: BusLocationTowerPilotBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    if body.enabled and not body.seeker_email.strip():
+        raise HTTPException(status_code=400, detail="지정할 개인회원 이메일이 필요합니다.")
+    try:
+        return upsert_bus_location_tower(
+            db,
+            seeker_email=body.seeker_email,
+            enabled=body.enabled,
+            company_key=body.company_key,
+            company_name=body.company_name,
+            route_id=body.route_id,
+            route_name=body.route_name,
+            note=body.note,
+            work_start_time=body.work_start_time,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/pilot/bus-location-tower/stop-today")
+def ops_stop_bus_location_tower_today(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    return stop_bus_location_tower_today(db)
+
+
+@router.get("/shuttle/participants")
+def ops_shuttle_participants(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    return admin_participants_view(db)
+
+
 @router.post("/scenario/applications")
 def ops_scenario_applications(
     body: DistributeApplicationsBody,
@@ -595,3 +763,83 @@ def ops_delete_ghost_pin(
     if not deleted:
         raise HTTPException(status_code=404, detail="ghost pin not found")
     return {"deleted": True, "id": pin_id}
+
+
+@router.get("/ghost-routes")
+def ops_list_ghost_routes(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    routes = list_ghost_routes(db)
+    return {"ghost_routes": routes, "count": len(routes)}
+
+
+@router.post("/ghost-routes")
+def ops_create_ghost_route(
+    body: GhostRouteCreateBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    route = create_ghost_route(
+        db,
+        workplace_latitude=body.workplace_latitude,
+        workplace_longitude=body.workplace_longitude,
+        stops=[s.model_dump() for s in body.stops],
+        label=body.label,
+    )
+    return {"ghost_route": route}
+
+
+@router.delete("/ghost-routes/{route_id}")
+def ops_delete_ghost_route(
+    route_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    deleted = delete_ghost_route(db, route_id=route_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="ghost route not found")
+    return {"deleted": True, "id": route_id}
+
+
+@router.get("/announcements")
+def ops_list_announcements(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    items = list_announcements(db)
+    return {"announcements": items, "count": len(items)}
+
+
+@router.post("/announcements")
+def ops_create_announcement(
+    body: AdminAnnouncementCreateBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    item = create_announcement(
+        db,
+        title=body.title,
+        body=body.body,
+        audience=body.audience,
+        push_requested=body.push_requested,
+    )
+    return {"announcement": item}
+
+
+@router.get("/compliance/workplace-mismatch/pending")
+def ops_list_workplace_mismatch_pending(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    flags = list_pending_workplace_mismatch_flags(db)
+    return {"flags": flags, "count": len(flags)}
+
+
+@router.post("/compliance/workplace-mismatch/{flag_id}/approve-stated-workplace")
+def ops_approve_stated_workplace_post(
+    flag_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    return approve_stated_workplace_post(db, flag_id=flag_id)

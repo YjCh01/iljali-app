@@ -44,6 +44,12 @@ class JobApplicationRow(Base):
     seeker_name: Mapped[str] = mapped_column(String(100), default="")
     status: Mapped[str] = mapped_column(String(32), default="applied")
     work_schedule: Mapped[str] = mapped_column(String(128), default="")
+    commute_route_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    commute_route_name: Mapped[str] = mapped_column(String(200), default="")
+    shuttle_stop_id: Mapped[str] = mapped_column(String(64), default="")
+    shuttle_stop_label: Mapped[str] = mapped_column(String(200), default="")
+    shuttle_pickup_time: Mapped[str] = mapped_column(String(32), default="")
+    shuttle_shift_date: Mapped[str] = mapped_column(String(10), default="", index=True)
     applied_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

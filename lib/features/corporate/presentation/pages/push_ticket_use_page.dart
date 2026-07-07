@@ -422,6 +422,15 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
         companyName: profile.companyName,
         targetLabel: targetLabel,
         targetKind: selected.first.kind,
+        recruitmentTargets: [
+          for (final target in selected)
+            RecruitmentPushTargetArgs(
+              latitude: target.coordinate.latitude,
+              longitude: target.coordinate.longitude,
+              radiusMeters: target.radiusMeters,
+              label: target.title,
+            ),
+        ],
       ),
     );
 

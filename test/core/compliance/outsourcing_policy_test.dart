@@ -17,7 +17,7 @@ void main() {
   group('ContactEntitlementService', () {
     final service = ContactEntitlementService();
 
-    test('blocks admin review pending profile', () {
+    test('allows admin review pending profile', () {
       const profile = CorporateMemberProfile(
         companyName: '테스트',
         businessRegistrationNumber: '1234567890',
@@ -30,8 +30,7 @@ void main() {
       );
 
       final result = service.evaluate(profile);
-      expect(result.allowed, isFalse);
-      expect(result.showPartnershipUpsell, isFalse);
+      expect(result, ContactAccessResult.allowedFull);
     });
 
     test('allows BASIC profile for contact', () {

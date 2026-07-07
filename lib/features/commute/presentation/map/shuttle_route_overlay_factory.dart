@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/domain/utils/commute_route_polyline.dart';
 
@@ -12,12 +13,12 @@ abstract final class ShuttleRouteOverlayFactory {
   static const stopIdPrefix = 'shuttle_stop_';
   static const workplaceMarkerId = 'shuttle_workplace';
 
-  static Set<NAddableOverlay> build(
+  static Future<Set<NAddableOverlay>> build(
     CommuteRoute route, {
     GeoCoordinate? workplace,
     void Function(CommuteRoute route)? onStopTap,
     bool showStopCaptions = true,
-  }) {
+  }) async {
     final points = CommuteRoutePolyline.pathIncludingWorkplace(
       route: route,
       workplace: workplace,
@@ -39,6 +40,10 @@ abstract final class ShuttleRouteOverlayFactory {
       ),
     );
 
+    final busIcon = await MapPinOverlayIconCache.busStop(
+      bodyColor: MapPinColors.active,
+    );
+
     for (final stop in route.stops) {
       final timeSuffix = stop.departureTime == null
           ? ''
@@ -49,8 +54,11 @@ abstract final class ShuttleRouteOverlayFactory {
           stop.coordinate.latitude,
           stop.coordinate.longitude,
         ),
-        iconTintColor: color,
-        size: const Size(14, 14),
+        icon: busIcon,
+        size: const Size(
+          TeardropMapPinArt.busWidth,
+          TeardropMapPinArt.busHeight,
+        ),
         caption: showStopCaptions
             ? NOverlayCaption(
                 text: '${stop.label}$timeSuffix',
@@ -68,16 +76,23 @@ abstract final class ShuttleRouteOverlayFactory {
     }
 
     if (workplace != null) {
+      final workplaceIcon = await MapPinOverlayIconCache.pin(
+        style: MapPinStyle.workplace,
+        bodyColor: MapPinColors.active,
+      );
       overlays.add(
         NMarker(
           id: '${workplaceMarkerId}_${route.id}',
           position: NLatLng(workplace.latitude, workplace.longitude),
-          iconTintColor: const Color(0xFF5E35B1),
-          size: const Size(16, 16),
-          caption: const NOverlayCaption(
+          icon: workplaceIcon,
+          size: const Size(
+            TeardropMapPinArt.jobWidth,
+            TeardropMapPinArt.jobHeight,
+          ),
+          caption: NOverlayCaption(
             text: '근무지',
             color: Colors.white,
-            haloColor: Color(0xFF5E35B1),
+            haloColor: MapPinColors.active.withValues(alpha: 0.85),
             textSize: 12,
           ),
           isHideCollidedCaptions: true,

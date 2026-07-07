@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from html import unescape
 from typing import Optional
 from urllib.parse import urlparse
@@ -13,6 +13,10 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import settings
+from app.services.job_post_image_extractor import (
+    extract_image_job_body,
+    should_try_image_extract,
+)
 
 _USER_AGENT = (
     "Mozilla/5.0 (compatible; IljariJobImporter/1.0; +https://iljari.co.kr/bot)"
@@ -29,6 +33,8 @@ class ScrapeResult:
     work_schedule: str = ""
     workplace: str | None = None
     job_description: str = ""
+    description_html: str = ""
+    description_images: list[str] = field(default_factory=list)
     confidence: float = 0.5
     source_url: str = ""
     error: str | None = None
@@ -231,6 +237,23 @@ async def fetch_job_post(url: str, *, platform: str | None = None) -> ScrapeResu
         raw_text = f"{_meta_content(soup, 'og:title')}\n{_meta_content(soup, 'og:description')}"
 
     fields = _site_enrich(detected, soup, raw_text)
+
+    job_description = (fields.get("job_description") or "").strip()
+    description_html = ""
+    description_images: list[str] = []
+    if should_try_image_extract(job_description, platform=detected):
+        description_html, description_images = extract_image_job_body(
+            soup,
+            trimmed,
+            platform=detected,
+        )
+        if description_images and not job_description:
+            job_description = "이미지 공고"
+            fields["confidence"] = min(
+                float(fields.get("confidence", 0.5)) + 0.25,
+                0.95,
+            )
+
     return ScrapeResult(
         platform=detected,
         raw_text=raw_text[:8000],
@@ -238,7 +261,9 @@ async def fetch_job_post(url: str, *, platform: str | None = None) -> ScrapeResu
         hourly_wage=fields.get("hourly_wage"),
         work_schedule=fields.get("work_schedule", ""),
         workplace=fields.get("workplace"),
-        job_description=fields.get("job_description", ""),
+        job_description=job_description,
+        description_html=description_html,
+        description_images=description_images,
         confidence=float(fields.get("confidence", 0.5)),
         source_url=trimmed,
     )

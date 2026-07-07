@@ -3,6 +3,7 @@ import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_booking_sheet.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/entities/work_schedule_spec.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/work_schedule_calendar_utils.dart';
@@ -14,19 +15,24 @@ class JobApplyFlowResult {
   const JobApplyFlowResult({
     required this.selectedDates,
     this.shuttleSelection,
+    this.scheduleNegotiable = false,
   });
 
-  /// 선택한 근무일 (정렬됨). 단일·복수 모두 이 목록으로 전달.
+  /// 선택한 근무일 (정렬됨). 협의 공고는 비어 있을 수 있음.
   final List<DateTime> selectedDates;
 
   final ShuttleBookingSelection? shuttleSelection;
 
-  DateTime get primaryDate => selectedDates.first;
+  /// 근무일정 협의 — 채팅으로 일정 조율
+  final bool scheduleNegotiable;
+
+  DateTime? get primaryDate =>
+      scheduleNegotiable || selectedDates.isEmpty ? null : selectedDates.first;
 
   /// 하위 호환 — 교대 선택 UI 제거, 항상 any
   String get shiftSlot => 'any';
 
-  DateTime get shiftDate => primaryDate;
+  DateTime get shiftDate => primaryDate ?? DateTime.now();
 }
 
 Future<JobApplyFlowResult?> showJobApplyFlowSheet(
@@ -35,6 +41,7 @@ Future<JobApplyFlowResult?> showJobApplyFlowSheet(
   required String workSchedule,
   required WorkerCategory workerCategory,
   required bool hasShuttle,
+  required bool workScheduleNegotiable,
   CommuteRoute? shuttleRoute,
 }) {
   return showAdaptiveSheet<JobApplyFlowResult>(
@@ -44,6 +51,7 @@ Future<JobApplyFlowResult?> showJobApplyFlowSheet(
       workSchedule: workSchedule,
       workerCategory: workerCategory,
       hasShuttle: hasShuttle,
+      workScheduleNegotiable: workScheduleNegotiable,
       shuttleRoute: shuttleRoute,
     ),
   );
@@ -55,6 +63,7 @@ class _JobApplyFlowBody extends StatefulWidget {
     required this.workSchedule,
     required this.workerCategory,
     required this.hasShuttle,
+    required this.workScheduleNegotiable,
     this.shuttleRoute,
   });
 
@@ -62,6 +71,7 @@ class _JobApplyFlowBody extends StatefulWidget {
   final String workSchedule;
   final WorkerCategory workerCategory;
   final bool hasShuttle;
+  final bool workScheduleNegotiable;
   final CommuteRoute? shuttleRoute;
 
   @override
@@ -127,7 +137,12 @@ class _JobApplyFlowBodyState extends State<_JobApplyFlowBody> {
     });
   }
 
-  bool get _canProceed => _selectedDates.isNotEmpty;
+  bool get _scheduleNegotiable =>
+      widget.workScheduleNegotiable ||
+      WorkScheduleNegotiable.isLabel(widget.workSchedule);
+
+  bool get _canProceed =>
+      _scheduleNegotiable || _selectedDates.isNotEmpty;
 
   void _next() {
     if (_step == 0) {
@@ -143,6 +158,16 @@ class _JobApplyFlowBodyState extends State<_JobApplyFlowBody> {
   }
 
   void _finish() {
+    if (_scheduleNegotiable) {
+      Navigator.of(context).pop(
+        JobApplyFlowResult(
+          selectedDates: const [],
+          scheduleNegotiable: true,
+          shuttleSelection: _skipShuttle ? null : _shuttleSelection,
+        ),
+      );
+      return;
+    }
     final sorted = _selectedDates.toList()..sort();
     Navigator.of(context).pop(
       JobApplyFlowResult(
@@ -253,7 +278,25 @@ class _JobApplyFlowBodyState extends State<_JobApplyFlowBody> {
                 ),
               ],
               const SizedBox(height: 10),
-              if (!_hasSchedule || _allSelectableDays.isEmpty)
+              if (_scheduleNegotiable)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '이 공고는 근무 일정이 협의 가능합니다.\n'
+                    '지원 후 채팅으로 희망 일정을 말씀해 주세요.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                      color: AppColors.textSecondary.withValues(alpha: 0.95),
+                    ),
+                  ),
+                )
+              else if (!_hasSchedule || _allSelectableDays.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(

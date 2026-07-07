@@ -25,6 +25,11 @@ async def ocr_business_certificate(
     expected_company: str = "",
 ):
     if not settings.clova_ocr_secret or not settings.clova_ocr_invoke_url:
+        if settings.require_clova_ocr:
+            raise HTTPException(
+                status_code=503,
+                detail="CLOVA OCR이 설정되지 않았습니다. 운영 환경에서는 CLOVA_OCR_* 키가 필요합니다.",
+            )
         brn = "".join(ch for ch in expected_brn if ch.isdigit()) or "0000000000"
         flagged = brn.endswith("9999")
         return OcrFieldResponse(

@@ -23,27 +23,28 @@ alwaysApply: false
 
 ### Push & packages (replaces partnership tiers)
 
-- **Default plan**: 700m radius, 1 free push/day, 2 signup bonus pushes, 1 base location.
-- **Package product**: 5,000 KRW = 1 location slot + 1 push at **1km** from that base.
+- **Default plan**: 700m radius map pin (free), signup bonus 2 pushes, verification bonus 5 pushes, 1 base location.
+- **Package product**: 5,000 KRW = 1 location slot + 1 push at **700m** from that base.
 - **Bundles**: 10→45,000 / 30→120,000 / 100→350,000 KRW.
-- **Wallet depletion**: daily free → signup bonus → package credits.
+- **Wallet depletion**: signup bonus → verification bonus → package credits.
+- **Job posting**: always free (no per-post fee).
 - **Deprecated**: `premium_partnership_tier.dart`, partnership subscription, tier cards — migrate to `PushPackageCatalog` / `EmployerPushWallet`.
 
 ### Payments & entitlements
 
 - Mock PG when keys missing (`env_config.dart`).
-- **All push beyond free/bonus requires package credit** (or triggers package shop).
+- **Paid**: push packages, cash wallet top-up — not job posting or successful hire (main app).
 - **Contact/chat**: available on default plan (no tier gate).
+
+### Commissions (partner builds only — default OFF)
+
+- `ENABLE_HIRING_COMMISSION=false` on main app — no check-in success fee UI or billing.
+- Code retained: `commission_calculator.dart`, `permanent_commission_calculator.dart` — enable per build for partner channels only.
 
 ### Address
 
 - Mobile: Daum Postcode WebView (`daum_postcode_picker_page.dart`).
 - Windows/desktop: QC manual entry when WebView unavailable (`workplace_address_qc.dart`).
-
-### Commissions
-
-- Daily worker: fixed fee on check-in (`commission_calculator.dart`).
-- Permanent: % on verified employment (`permanent_commission_calculator.dart`).
 
 ## Conventions
 

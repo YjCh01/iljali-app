@@ -34,14 +34,18 @@ def grant_wallet_credits(
     db: Session,
     *,
     company_key: str,
-    package_credits: int,
+    package_credits: int = 0,
+    shuttle_stop_credits: int = 0,
+    push_ticket_credits: int = 0,
     location_slots: int | None = None,
 ) -> dict:
     brn = normalize_brn(company_key)
     wallet = get_or_create_wallet(db, brn)
-    slots = location_slots if location_slots is not None else package_credits
-    wallet.package_credits += max(0, package_credits)
+    exposure_add = max(0, package_credits) + max(0, shuttle_stop_credits)
+    slots = location_slots if location_slots is not None else exposure_add
+    wallet.package_credits += exposure_add
     wallet.location_slots_from_packages += max(0, slots)
+    wallet.push_ticket_credits += max(0, push_ticket_credits)
     _audit(
         db,
         action="wallet.grant",
@@ -49,7 +53,10 @@ def grant_wallet_credits(
         target_id=brn,
         detail={
             "package_credits": package_credits,
+            "shuttle_stop_credits": shuttle_stop_credits,
+            "push_ticket_credits": push_ticket_credits,
             "location_slots": slots,
+            "exposure_total": exposure_add,
         },
     )
     db.commit()
@@ -527,6 +534,10 @@ def bulk_import_jobs(db: Session, posts: list[dict]) -> dict:
                 hourly_wage=item.get("hourly_wage") or "",
                 work_schedule=item.get("work_schedule") or "",
                 summary=item.get("summary") or "",
+                job_description=item.get("job_description") or "",
+                description_body_json=item.get("description_body_json") or "{}",
+                workplace_latitude=item.get("workplace_latitude"),
+                workplace_longitude=item.get("workplace_longitude"),
                 status=item.get("status") or "recruiting",
                 posted_by_email=(item.get("posted_by_email") or "").strip().lower(),
                 posted_by_name=item.get("posted_by_name") or "",
@@ -803,7 +814,10 @@ def _resolve_poster(db: Session, post: JobPostRow) -> dict:
 
 def _job_map_item(db: Session, post: JobPostRow, index: int) -> dict:
     ent = db.get(JobPostEntitlementRow, post.id)
-    lat, lng = _map_coords(index)
+    if post.workplace_latitude is not None and post.workplace_longitude is not None:
+        lat, lng = post.workplace_latitude, post.workplace_longitude
+    else:
+        lat, lng = _map_coords(index)
     app_count = (
         db.query(JobApplicationRow)
         .filter(JobApplicationRow.post_id == post.id)

@@ -101,12 +101,14 @@ class _AdminDashboardPanelState extends State<AdminDashboardPanel> {
                         : () => c.run(
                               () => c.client.grantWallet(
                                 companyKey: '1000000001',
-                                packageCredits: 30,
+                                packageCredits: 1,
+                                shuttleStopCredits: 1,
+                                pushTicketCredits: 1,
                               ),
-                              successMessage: '테스트기업 알파 이용권 +30',
+                              successMessage: '테스트기업 알파 이용권 +1',
                             ),
                     icon: const Icon(Icons.wallet_outlined, size: 18),
-                    label: const Text('알파 +30 이용권'),
+                    label: const Text('알파 +1 이용권'),
                   ),
                 ],
               ),

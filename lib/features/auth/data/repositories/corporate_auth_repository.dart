@@ -8,6 +8,7 @@ import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/core/sync/qc_sync_bootstrap.dart';
+import 'package:map/features/auth/domain/utils/auth_error_message.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/services/corporate_org_join_service.dart';
 
@@ -40,10 +41,17 @@ abstract final class CorporateAuthRepository {
     }
 
     final client = IljariApiClient();
-    final result = await client.login(
-      email: normalizedEmail,
-      password: password,
-    );
+    Map<String, dynamic> result;
+    try {
+      result = await client.login(
+        email: normalizedEmail,
+        password: password,
+      );
+    } on IljariApiException catch (e) {
+      throw ArgumentError(
+        AuthErrorMessage.loginFailure(e, memberType: MemberType.corporate),
+      );
+    }
     final memberType = result['member_type'] as String? ?? '';
     if (memberType == 'seeker') {
       throw ArgumentError('개인회원 계정입니다. 개인 로그인을 이용하세요.');
@@ -66,6 +74,7 @@ abstract final class CorporateAuthRepository {
     required String password,
     required String displayName,
     required String phone,
+    required String phoneVerifiedToken,
     required CorporateMemberProfile profile,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
@@ -83,6 +92,7 @@ abstract final class CorporateAuthRepository {
       password: password,
       displayName: displayName.trim(),
       phone: normalizedPhone,
+      phoneVerifiedToken: phoneVerifiedToken,
       companyName: profile.companyName,
       companyKey: profile.companyKey,
       department: profile.department,

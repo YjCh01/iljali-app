@@ -11,6 +11,11 @@ import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/geo/map_viewport_bounds.dart';
 
 import 'package:map/core/geo/map_user_location_service.dart';
+import 'package:map/core/map/ghost_route_overlay_factory.dart';
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
+import 'package:map/core/map/web/ghost_route_web_overlay_builder.dart';
+import 'package:map/features/job_seeker/data/datasources/closed_ghost_route_local_data_source.dart';
+import 'package:map/features/job_seeker/domain/entities/closed_ghost_route.dart';
 import 'package:map/core/map/web/job_map_web_marker_factory.dart';
 import 'package:map/core/map/web/naver_map_web_layer.dart';
 import 'package:map/core/utils/naver_map_platform.dart';
@@ -148,6 +153,8 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
   List<JobMapPin> _visiblePins = [];
 
+  List<ClosedGhostRoute> _ghostRoutes = const [];
+
   MapViewportBounds? _activeViewport;
 
   bool _loading = true;
@@ -257,12 +264,15 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
     setState(() => _loading = true);
 
     final pins = await _getPins();
+    final routes =
+        await const ClosedGhostRouteLocalDataSourceImpl().fetchAll();
 
     if (!mounted) return;
 
     setState(() {
 
       _catalogPins = pins;
+      _ghostRoutes = routes;
 
       _loading = false;
 
@@ -420,32 +430,32 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
     final overlays = <NAddableOverlay>{};
 
     overlays.addAll(
-
-      JobMapMarkerFactory.createAll(
-
+      await JobMapMarkerFactory.createAll(
         _visiblePins,
-
         onTap: widget.onPinTap,
-
       ),
-
     );
 
     final route = _effectiveShuttleRoute;
 
     if (route != null) {
-
       overlays.addAll(
-        ShuttleRouteOverlayFactory.build(
+        await ShuttleRouteOverlayFactory.build(
           route,
           workplace: widget.shuttleWorkplace,
         ),
       );
+    }
 
+    for (final ghostRoute in _ghostRoutes) {
+      overlays.addAll(await GhostRouteOverlayFactory.build(ghostRoute));
     }
 
     for (final pin in widget.recruitmentPins) {
-      final tint = pin.point.resolvedPinColor;
+      final icon = await MapPinOverlayIconCache.pin(
+        style: MapPinStyle.notification,
+        bodyColor: MapPinColors.active,
+      );
       overlays.add(
         NMarker(
           id: 'recruitment_pin_${pin.post.id}_${pin.index}',
@@ -453,12 +463,15 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
             pin.coordinate.latitude,
             pin.coordinate.longitude,
           ),
-          iconTintColor: tint,
-          size: const Size(30, 30),
+          icon: icon,
+          size: const Size(
+            TeardropMapPinArt.jobWidth,
+            TeardropMapPinArt.jobHeight,
+          ),
           caption: NOverlayCaption(
             text: ExposurePointLabels.title(pin.index),
             color: Colors.white,
-            haloColor: tint.withValues(alpha: 0.85),
+            haloColor: MapPinColors.active.withValues(alpha: 0.85),
             textSize: 11,
           ),
         )..setOnTapListener((_) {
@@ -635,7 +648,8 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
           ),
 
         MapCurrentLocationButton(
-          bottom: _areaSearchButtonBottom(context) + 56,
+          bottom: _areaSearchButtonBottom(context) +
+              MapFloatingInsets.myLocationAboveSearchButton,
         ),
 
       ],
@@ -693,9 +707,11 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
           id: 'recruitment_pin_${pin.post.id}_${pin.index}',
           latitude: pin.coordinate.latitude,
           longitude: pin.coordinate.longitude,
-          colorHex: NaverMapWebColors.hex(pin.point.resolvedPinColor),
-          label: ExposurePointLabels.title(pin.index).substring(0, 1),
-          size: 30,
+          colorHex: NaverMapWebColors.hex(MapPinColors.active),
+          label: '',
+          kind: MapPinMarkerKind.notification,
+          size: TeardropMapPinArt.jobWidth,
+          height: TeardropMapPinArt.jobHeight,
         ),
     ];
 
@@ -715,6 +731,9 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
           ),
     ];
 
+    final ghostOverlays =
+        GhostRouteWebOverlayBuilder.fromRoutes(_ghostRoutes);
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -727,10 +746,12 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
             ...jobMarkers,
             ...shuttleOverlays.markers,
             ...recruitmentMarkers,
+            ...ghostOverlays.markers,
           ],
           polylines: [
             ...shuttleOverlays.polylines,
             ...linkPolylines,
+            ...ghostOverlays.polylines,
           ],
           onMapReady: _handleWebMapReady,
           onCameraIdle: _cameraPromptReady ? _markAreaSearchPending : null,
@@ -739,7 +760,7 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
               : (_, __) => widget.onMapBackgroundTap!(),
           onMarkerTap: (id) {
             for (final pin in _visiblePins) {
-              if (pin.post.id == id) {
+              if (pin.mapMarkerId == id || pin.post.id == id) {
                 widget.onPinTap(pin);
                 return;
               }
@@ -768,7 +789,8 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
           ),
 
         MapCurrentLocationButton(
-          bottom: _areaSearchButtonBottom(context) + 56,
+          bottom: _areaSearchButtonBottom(context) +
+              MapFloatingInsets.myLocationAboveSearchButton,
         ),
 
       ],

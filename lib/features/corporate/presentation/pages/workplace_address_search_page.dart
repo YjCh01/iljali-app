@@ -5,11 +5,12 @@ import 'package:map/core/address/daum_postcode_picker_page.dart';
 import 'package:map/core/address/workplace_address_mapper.dart';
 import 'package:map/core/address/workplace_address_platform.dart';
 import 'package:map/core/address/workplace_address_qc.dart';
+import 'package:map/core/config/dev_experience_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 
-/// 근무지 — 앱·웹 동일: 탭 → 전체화면 도로명주소 검색 · QC 직접 입력(Windows 등)
+/// 근무지 — 앱·웹 동일: 탭 → 전체화면 도로명주소 검색 · 데스크톱 수동 입력
 class WorkplaceAddressSearchPage extends StatefulWidget {
   const WorkplaceAddressSearchPage({
     super.key,
@@ -61,8 +62,9 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
     final sample = WorkplaceAddressQc.sample();
     setState(() {
       _selected = sample;
-      _statusMessage =
-          'QC 모드 · 좌표는 샘플(강남)으로 저장됩니다. 실제 배포 전 주소 검색·지오코딩을 사용하세요.';
+      _statusMessage = DevExperienceFlags.enabled
+          ? 'QC 샘플 좌표(강남)로 저장됩니다.'
+          : '주소는 저장되며, 좌표는 서버 지오코딩으로 보완됩니다.';
       if (prefillFields) {
         _queryController.text = sample.roadAddress;
         _detailController.clear();
@@ -117,8 +119,9 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
         roadAddress: road,
         detailAddress: _detailController.text,
       );
-      _statusMessage =
-          'QC 모드 · 좌표는 샘플(강남)으로 저장됩니다. 실제 배포 전 주소 검색·지오코딩을 사용하세요.';
+      _statusMessage = DevExperienceFlags.enabled
+          ? 'QC 샘플 좌표(강남)로 저장됩니다.'
+          : '주소는 저장되며, 좌표는 서버 지오코딩으로 보완됩니다.';
     });
   }
 
@@ -188,7 +191,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
               },
               decoration: _searchDecoration(
                 hintText: _showQcManual || _qcPrimaryMode
-                    ? '도로명·동 직접 입력 (QC)'
+                    ? '도로명·동 직접 입력'
                     : '탭하여 동·도로명 검색',
               ),
             ),
@@ -220,13 +223,15 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _applyQcSample(),
-                      child: const Text('QC 샘플 주소'),
+                  if (DevExperienceFlags.enabled) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => _applyQcSample(),
+                        child: const Text('샘플 주소 (QC)'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: FilledButton.tonal(
                       onPressed: _applyManualQcInput,
@@ -269,7 +274,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
                 ),
                 child: Text(
                   _qcPrimaryMode || _showQcManual
-                      ? '이 주소로 계속 (QC)'
+                      ? '이 주소로 계속'
                       : '이 주소 선택',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -299,7 +304,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
           Expanded(
             child: Text(
               'Windows 등 데스크톱 앱에서는 도로명주소 검색을 사용할 수 없습니다. '
-              'Chrome 웹 또는 모바일 앱에서 주소 검색을 이용하거나, QC용 직접 입력으로 공고 등록을 이어갈 수 있습니다.',
+              'Chrome 웹 또는 모바일 앱에서 주소 검색을 이용하거나, 직접 입력으로 공고 등록을 이어갈 수 있습니다.',
               style: TextStyle(
                 fontSize: 12,
                 height: 1.4,
@@ -318,7 +323,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            '주소를 입력한 뒤 「입력 적용」 또는 「QC 샘플 주소」를 눌러 주세요.',
+            '주소를 입력한 뒤 「입력 적용」을 눌러 주세요.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppColors.textSecondary.withValues(alpha: 0.95),
@@ -350,7 +355,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
             const SizedBox(height: 12),
             TextButton(
               onPressed: () => setState(() => _showQcManual = true),
-              child: const Text('주소 검색이 안 될 때 직접 입력 (QC)'),
+              child: const Text('주소 검색이 안 될 때 직접 입력'),
             ),
           ],
         ),
@@ -378,7 +383,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _qcPrimaryMode || _showQcManual ? '선택한 근무지 (QC)' : '선택한 근무지',
+                  '선택한 근무지',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -408,8 +413,7 @@ class _WorkplaceAddressSearchPageState extends State<WorkplaceAddressSearchPage>
                   const SizedBox(height: 6),
                   Text(
                     '좌표 ${selected.coordinate!.latitude.toStringAsFixed(5)}, '
-                    '${selected.coordinate!.longitude.toStringAsFixed(5)}'
-                    '${_qcPrimaryMode || _showQcManual ? ' · QC 샘플' : ''}',
+                    '${selected.coordinate!.longitude.toStringAsFixed(5)}',
                     style: TextStyle(
                       fontSize: 11,
                       color: AppColors.textSecondary.withValues(alpha: 0.9),

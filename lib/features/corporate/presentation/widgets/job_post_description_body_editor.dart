@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
 import 'package:map/features/corporate/domain/services/job_post_media_upload_service.dart';
+import 'package:map/features/corporate/presentation/widgets/job_post_description_image.dart';
 
 enum _BodyEditorMode { text, images, html }
 
@@ -269,17 +270,12 @@ class _ImageThumb extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: Image.network(
-            url,
+          child: JobPostDescriptionImage(
+            url: url,
             width: 96,
             height: 96,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              width: 96,
-              height: 96,
-              color: AppColors.primaryLight.withValues(alpha: 0.15),
-              child: const Icon(Icons.image_outlined),
-            ),
+            borderRadius: BorderRadius.circular(10),
           ),
         ),
         Positioned(

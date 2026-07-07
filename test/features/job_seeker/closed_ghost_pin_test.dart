@@ -3,6 +3,9 @@ import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 import 'package:map/features/job_seeker/domain/factories/closed_ghost_job_map_pin_factory.dart';
+import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
+import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
+import 'package:map/features/job_seeker/domain/utils/closed_ghost_pin_suppression_policy.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -66,7 +69,73 @@ void main() {
 
     expect(pin.isClosedGhost, isTrue);
     expect(pin.mapMarkerId, 'ghost_post_p3');
+    expect(pin.mapMarkerId, isNot('p3'));
     expect(pin.closedGhostMessage, '마감된 공고입니다.');
     expect(pin.displayTier, JobMapPinDisplayTier.closedGhost);
+  });
+
+  test('suppresses ghost when same company has active post at workplace', () {
+    const workplace = GeoCoordinate(latitude: 37.01, longitude: 127.23);
+    const profile = CorporateMemberProfile(
+      companyName: '아라컴퍼니',
+      businessRegistrationNumber: '5403100894',
+      department: 'HR',
+      contactPersonName: 'Kim',
+      handlerCode: '0001',
+    );
+    final closed = CorporateJobPost(
+      id: 'old-closed',
+      title: '마감됨',
+      warehouseName: '경기 안성시 소동산길 3-29',
+      hourlyWage: '10,000원',
+      workSchedule: '09-18',
+      summary: '',
+      status: CorporateJobPostStatus.closed,
+      applicantCount: 0,
+      postedAt: DateTime.now().subtract(const Duration(days: 5)),
+      workerCategory: WorkerCategory.daily,
+      registeredBy: profile,
+      workplaceLatitude: workplace.latitude,
+      workplaceLongitude: workplace.longitude,
+    );
+    final active = CorporateJobPost(
+      id: 'new-copy',
+      title: '복사 등록',
+      warehouseName: '경기 안성시 소동산길 3-29',
+      hourlyWage: '10,000원',
+      workSchedule: '09-18',
+      summary: '',
+      status: CorporateJobPostStatus.recruiting,
+      applicantCount: 0,
+      postedAt: DateTime.now(),
+      workerCategory: WorkerCategory.daily,
+      registeredBy: profile,
+      workplaceLatitude: workplace.latitude,
+      workplaceLongitude: workplace.longitude,
+      notificationSettings: JobPostNotificationSettings(
+        basePoints: [
+          PushNotificationBasePoint(
+            id: 'wp',
+            coordinate: workplace,
+            addressLabel: '근무지',
+          ),
+        ],
+      ),
+    );
+
+    expect(
+      ClosedGhostPinSuppressionPolicy.shouldRenderGhostForPost(
+        post: closed,
+        allPosts: [closed, active],
+      ),
+      isFalse,
+    );
+    expect(
+      ClosedGhostPinSuppressionPolicy.shouldRenderGhostForPost(
+        post: closed,
+        allPosts: [closed],
+      ),
+      isTrue,
+    );
   });
 }

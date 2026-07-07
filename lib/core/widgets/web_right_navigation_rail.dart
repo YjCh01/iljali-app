@@ -7,6 +7,15 @@ abstract final class WebLayoutBreakpoints {
   static const wide = 900.0;
   static const railWidth = 88.0;
 
+  /// 알바몬·에펨코리아 등 일반 웹처럼 본문 최대 폭 (우측 레일 포함)
+  static const siteFrameMaxWidth = 1140.0;
+
+  /// 좁은 wide 웹에서도 좌·우 여백이 남도록
+  static const minSideGutter = 24.0;
+
+  /// 좌·우 광고·여백 — 일반 웹처럼 흰 배경
+  static const sideGutterColor = Colors.white;
+
   static bool isWideWeb(BuildContext context) =>
       kIsWeb && MediaQuery.sizeOf(context).width >= wide;
 }

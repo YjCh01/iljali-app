@@ -1,12 +1,15 @@
-from datetime import datetime, timezone
-from uuid import uuid4
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.job_sync_models import ChatMessageRow
+from app.services.chat_message_service import (
+    append_message as persist_message,
+    clear_messages as clear_room_messages,
+    list_messages,
+)
+from app.services.chat_realtime_hub import chat_realtime_hub
+from app.services.push_dispatch_hooks import push_chat_message
 
 router = APIRouter(prefix="/v1/chat-sync", tags=["chat-sync"])
 
@@ -18,59 +21,52 @@ class ChatMessageBody(BaseModel):
     message_type: str = "text"
 
 
-def _row_to_dict(row: ChatMessageRow) -> dict:
-    return {
-        "id": row.id,
-        "application_id": row.application_id,
-        "sender_role": row.sender_role,
-        "sender_name": row.sender_name,
-        "body": row.body,
-        "message_type": row.message_type,
-        "sent_at": row.sent_at.replace(tzinfo=timezone.utc).isoformat()
-        if row.sent_at
-        else None,
-    }
+@router.websocket("/ws/{application_id}")
+async def chat_websocket(
+    websocket: WebSocket,
+    application_id: str,
+    role: str = Query(default="seeker"),
+):
+    normalized = role.strip().lower()
+    if normalized not in {"seeker", "employer", "system"}:
+        normalized = "seeker"
+    await chat_realtime_hub.connect(application_id, websocket)
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            await chat_realtime_hub.handle_client_text(
+                application_id, websocket, raw
+            )
+    except WebSocketDisconnect:
+        await chat_realtime_hub.disconnect(application_id, websocket)
 
 
 @router.get("/{application_id}/messages")
-def list_messages(application_id: str, db: Session = Depends(get_db)):
-    rows = (
-        db.query(ChatMessageRow)
-        .filter(ChatMessageRow.application_id == application_id)
-        .order_by(ChatMessageRow.sent_at.asc())
-        .all()
-    )
-    return {
-        "application_id": application_id,
-        "messages": [_row_to_dict(r) for r in rows],
-    }
+def get_messages(application_id: str, db: Session = Depends(get_db)):
+    items = list_messages(db, application_id)
+    return {"application_id": application_id, "messages": items}
 
 
 @router.post("/{application_id}/messages")
-def append_message(
+async def append_message(
     application_id: str,
     body: ChatMessageBody,
     db: Session = Depends(get_db),
 ):
-    row = ChatMessageRow(
-        id=f"msg_{uuid4().hex[:12]}",
+    row = persist_message(
+        db,
         application_id=application_id,
         sender_role=body.sender_role,
         sender_name=body.sender_name,
         body=body.body,
         message_type=body.message_type,
-        sent_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return _row_to_dict(row)
+    await chat_realtime_hub.broadcast_message(application_id, row)
+    push_chat_message(db, application_id=application_id, message=row)
+    return row
 
 
 @router.delete("/{application_id}/messages")
 def clear_messages(application_id: str, db: Session = Depends(get_db)):
-    db.query(ChatMessageRow).filter(
-        ChatMessageRow.application_id == application_id
-    ).delete()
-    db.commit()
+    clear_room_messages(db, application_id)
     return {"cleared": True, "application_id": application_id}

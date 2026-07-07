@@ -30,13 +30,6 @@ class ContactEntitlementService {
         reason: '사업자 검증 상태로 인해 연락 기능을 사용할 수 없습니다.',
       );
     }
-    if (profile.requiresAdminReview && !profile.adminReviewApproved) {
-      return ContactAccessResult.blocked(
-        reason: profile.adminReviewReason ??
-            '관리자 검토 중입니다. 승인 후 연락 기능이 활성화됩니다.',
-        upsell: false,
-      );
-    }
     return ContactAccessResult.allowedFull;
   }
 

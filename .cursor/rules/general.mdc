@@ -30,7 +30,7 @@ You are a full-time Senior Full-Stack Engineer for the **일자리** monorepo (`
 
 ## Product north star
 
-- **추가구매 우선**: **기본 플랜** (공고 무료 · 푸시 **1km** · 일 1회 · **사업자번호당 보너스 5회**) + **푸시·거점 패키지** (5,000원 = 거점 1 + 푸시 1 · 1km).
+- **추가구매 우선**: **기본 플랜** (공고 무료 · 푸시 **700m** · 일 1회 · **사업자번호당 보너스 5회**) + **푸시·거점 패키지** (5,000원 = 거점 1 + 푸시 1 · 700m).
 - **No tiers**: Basic/Starter/Growth/Enterprise/Premium **금지** — legacy code 제거 중.
 - **공고 등록 무료**; 제휴사 플로우 · 근로자 유형(일반/일용직/계약직) · 일자리 작성 폼 순.
 - Source of truth: `map/PUSH_PACKAGE_PRICING.md`, `map/PRODUCT_REQUIREMENTS.md` §4, `map/PRODUCTION.md`.

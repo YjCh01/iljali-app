@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:map/core/auth/guest_auth_navigation.dart';
 import 'package:map/core/branding/iljari_ad_campaign.dart';
 import 'package:map/core/constants/app_colors.dart';
@@ -6,6 +6,7 @@ import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/legal/widgets/business_disclosure_footer.dart';
 import 'package:map/features/auth/data/local/local_individual_auth_store.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/commute/presentation/widgets/bus_location_tower_pilot_entry_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 import 'package:map/features/job_seeker/domain/utils/seeker_profile_readiness.dart';
 import 'package:map/features/job_seeker/presentation/utils/seeker_shell_access.dart';
@@ -122,6 +123,7 @@ class IndividualMoreTab extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 16),
+          if (signedIn) const BusLocationTowerPilotEntryCard(),
           _MenuTile(
             icon: Icons.home_outlined,
             title: '실주소',

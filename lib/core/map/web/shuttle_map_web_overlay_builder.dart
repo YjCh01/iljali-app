@@ -1,3 +1,4 @@
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/map/web/naver_map_web_layer.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
@@ -34,6 +35,7 @@ abstract final class ShuttleMapWebOverlayBuilder {
           ]
         : <NaverMapWebPolylineSpec>[];
 
+    final activeHex = NaverMapWebColors.hex(MapPinColors.active);
     final markers = <NaverMapWebMarkerSpec>[];
     for (final stop in route.stops) {
       markers.add(
@@ -41,9 +43,11 @@ abstract final class ShuttleMapWebOverlayBuilder {
           id: 'shuttle_stop_${route.id}_${stop.id}',
           latitude: stop.coordinate.latitude,
           longitude: stop.coordinate.longitude,
-          colorHex: colorHex,
-          label: showStopCaptions ? stop.label.substring(0, 1) : '•',
-          size: 14,
+          colorHex: activeHex,
+          label: '',
+          kind: MapPinMarkerKind.busStop,
+          size: TeardropMapPinArt.busWidth,
+          height: TeardropMapPinArt.busHeight,
         ),
       );
       if (showStopCaptions && stop.label.isNotEmpty) {
@@ -57,9 +61,11 @@ abstract final class ShuttleMapWebOverlayBuilder {
           id: 'shuttle_workplace_${route.id}',
           latitude: workplace.latitude,
           longitude: workplace.longitude,
-          colorHex: '#5E35B1',
-          label: '근',
-          size: 16,
+          colorHex: activeHex,
+          label: '',
+          kind: MapPinMarkerKind.workplace,
+          size: TeardropMapPinArt.jobWidth,
+          height: TeardropMapPinArt.jobHeight,
         ),
       );
     }

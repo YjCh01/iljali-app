@@ -13,6 +13,13 @@ _LOWER = re.compile(r"[a-z]")
 _SPECIAL = re.compile(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;/`~]')
 
 QC_LEGACY_PASSWORD = "QcTest1234!"
+_QC_SEEKER_EMAIL = re.compile(r"^seeker-\d{4}@qc\.iljari\.co\.kr$", re.IGNORECASE)
+
+
+def _is_qc_seeker_email(email: str | None) -> bool:
+    if not email:
+        return False
+    return bool(_QC_SEEKER_EMAIL.match(email.strip()))
 
 
 def validate_password_strength(password: str) -> str | None:
@@ -44,9 +51,13 @@ def hash_password(password: str) -> str:
     return f"pbkdf2_sha256$120000${salt}${digest.hex()}"
 
 
-def verify_password(password: str, stored: str | None) -> bool:
+def verify_password(
+    password: str, stored: str | None, *, email: str | None = None
+) -> bool:
     if not stored:
-        return password == QC_LEGACY_PASSWORD
+        if _is_qc_seeker_email(email) and password == QC_LEGACY_PASSWORD:
+            return True
+        return False
     if stored.startswith("pbkdf2_sha256$"):
         try:
             _, iterations, salt, digest_hex = stored.split("$", 3)

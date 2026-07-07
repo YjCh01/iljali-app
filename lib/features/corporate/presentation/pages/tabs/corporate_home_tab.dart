@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:map/core/compliance/services/subscription_renewal_service.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/presentation/utils/corporate_shell_access.dart';
 import 'package:map/core/sync/member_sanction_guard.dart';
 import 'package:map/core/widgets/push_wallet_bonus_feedback.dart';
@@ -11,6 +12,7 @@ import 'package:map/features/corporate/domain/services/push_wallet_service.dart'
 import 'package:map/features/corporate/domain/usecases/get_corporate_dashboard_summary_usecase.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/presentation/pages/job_post_detail_page.dart';
+import 'package:map/features/job_seeker/presentation/widgets/closed_ghost_pin_callout_card.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_callout_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_home_feature_highlights.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_home_map_background.dart';
@@ -25,6 +27,7 @@ class CorporateHomeTab extends StatefulWidget {
     this.onOpenJobPosts,
     this.onOpenChat,
     this.focusPostId,
+    this.focusPost,
     this.onFocusConsumed,
   });
 
@@ -33,6 +36,7 @@ class CorporateHomeTab extends StatefulWidget {
   final VoidCallback? onOpenJobPosts;
   final VoidCallback? onOpenChat;
   final String? focusPostId;
+  final CorporateJobPost? focusPost;
   final VoidCallback? onFocusConsumed;
 
   @override
@@ -96,6 +100,7 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
         builder: (_) => JobPostDetailPage(
           pin: pin,
           employerPreview: isOwnPreview,
+          showActionGrid: false,
         ),
       ),
     );
@@ -205,13 +210,9 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
 
     final user = AuthSession.instance.currentUser;
     final profile = user?.corporateProfile;
-    final contact = profile?.contactPersonName.trim();
-    if (contact != null && contact.isNotEmpty) {
-      return '$contact님, 안녕하세요';
-    }
-    final code = profile?.handlerCode.trim();
-    if (code != null && code.isNotEmpty) {
-      return '담당자 코드 $code님, 안녕하세요';
+    final company = profile?.companyName.trim();
+    if (company != null && company.isNotEmpty) {
+      return '$company님, 안녕하세요';
     }
     return '${user?.name ?? '기업'}님, 안녕하세요';
   }
@@ -222,6 +223,24 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
     final summary = _summary;
 
     if (_loading || summary == null) {
+      if (widget.focusPostId != null) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            CorporateHomeMapBackground(
+              focusPostId: widget.focusPostId,
+              focusPost: widget.focusPost,
+              selectedPostId: _calloutPin?.post.id,
+              onSelectedPinChanged: _onSelectedPinChanged,
+              onFocusConsumed: widget.onFocusConsumed,
+            ),
+            const ColoredBox(
+              color: Color(0x66FFFFFF),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ],
+        );
+      }
       return const ColoredBox(
         color: AppColors.background,
         child: Center(child: CircularProgressIndicator()),
@@ -233,6 +252,7 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
       children: [
         CorporateHomeMapBackground(
           focusPostId: widget.focusPostId,
+          focusPost: widget.focusPost,
           selectedPostId: _calloutPin?.post.id,
           onSelectedPinChanged: _onSelectedPinChanged,
           onFocusConsumed: widget.onFocusConsumed,
@@ -241,12 +261,26 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
           Positioned(
             left: 0,
             right: 0,
-            bottom: MediaQuery.sizeOf(context).height * _sheetSnapSizes.first + 8,
-            child: JobMapPinCalloutCard(
-              pin: _calloutPin!,
-              employerPreview: _isOwnPin(_calloutPin!),
-              onClose: _closeCallout,
-              onViewDetail: () => _openDetailPreview(_calloutPin!),
+            top: MediaQuery.sizeOf(context).height * 0.38,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: JobMapPinCalloutCard.maxCompactWidth,
+                ),
+                child: _calloutPin!.isClosedGhost
+                    ? ClosedGhostPinCalloutCard(
+                        pin: _calloutPin!,
+                        onClose: _closeCallout,
+                      )
+                    : JobMapPinCalloutCard(
+                        pin: _calloutPin!,
+                        compact: true,
+                        employerPreview: _isOwnPin(_calloutPin!),
+                        onClose: _closeCallout,
+                        onViewDetail: () => _openDetailPreview(_calloutPin!),
+                      ),
+              ),
             ),
           ),
         DraggableScrollableSheet(

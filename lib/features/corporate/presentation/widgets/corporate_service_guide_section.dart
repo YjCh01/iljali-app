@@ -24,9 +24,9 @@ class _CorporateServiceGuideSectionState
   static List<_ShortClipData> get _clips {
     return [
       _ShortClipData(
-        hook: '공고를 등록하면!',
+        hook: '공고 등록은 무료입니다.',
         bodyLines: const [
-          '지도 위 근무지에 핀이 표시됩니다.',
+          '등록 시 지도 위 근무지에 공고가 표시됩니다.',
           '근무지 외 다른 곳에 공고를 알리려면',
           '일자리 알림핀 ▽',
           '통근버스 노선표를 지도에 표시하려면',

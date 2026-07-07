@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/hiring/hiring_application.dart';
-import 'package:map/core/hiring/hiring_application_status.dart';
+import 'package:map/core/hiring/hiring_refresh.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/empty_state_card.dart';
@@ -26,7 +27,9 @@ import 'package:map/features/job_seeker/presentation/widgets/job_proposal_card.d
 
 /// 구직자 3번 탭 — 내 지원 (Coupang Flex 스타일)
 class IndividualApplicationsTab extends StatefulWidget {
-  const IndividualApplicationsTab({super.key});
+  const IndividualApplicationsTab({super.key, this.isActive = true});
+
+  final bool isActive;
 
   @override
   State<IndividualApplicationsTab> createState() =>
@@ -55,7 +58,13 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
   @override
   void didUpdateWidget(covariant IndividualApplicationsTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _load();
+    if (widget.isActive && HiringRefresh.consumeIfDirty()) {
+      _load();
+      return;
+    }
+    if (widget.isActive && !oldWidget.isActive) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -265,7 +274,7 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
             if (_localApps.isNotEmpty &&
                 _localApps.any((a) => !_hiringItems
                     .any((h) => h.postId == a.postId))) ...[
-              _SectionHeader(
+              const _SectionHeader(
                 icon: Icons.hourglass_top_outlined,
                 title: '접수 중',
               ),
@@ -324,7 +333,7 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
                   ),
               const SizedBox(height: 20),
             ],
-            _SectionHeader(
+            const _SectionHeader(
               icon: Icons.event_available,
               title: '오늘·다가오는 근무',
             ),
@@ -352,7 +361,7 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
                         : null,
                   )),
             const SizedBox(height: 20),
-            _SectionHeader(
+            const _SectionHeader(
               icon: Icons.directions_bus,
               title: '셔틀 안내',
             ),
@@ -476,6 +485,20 @@ class _IndividualApplicationsTabState extends State<IndividualApplicationsTab> {
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(44),
+                ),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonalIcon(
+                onPressed: () => Navigator.of(context).pushNamed(
+                  AppRoutes.seekerMyBus,
+                ),
+                icon: const Icon(Icons.my_location_rounded),
+                label: const Text(
+                  '내 버스 · 실시간 위치',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(44),
                 ),
               ),

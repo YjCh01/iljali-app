@@ -3,6 +3,7 @@ import 'package:map/core/hiring/hiring_credential_access.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/features/corporate/domain/services/seeker_profile_lookup.dart';
+import 'package:map/features/credential/domain/custom_credential_support.dart';
 import 'package:map/features/credential/domain/entities/credential_catalog.dart';
 import 'package:map/features/job_seeker/domain/entities/employer_visible_credential.dart';
 import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
@@ -93,8 +94,7 @@ class SeekerResumeSnapshot {
   }) {
     if (profile == null) return const [];
     return profile.completeCredentialHoldings.map((holding) {
-      final label = CredentialCatalog.findById(holding.credentialId)?.label ??
-          holding.credentialId;
+      final label = CustomCredentialSupport.displayLabel(holding);
       return EmployerVisibleCredential(
         credentialId: holding.credentialId,
         label: label,

@@ -1,3 +1,4 @@
+import 'package:map/features/credential/domain/custom_credential_support.dart';
 import 'package:map/features/credential/domain/entities/credential_catalog.dart';
 import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_credential_holding.dart';
@@ -13,6 +14,11 @@ extension SeekerProfileCredentialsX on SeekerMemberProfile {
 
   List<SeekerCredentialHolding> get completeCredentialHoldings =>
       credentialHoldings.where((h) => h.isComplete).toList();
+
+  List<SeekerCredentialHolding> get customCredentialHoldings =>
+      credentialHoldings
+          .where((h) => CustomCredentialSupport.isCustomId(h.credentialId))
+          .toList();
 
   bool hasResumeContentFor(ResumeItemKind kind) {
     return switch (kind) {
@@ -57,7 +63,7 @@ extension SeekerProfileCredentialsX on SeekerMemberProfile {
   List<String> credentialLabelsForDisplay({Set<String>? onlyIds}) {
     return completeCredentialHoldings
         .where((h) => onlyIds == null || onlyIds.contains(h.credentialId))
-        .map((h) => CredentialCatalog.findById(h.credentialId)?.label ?? h.credentialId)
+        .map((h) => CustomCredentialSupport.displayLabel(h))
         .toList();
   }
 }

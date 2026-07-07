@@ -14,10 +14,11 @@ class ShuttleRouteStopRowList extends StatefulWidget {
     required this.activeIndex,
     required this.positionAdjustIndex,
     required this.routeColorHex,
-    required this.onSelect,
     required this.onRemove,
     required this.onAdd,
-    required this.onEditDetails,
+    required this.onPickPhoto,
+    required this.onEditTime,
+    this.onEditWorkplaceArrival,
     required this.onAdjustPosition,
     required this.onReorder,
     this.showActivationControls = true,
@@ -28,7 +29,7 @@ class ShuttleRouteStopRowList extends StatefulWidget {
   });
 
   static const listViewportRows = 4;
-  static const rowHeight = 56.0;
+  static const rowHeight = 60.0;
   static const listRadius = 12.0;
 
   final List<CommuteRouteStop> intermediateStops;
@@ -36,10 +37,11 @@ class ShuttleRouteStopRowList extends StatefulWidget {
   final int activeIndex;
   final int positionAdjustIndex;
   final String routeColorHex;
-  final ValueChanged<int> onSelect;
   final ValueChanged<int> onRemove;
   final VoidCallback onAdd;
-  final ValueChanged<int> onEditDetails;
+  final ValueChanged<int> onPickPhoto;
+  final ValueChanged<int> onEditTime;
+  final VoidCallback? onEditWorkplaceArrival;
   final ValueChanged<int> onAdjustPosition;
   final void Function(int oldIndex, int newIndex) onReorder;
   final bool showActivationControls;
@@ -247,13 +249,13 @@ class _ShuttleRouteStopRowListState extends State<ShuttleRouteStopRowList> {
                                 ? null
                                 : () => widget
                                     .onToggleActivationSelection?.call(index),
-                            onTap: () => widget.onSelect(index),
-                            onEditDetails: locked
+                            onTap: () => widget.onAdjustPosition(index),
+                            onPickPhoto: locked
                                 ? null
-                                : () => widget.onEditDetails(index),
-                            onAdjustPosition: locked
+                                : () => widget.onPickPhoto(index),
+                            onEditTime: locked
                                 ? null
-                                : () => widget.onAdjustPosition(index),
+                                : () => widget.onEditTime(index),
                             onRemove: locked
                                 ? null
                                 : () => widget.onRemove(index),
@@ -302,7 +304,10 @@ class _ShuttleRouteStopRowListState extends State<ShuttleRouteStopRowList> {
                 thickness: 1,
                 color: AppColors.searchBarBorder.withValues(alpha: 0.85),
               ),
-              const _ShuttleWorkplaceStopRow(),
+              _ShuttleWorkplaceStopRow(
+                workplaceStop: widget.workplaceStop,
+                onEditArrival: widget.onEditWorkplaceArrival,
+              ),
             ],
           ),
         ),
@@ -326,8 +331,8 @@ class _ShuttleRouteStopRow extends StatelessWidget {
     this.isLocked = false,
     this.onToggleCheck,
     required this.onTap,
-    this.onEditDetails,
-    this.onAdjustPosition,
+    this.onPickPhoto,
+    this.onEditTime,
     this.onRemove,
     required this.dragHandle,
   });
@@ -345,28 +350,35 @@ class _ShuttleRouteStopRow extends StatelessWidget {
   final bool isLocked;
   final VoidCallback? onToggleCheck;
   final VoidCallback onTap;
-  final VoidCallback? onEditDetails;
-  final VoidCallback? onAdjustPosition;
+  final VoidCallback? onPickPhoto;
+  final VoidCallback? onEditTime;
   final VoidCallback? onRemove;
   final Widget dragHandle;
 
+  bool get _hasPhoto => stop.photoPath?.trim().isNotEmpty == true;
+
+  String get _timeDisplay {
+    final time = stop.departureTime?.trim();
+    if (time != null && time.isNotEmpty) return time;
+    return '00:00';
+  }
+
+  bool get _timeMissing =>
+      stop.departureTime == null || stop.departureTime!.trim().isEmpty;
+
   @override
   Widget build(BuildContext context) {
-    final timeLabel = isLocked
+    final statusLabel = isLocked
         ? '노출 중 · 수정 불가'
         : adjusting
             ? '위치 조정 중'
             : isNewStop
-                ? '새 정류장 · 지도에서 위치 조정'
+                ? '새 정류장 · 탭하여 위치 조정'
                 : !showActivationControls
-                    ? (stop.departureTime == null
-                        ? '경유·도착'
-                        : '탑승 ${stop.departureTime}')
+                    ? '탭하여 위치 조정'
                     : stop.exposureActivated
                         ? '지도 노출 중'
-                        : stop.departureTime == null
-                            ? '경유·도착'
-                            : '탑승 ${stop.departureTime}';
+                        : '탭하여 위치 조정';
 
     return Material(
       color: isLocked
@@ -446,7 +458,7 @@ class _ShuttleRouteStopRow extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      adjusting ? '위치 조정 중' : timeLabel,
+                      adjusting ? '위치 조정 중' : statusLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -464,18 +476,23 @@ class _ShuttleRouteStopRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (onEditDetails != null)
-                _StopRowAction(
-                  label: '편집',
-                  onTap: onEditDetails!,
-                  color: routeColor,
+              if (onPickPhoto != null)
+                _StopRowIconButton(
+                  tooltip: _hasPhoto ? '사진 변경' : '사진 등록',
+                  icon: _hasPhoto
+                      ? Icons.photo_camera_rounded
+                      : Icons.add_a_photo_outlined,
+                  onTap: onPickPhoto!,
+                  color: _hasPhoto ? routeColor : AppColors.textSecondary,
+                  filled: _hasPhoto,
                 ),
-              if (onAdjustPosition != null)
-                _StopRowAction(
-                  label: '수정',
-                  onTap: onAdjustPosition!,
-                  color: adjusting ? routeColor : AppColors.textSecondary,
-                  emphasized: adjusting,
+              if (onEditTime != null)
+                _StopTimeChip(
+                  time: _timeDisplay,
+                  isPlaceholder: _timeMissing,
+                  emphasize: isFirst && _timeMissing,
+                  routeColor: routeColor,
+                  onTap: onEditTime!,
                 ),
               dragHandle,
               if (onRemove != null)
@@ -493,7 +510,13 @@ class _ShuttleRouteStopRow extends StatelessWidget {
 }
 
 class _ShuttleWorkplaceStopRow extends StatelessWidget {
-  const _ShuttleWorkplaceStopRow();
+  const _ShuttleWorkplaceStopRow({
+    required this.workplaceStop,
+    this.onEditArrival,
+  });
+
+  final CommuteRouteStop workplaceStop;
+  final VoidCallback? onEditArrival;
 
   @override
   Widget build(BuildContext context) {
@@ -529,12 +552,12 @@ class _ShuttleWorkplaceStopRow extends StatelessWidget {
               color: Color(0xFF5E35B1),
             ),
             const SizedBox(width: 6),
-            const Expanded(
+            Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     ShuttleRouteStopPolicy.workplaceLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -545,10 +568,12 @@ class _ShuttleWorkplaceStopRow extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '도착지 · 수정 불가',
+                    workplaceStop.arrivalTime?.trim().isNotEmpty == true
+                        ? '도착 ${workplaceStop.arrivalTime} · 알림 기준'
+                        : '도착 시각 입력 · 시계 아이콘 탭',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.textSecondary,
                       fontWeight: FontWeight.w400,
@@ -557,13 +582,132 @@ class _ShuttleWorkplaceStopRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(
-              Icons.lock_clock_outlined,
-              size: 18,
-              color: AppColors.textSecondary.withValues(alpha: 0.55),
-            ),
+            if (onEditArrival != null)
+              _StopTimeChip(
+                time: workplaceStop.arrivalTime?.trim().isNotEmpty == true
+                    ? workplaceStop.arrivalTime!.trim()
+                    : '00:00',
+                isPlaceholder:
+                    workplaceStop.arrivalTime?.trim().isNotEmpty != true,
+                emphasize:
+                    workplaceStop.arrivalTime?.trim().isNotEmpty != true,
+                routeColor: const Color(0xFF5E35B1),
+                onTap: onEditArrival!,
+              )
+            else
+              Icon(
+                Icons.lock_clock_outlined,
+                size: 18,
+                color: AppColors.textSecondary.withValues(alpha: 0.55),
+              ),
             const SizedBox(width: 12),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StopRowIconButton extends StatelessWidget {
+  const _StopRowIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+    required this.color,
+    this.filled = false,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color color;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onTap,
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      icon: Icon(
+        icon,
+        size: 18,
+        color: filled ? color : color.withValues(alpha: 0.82),
+      ),
+      style: filled
+          ? IconButton.styleFrom(
+              backgroundColor: color.withValues(alpha: 0.12),
+            )
+          : null,
+    );
+  }
+}
+
+class _StopTimeChip extends StatelessWidget {
+  const _StopTimeChip({
+    required this.time,
+    required this.isPlaceholder,
+    required this.emphasize,
+    required this.routeColor,
+    required this.onTap,
+  });
+
+  final String time;
+  final bool isPlaceholder;
+  final bool emphasize;
+  final Color routeColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = emphasize
+        ? const Color(0xFFE65100)
+        : isPlaceholder
+            ? AppColors.textSecondary.withValues(alpha: 0.35)
+            : routeColor.withValues(alpha: 0.45);
+    final textColor = isPlaceholder
+        ? AppColors.textSecondary.withValues(alpha: 0.55)
+        : routeColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 2),
+      child: Material(
+        color: emphasize
+            ? const Color(0xFFFFF3E0)
+            : AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.schedule_outlined,
+                  size: 14,
+                  color: textColor.withValues(alpha: isPlaceholder ? 0.7 : 1),
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: textColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -575,13 +719,11 @@ class _StopRowAction extends StatelessWidget {
     required this.label,
     required this.onTap,
     required this.color,
-    this.emphasized = false,
   });
 
   final String label;
   final VoidCallback onTap;
   final Color color;
-  final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
@@ -593,8 +735,8 @@ class _StopRowAction extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 10,
-            fontWeight: emphasized ? FontWeight.w800 : FontWeight.w700,
-            color: color.withValues(alpha: emphasized ? 1 : 0.88),
+            fontWeight: FontWeight.w700,
+            color: color.withValues(alpha: 0.88),
           ),
         ),
       ),

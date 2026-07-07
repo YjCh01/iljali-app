@@ -3,6 +3,7 @@ import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/widgets/korean_calendar.dart';
 import 'package:map/core/widgets/scroll_time_picker.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/entities/work_schedule_spec.dart';
 import 'package:map/features/corporate/domain/utils/work_schedule_codec.dart';
 import 'package:map/features/corporate/presentation/widgets/work_schedule_field_preview.dart';
@@ -14,8 +15,8 @@ class WorkScheduleSelectorField extends StatefulWidget {
     required this.controller,
     this.dailyOnly = false,
     this.firstStartDateOnly = false,
-    this.workPeriodNegotiable = false,
-    this.onWorkPeriodNegotiableChanged,
+    this.workScheduleNegotiable = false,
+    this.onWorkScheduleNegotiableChanged,
     this.onDailyScheduleCommitted,
   });
 
@@ -24,9 +25,9 @@ class WorkScheduleSelectorField extends StatefulWidget {
   final bool dailyOnly;
   /// 정규직 — 근무기간은 첫 근무 시작일만
   final bool firstStartDateOnly;
-  /// 정규직 — 첫 근무 시작일 협의 가능
-  final bool workPeriodNegotiable;
-  final ValueChanged<bool>? onWorkPeriodNegotiableChanged;
+  /// 근무 일정 협의 — 달력 선택 없이 등록 가능
+  final bool workScheduleNegotiable;
+  final ValueChanged<bool>? onWorkScheduleNegotiableChanged;
   /// 일용직 근무일 적용 시 부모에 알림 (급여지급일 자동 설정 등)
   final VoidCallback? onDailyScheduleCommitted;
 
@@ -130,10 +131,18 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
   void _commit() {
     if (_spec.mode == WorkScheduleMode.dailyPick) {
       _spec = _spec.withDerivedDailyBounds();
+    } else if (_spec.mode == WorkScheduleMode.fixedWeekdays ||
+        _spec.mode == WorkScheduleMode.customDates) {
+      if (_spec.weekdayHoursByIndex.isEmpty &&
+          _weekdayHourIndices().isNotEmpty) {
+        _spec = _specWithAllWeekdayDefaults();
+      }
     }
     widget.controller.text = WorkScheduleCodec.encode(
       _spec,
-      workPeriodNegotiable: widget.workPeriodNegotiable,
+      workPeriodNegotiable:
+          widget.workScheduleNegotiable && widget.firstStartDateOnly,
+      workScheduleNegotiable: widget.workScheduleNegotiable,
     );
     if (_spec.mode == WorkScheduleMode.dailyPick) {
       widget.onDailyScheduleCommitted?.call();
@@ -403,15 +412,21 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
     required bool isStart,
     required bool isNight,
     DateTime? dailyDate,
+    int? weekdayIndex,
   }) async {
     final initial = dailyDate != null
         ? () {
             final hours = _spec.hoursForDate(dailyDate);
             return isStart ? hours.start : hours.end;
           }()
-        : isNight
-            ? (isStart ? _spec.nightStart : _spec.nightEnd)
-            : (isStart ? _spec.dayStart : _spec.dayEnd);
+        : weekdayIndex != null
+            ? () {
+                final hours = _spec.hoursForWeekday(weekdayIndex);
+                return isStart ? hours.start : hours.end;
+              }()
+            : isNight
+                ? (isStart ? _spec.nightStart : _spec.nightEnd)
+                : (isStart ? _spec.dayStart : _spec.dayEnd);
     final picked = await showScrollTimePicker(
       context: context,
       initialTime: initial,
@@ -429,6 +444,16 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
         _spec = _spec.copyWith(dailyHoursByDate: hours);
         return;
       }
+      if (weekdayIndex != null) {
+        final current = _spec.hoursForWeekday(weekdayIndex);
+        final next = isStart
+            ? current.copyWith(start: picked)
+            : current.copyWith(end: picked);
+        final hours = Map<int, DailyDayHours>.from(_spec.weekdayHoursByIndex)
+          ..[weekdayIndex] = next;
+        _spec = _spec.copyWith(weekdayHoursByIndex: hours);
+        return;
+      }
       if (isNight) {
         _spec = _spec.copyWith(
           nightStart: isStart ? picked : _spec.nightStart,
@@ -441,6 +466,101 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
         );
       }
     });
+  }
+
+  List<int> _weekdayHourIndices() {
+    if (_spec.mode == WorkScheduleMode.fixedWeekdays) {
+      return _spec.weekdays.toList()..sort();
+    }
+    if (_spec.mode == WorkScheduleMode.customDates) {
+      return List<int>.generate(7, (i) => i);
+    }
+    return const [];
+  }
+
+  WorkScheduleSpec _specWithWeekdays(Set<int> days) {
+    final hours = Map<int, DailyDayHours>.from(_spec.weekdayHoursByIndex);
+    for (final index in days) {
+      hours.putIfAbsent(
+        index,
+        () => DailyDayHours(start: _spec.dayStart, end: _spec.dayEnd),
+      );
+    }
+    hours.removeWhere((key, _) => !days.contains(key));
+    return _spec
+        .copyWith(weekdays: days, weekdayHoursByIndex: hours)
+        .trimWeekdayHoursToSelection();
+  }
+
+  WorkScheduleSpec _specWithAllWeekdayDefaults() {
+    final hours = <int, DailyDayHours>{};
+    for (final index in _weekdayHourIndices()) {
+      hours[index] = DailyDayHours(start: _spec.dayStart, end: _spec.dayEnd);
+    }
+    return _spec.copyWith(weekdayHoursByIndex: hours);
+  }
+
+  List<Widget> _buildWeekdayHourRows(VoidCallback refresh) {
+    final indices = _weekdayHourIndices();
+    if (indices.isEmpty) return const [];
+    return [
+      Text(
+        '요일마다 근무 시간을 다르게 설정할 수 있습니다.',
+        style: TextStyle(
+          fontSize: 12,
+          color: AppColors.textSecondary.withValues(alpha: 0.9),
+        ),
+      ),
+      const SizedBox(height: 8),
+      for (final index in indices) ...[
+        Text(
+          '${WorkScheduleSpec.weekdayLabels[index]}요일',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  await _pickTime(
+                    isStart: true,
+                    isNight: false,
+                    weekdayIndex: index,
+                  );
+                  refresh();
+                },
+                icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+                label: Text(
+                  '시작 ${_padTime(_spec.hoursForWeekday(index).start)}',
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  await _pickTime(
+                    isStart: false,
+                    isNight: false,
+                    weekdayIndex: index,
+                  );
+                  refresh();
+                },
+                icon: const Icon(Icons.schedule_outlined, size: 18),
+                label: Text(
+                  '종료 ${_padTime(_spec.hoursForWeekday(index).end)}',
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+      ],
+    ];
   }
 
   void _appendCustomCycleSlot(ShiftSlotKind slot) {
@@ -487,7 +607,9 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
 
             final preview = WorkScheduleCodec.encode(
               _spec,
-              workPeriodNegotiable: widget.workPeriodNegotiable,
+              workPeriodNegotiable:
+                  widget.workScheduleNegotiable && widget.firstStartDateOnly,
+              workScheduleNegotiable: widget.workScheduleNegotiable,
             );
             final cycle = _spec.rotatingCycle;
             final isCustomPreset =
@@ -495,7 +617,9 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
             final isDaily = _spec.mode == WorkScheduleMode.dailyPick;
             final isRegular = _spec.firstStartDateOnly;
             final scheduleComplete = _spec.isCompleteFor(
-              workPeriodNegotiable: widget.workPeriodNegotiable,
+              workPeriodNegotiable:
+                  widget.workScheduleNegotiable && widget.firstStartDateOnly,
+              workScheduleNegotiable: widget.workScheduleNegotiable,
             );
 
             return SafeArea(
@@ -582,7 +706,7 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                                 } else if (days.length > 1) {
                                   days.remove(index);
                                 }
-                                _spec = _spec.copyWith(weekdays: days);
+                                _spec = _specWithWeekdays(days);
                               });
                               refresh();
                             },
@@ -599,7 +723,7 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                                 _spec.weekdays.length == _monFri.length,
                             onSelected: (_) {
                               setState(() {
-                                _spec = _spec.copyWith(weekdays: _monFri);
+                                _spec = _specWithWeekdays(_monFri);
                               });
                               refresh();
                             },
@@ -610,7 +734,7 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                                 _spec.weekdays.length == _monSat.length,
                             onSelected: (_) {
                               setState(() {
-                                _spec = _spec.copyWith(weekdays: _monSat);
+                                _spec = _specWithWeekdays(_monSat);
                               });
                               refresh();
                             },
@@ -982,6 +1106,33 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                             );
                           });
                         })(),
+                    ] else if (_spec.mode == WorkScheduleMode.fixedWeekdays ||
+                        _spec.mode == WorkScheduleMode.customDates) ...[
+                      if (_spec.weekdayHoursByIndex.isEmpty &&
+                          _weekdayHourIndices().isNotEmpty) ...[
+                        Text(
+                          '선택한 요일마다 시작·종료 시간을 지정하세요.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary.withValues(alpha: 0.9),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _spec = _specWithAllWeekdayDefaults();
+                            });
+                            refresh();
+                          },
+                          icon: const Icon(Icons.schedule_outlined, size: 18),
+                          label: Text(
+                            '기본 ${_padTime(_spec.dayStart)}~${_padTime(_spec.dayEnd)}로 시작',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      ..._buildWeekdayHourRows(refresh),
                     ] else ...[
                       Row(
                         children: [
@@ -1069,34 +1220,6 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                         ),
                       ),
                     ],
-                    if (isRegular) ...[
-                      const SizedBox(height: 12),
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        value: widget.workPeriodNegotiable,
-                        onChanged: (value) {
-                          widget.onWorkPeriodNegotiableChanged?.call(
-                            value ?? false,
-                          );
-                          refresh();
-                        },
-                        title: const Text(
-                          '협의가능',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '첫 근무 시작일을 선택하지 않아도 협의로 표시할 수 있습니다.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary.withValues(alpha: 0.9),
-                          ),
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: scheduleComplete
@@ -1131,11 +1254,27 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
     setState(() {});
   }
 
+  void _setWorkScheduleNegotiable(bool value) {
+    widget.onWorkScheduleNegotiableChanged?.call(value);
+    if (value) {
+      if (widget.controller.text.trim().isEmpty) {
+        widget.controller.text = WorkScheduleNegotiable.label;
+      }
+    } else if (WorkScheduleNegotiable.isLabel(widget.controller.text)) {
+      widget.controller.clear();
+    }
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final raw = widget.controller.text.trim();
     final hasValue = raw.isNotEmpty;
-    final previewModel = WorkSchedulePreviewFormatter.fromRaw(raw);
+    final displayRaw =
+        widget.workScheduleNegotiable && WorkScheduleNegotiable.isLabel(raw)
+            ? WorkScheduleNegotiable.label
+            : raw;
+    final previewModel = WorkSchedulePreviewFormatter.fromRaw(displayRaw);
     final needsExpand = previewModel?.needsExpand ?? false;
 
     return Column(
@@ -1174,7 +1313,7 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: WorkScheduleFieldPreview(
-                      raw: raw,
+                      raw: displayRaw,
                       expanded: _previewExpanded,
                       placeholder: widget.dailyOnly
                           ? '근무일 선택'
@@ -1190,6 +1329,27 @@ class _WorkScheduleSelectorFieldState extends State<WorkScheduleSelectorField> {
                   ),
                 ],
               ),
+            ),
+          ),
+        ),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: widget.workScheduleNegotiable,
+          onChanged: (value) => _setWorkScheduleNegotiable(value ?? false),
+          title: const Text(
+            WorkScheduleNegotiable.label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          subtitle: Text(
+            '체크하면 달력에서 일정을 고르지 않아도 됩니다.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: AppColors.textSecondary.withValues(alpha: 0.9),
             ),
           ),
         ),

@@ -13,6 +13,7 @@ import 'package:map/features/corporate/presentation/widgets/corporate_exposure_m
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase.dart';
+import 'package:map/features/job_seeker/presentation/widgets/closed_ghost_pin_feedback.dart';
 
 /// 홈 — 우리 공고 + 주변 채용 mock 지도 (확대 · 패닝 · 핀만)
 class CorporateHomeExposureMap extends StatefulWidget {
@@ -93,6 +94,10 @@ class _CorporateHomeExposureMapState extends State<CorporateHomeExposureMap> {
   void _toggleExpanded() => setState(() => _expanded = !_expanded);
 
   void _onPinTap(JobMapPin pin) {
+    if (pin.isClosedGhost) {
+      ClosedGhostPinFeedback.showSnackBar(context);
+      return;
+    }
     final isOwn = _ownPostIds.contains(pin.post.id);
     if (isOwn) {
       ScaffoldMessenger.of(context).showSnackBar(

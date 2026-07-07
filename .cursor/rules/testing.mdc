@@ -1,26 +1,41 @@
 ---
 description: Proactive test and lint verification — run, fix, repeat
-globs: "{map/test/**,map/lib/**,server/**}"
+globs: "{test/**,lib/**,server/**,run*.sh,scripts/**}"
 alwaysApply: false
 ---
 
 # Testing — Verify Before Done
 
+## API target (기본: NCP 서버)
+
+- **기본:** `http://api.iljari.app:8000` — `scripts/remote_api.env` SSOT
+- **앱/UI:** 맥에서 `run_*.sh` / `flutter test` (클라이언트만 로컬)
+- **통합·QC·E2E:** NCP PostgreSQL + Docker API — `./scripts/seed_ncp_server.sh`
+- **로컬 API (opt-in):** `ILJARI_API_MODE=local ./run_qc.sh`
+
+```bash
+curl -sf http://api.iljari.app:8000/health
+ILJARI_QC_SEEKERS=100 ./scripts/seed_ncp_server.sh
+```
+
+Admin 키 (NCP `.env`와 동일): `iljari-admin-dev-key`
+
 ## Default commands
 
-```powershell
-cd d:\1jari\map; flutter test
-cd d:\1jari\map; flutter analyze
+```bash
+cd ~/Projects/iljari-app
+flutter test
+flutter analyze
 ```
 
 Run **targeted tests first**, then full suite when touching shared core, pricing, or auth.
 
 ### Targeted examples
 
-```powershell
-cd d:\1jari\map; flutter test test/features/corporate/corporate_home_shell_test.dart
-cd d:\1jari\map; flutter test test/features/corporate/
-cd d:\1jari\map; flutter test test/core/compliance/
+```bash
+flutter test test/features/corporate/corporate_home_shell_test.dart
+flutter test test/features/corporate/
+flutter test test/core/compliance/
 ```
 
 ## When to add tests
@@ -35,6 +50,7 @@ Do **not** add trivial widget existence tests.
 
 - Use `SharedPreferences.setMockInitialValues({})` + `AuthSession.instance.signOut()` in tearDown.
 - Scroll before tap if home shell content is below fold (`scrollUntilVisible` / `ensureVisible`).
+- Unit/widget tests는 mock — **실 API 호출 금지** (NCP 의존 없음).
 
 ## Fix loop
 
@@ -50,13 +66,18 @@ Do **not** add trivial widget existence tests.
 
 ## Server
 
-```powershell
-cd d:\1jari\server; python -m pytest
+```bash
+cd server && python -m pytest
 ```
 
-Run when changing `server/app/` routes or compliance logic.
+Run when changing `server/app/` routes or compliance logic. 배포 후 NCP에서 smoke:
+
+```bash
+curl http://api.iljari.app:8000/health
+```
 
 ## CI mindset
 
 - Prefer green suite over skipping tests.
 - Mock external APIs (PG, OCR, maps) — never require real keys in unit tests.
+- Integration QC는 NCP 서버 기준 — 로컬 uvicorn 시드는 `ILJARI_API_MODE=local`일 때만.

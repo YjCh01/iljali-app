@@ -40,6 +40,27 @@ void main() {
     expect(second.last.text, '내일 몇 시에 출근하면 될까요?');
   });
 
+  test('migrateApplicationId merges chat keys', () async {
+    final repo = await ApplicationChatMessageRepository.create();
+    const localId = 'app_local_chat';
+    const serverId = 'app_server_chat';
+
+    await repo.append(
+      localId,
+      ApplicationChatMessage(
+        fromEmployer: false,
+        text: '로컬 메시지',
+        sentAt: DateTime(2026, 6, 19, 10),
+      ),
+    );
+    await repo.migrateApplicationId(localId, serverId);
+
+    expect(await repo.load(localId), isEmpty);
+    final merged = await repo.load(serverId);
+    expect(merged, hasLength(1));
+    expect(merged.single.text, '로컬 메시지');
+  });
+
   test('attachment messages serialize with kind and path', () {
     final message = ApplicationChatMessage(
       fromEmployer: false,

@@ -6,8 +6,11 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/job_seeker/data/datasources/closed_ghost_pin_local_data_source.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/factories/closed_ghost_job_map_pin_factory.dart';
+import 'package:map/features/job_seeker/domain/utils/closed_ghost_pin_suppression_policy.dart';
 import 'package:map/features/map_dashboard/data/datasources/warehouse_local_data_source.dart';
 import 'package:map/features/map_dashboard/domain/entities/warehouse.dart';
+import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
+import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 
 abstract class JobMapPinsDataSource {
   Future<List<JobMapPin>> fetchActiveJobPins({bool includeClosedGhosts = false});
@@ -86,7 +89,10 @@ class JobMapPinsLocalDataSource implements JobMapPinsDataSource {
     var fallbackIndex = 0;
     for (final post in posts) {
       if (coveredPostIds.contains(post.id)) continue;
-      if (!ClosedGhostJobMapPinFactory.qualifiesExpiredFreePost(post)) {
+      if (!ClosedGhostPinSuppressionPolicy.shouldRenderGhostForPost(
+        post: post,
+        allPosts: posts,
+      )) {
         continue;
       }
       final coordinate = await _coordinateForPost(
@@ -124,14 +130,21 @@ class JobMapPinsLocalDataSource implements JobMapPinsDataSource {
     required List<Warehouse> warehouseList,
     required int fallbackIndex,
   }) async {
-    final stored = post.workplaceCoordinate;
-    if (stored != null) return stored;
-
-    final settingsCoord =
-        post.notificationSettings?.basePoints.isNotEmpty == true
-            ? post.notificationSettings!.basePoints.first.coordinate
-            : null;
-    if (settingsCoord != null) return settingsCoord;
+    final resolved = await JobPostWorkplaceResolver.resolveMapWorkplaceCoordinateAsync(post);
+    if (!isLikelyDefaultPushMapCenter(resolved) ||
+        isDefaultPushMapAddressLabel(post.warehouseName)) {
+      if (!isLikelyDefaultPushMapCenter(resolved)) {
+        if (post.workplaceLatitude == null) {
+          await jobPosts.updateJobPost(
+            post.copyWith(
+              workplaceLatitude: resolved.latitude,
+              workplaceLongitude: resolved.longitude,
+            ),
+          );
+        }
+        return resolved;
+      }
+    }
 
     final warehouse = _matchWarehouse(post, warehouseList);
     if (warehouse != null) {

@@ -8,6 +8,7 @@ SIGNUP_BONUS_GRANT = 5
 class EmployerPushWalletResponse(BaseModel):
     company_key: str
     package_credits: int = 0
+    push_ticket_credits: int = 0
     cash_balance_krw: int = 0
     signup_bonus_remaining: int = 0
     location_slots_from_packages: int = 0
@@ -19,6 +20,7 @@ class EmployerPushWalletResponse(BaseModel):
 
 class EmployerPushWalletUpsert(BaseModel):
     package_credits: int | None = None
+    push_ticket_credits: int | None = None
     cash_balance_krw: int | None = None
     signup_bonus_remaining: int | None = None
     location_slots_from_packages: int | None = None

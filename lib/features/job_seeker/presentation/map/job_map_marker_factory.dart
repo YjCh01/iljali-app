@@ -1,47 +1,65 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
-import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
-import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
-/// 채용 공고 → 클러스터 가능 마커 (등급별 크기·색상)
+/// 채용 공고 → 클러스터 가능 마커 (근무지 / 알림 / 유령)
 abstract final class JobMapMarkerFactory {
-  static NClusterableMarker create(
+  static MapPinStyle _styleFor(JobMapPin pin) {
+    if (pin.isClosedGhost) return MapPinStyle.workplace;
+    return TeardropMapPinArt.styleForTier(pin.displayTier);
+  }
+
+  static Future<NClusterableMarker> create(
     JobMapPin pin, {
     void Function(JobMapPin pin)? onTap,
     bool isOwn = false,
     bool isSelected = false,
-  }) {
-    final tier = pin.displayTier;
-    var size = tier.markerSize;
-    if (isSelected) size *= 1.18;
-    else if (isOwn) size *= 1.06;
+  }) async {
+    var scale = 1.0;
+    if (isSelected) {
+      scale = 1.12;
+    } else if (isOwn) {
+      scale = 1.06;
+    }
+
+    final style = _styleFor(pin);
+    final bodyColor = isSelected
+        ? MapPinColors.selected
+        : pin.isClosedGhost
+            ? MapPinColors.ghost
+            : MapPinColors.active;
+
+    final icon = await MapPinOverlayIconCache.pin(
+      style: style,
+      bodyColor: bodyColor,
+      selected: isSelected,
+      scale: scale,
+    );
+
+    final (w, h) = switch (style) {
+      MapPinStyle.busStop => (
+          TeardropMapPinArt.busWidth * scale,
+          TeardropMapPinArt.busHeight * scale,
+        ),
+      _ => (
+          TeardropMapPinArt.pinWidth * scale,
+          TeardropMapPinArt.pinHeight * scale,
+        ),
+    };
 
     final marker = NClusterableMarker(
       id: pin.mapMarkerId,
       position: NLatLng(pin.latitude, pin.longitude),
       tags: {
         'type': pin.isClosedGhost ? 'closed_ghost' : 'job_post',
-        'pin_tier': tier.name,
+        'pin_tier': pin.displayTier.name,
         if (isOwn) 'own': '1',
         if (isSelected) 'selected': '1',
       },
-      iconTintColor: isSelected
-          ? const Color(0xFFFF6F00)
-          : pin.isClosedGhost
-              ? tier.pinColor.withValues(alpha: 0.72)
-              : isOwn
-                  ? AppColors.primary
-                  : tier.pinColor,
-      size: Size(size, size),
-      caption: NOverlayCaption(
-        text: tier == JobMapPinDisplayTier.standard
-            ? '1'
-            : tier.shapeGlyph,
-        color: Colors.white,
-        haloColor: Colors.transparent,
-        textSize: 14,
-      ),
+      icon: icon,
+      size: Size(w, h),
+      caption: null,
       isHideCollidedCaptions: true,
     );
 
@@ -52,23 +70,25 @@ abstract final class JobMapMarkerFactory {
     return marker;
   }
 
-  static Set<NClusterableMarker> createAll(
+  static Future<Set<NClusterableMarker>> createAll(
     List<JobMapPin> pins, {
     void Function(JobMapPin pin)? onTap,
     Set<String>? ownPostIds,
     String? selectedPostId,
-  }) {
-    return pins
-        .map(
-          (pin) => create(
-            pin,
-            onTap: onTap,
-            isOwn: ownPostIds?.contains(pin.post.id) ?? false,
-            isSelected: selectedPostId != null &&
-                (selectedPostId == pin.post.id ||
-                    selectedPostId == pin.mapMarkerId),
-          ),
-        )
-        .toSet();
+  }) async {
+    final markers = <NClusterableMarker>{};
+    for (final pin in pins) {
+      markers.add(
+        await create(
+          pin,
+          onTap: onTap,
+          isOwn: ownPostIds?.contains(pin.post.id) ?? false,
+          isSelected: selectedPostId != null &&
+              (selectedPostId == pin.post.id ||
+                  selectedPostId == pin.mapMarkerId),
+        ),
+      );
+    }
+    return markers;
   }
 }

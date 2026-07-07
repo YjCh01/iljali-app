@@ -1,6 +1,9 @@
 import 'package:web/web.dart' as web;
 
-enum NaverDirectionsMode { car, transit, walk }
+import 'package:map/core/utils/naver_directions_url.dart';
+
+export 'package:map/core/utils/naver_directions_url.dart'
+    show NaverDirectionsMode;
 
 Future<bool> openNaverDirections({
   required String destinationLabel,
@@ -8,32 +11,24 @@ Future<bool> openNaverDirections({
   double? destinationLongitude,
   double? originLatitude,
   double? originLongitude,
+  String? originLabel,
   NaverDirectionsMode mode = NaverDirectionsMode.car,
 }) async {
-  final trimmed = destinationLabel.trim();
-  if (trimmed.isEmpty &&
-      (destinationLatitude == null || destinationLongitude == null)) {
+  try {
+    final url = buildNaverDirectionsUrl(
+      destinationLabel: destinationLabel,
+      destinationLatitude: destinationLatitude,
+      destinationLongitude: destinationLongitude,
+      originLatitude: originLatitude,
+      originLongitude: originLongitude,
+      originLabel: originLabel,
+      mode: mode,
+    );
+    web.window.open(url, '_blank');
+    return true;
+  } on ArgumentError {
     return false;
   }
-
-  final destination = destinationLatitude != null && destinationLongitude != null
-      ? '${destinationLongitude.toStringAsFixed(6)},${destinationLatitude.toStringAsFixed(6)}'
-      : Uri.encodeComponent(trimmed);
-
-  final origin = originLatitude != null && originLongitude != null
-      ? '${originLongitude.toStringAsFixed(6)},${originLatitude.toStringAsFixed(6)}'
-      : '-';
-
-  final modePath = switch (mode) {
-    NaverDirectionsMode.car => 'car',
-    NaverDirectionsMode.transit => 'transit',
-    NaverDirectionsMode.walk => 'walk',
-  };
-
-  final url =
-      'https://map.naver.com/v5/directions/$origin/$destination/-/$modePath';
-  web.window.open(url, '_blank');
-  return true;
 }
 
 Future<bool> openMapsSearch({

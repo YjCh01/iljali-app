@@ -37,6 +37,7 @@ import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/corporate/domain/entities/push_dispatch_target.dart';
 import 'package:map/features/corporate/domain/entities/push_ticket_catalog.dart';
 import 'package:map/features/corporate/domain/services/push_dispatch_target_resolver.dart';
+import 'package:map/features/corporate/domain/usecases/delete_corporate_job_post_usecase.dart';
 import 'package:map/features/corporate/domain/usecases/get_corporate_job_posts_usecase.dart';
 import 'package:map/features/corporate/domain/usecases/save_corporate_job_post_usecase.dart';
 
@@ -389,26 +390,21 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
 
     final ownerKey =
         AuthSession.instance.currentUser?.corporateProfile?.companyKey;
-    final deleted = await _dataSource.deleteJobPost(
-      post.id,
+    final result = await const DeleteCorporateJobPostUseCase(
+      CorporateJobPostLocalDataSourceImpl(),
+    ).call(
+      postId: post.id,
       ownerCompanyKey: ownerKey,
     );
 
     if (!mounted) return;
 
-    if (!deleted) {
-
+    if (!result.deletedLocally) {
       ScaffoldMessenger.of(context).showSnackBar(
-
         const SnackBar(content: Text('공고를 삭제하지 못했습니다.')),
-
       );
-
       return;
-
     }
-
-
 
     JobBoardRefresh.markUpdated();
 
@@ -417,9 +413,13 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-
-      const SnackBar(content: Text('공고가 삭제되었습니다.')),
-
+      SnackBar(
+        content: Text(
+          result.syncedToServer
+              ? '공고가 삭제되었습니다.'
+              : '공고가 삭제되었습니다. 서버 동기화에 실패했습니다. 네트워크 확인 후 다시 삭제해 주세요.',
+        ),
+      ),
     );
 
   }

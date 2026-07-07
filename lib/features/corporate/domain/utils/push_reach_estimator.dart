@@ -3,6 +3,28 @@ import 'dart:math' as math;
 import 'package:map/features/corporate/domain/entities/push_dispatch_target.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 
+/// PUSH 발송 대상 좌표 (서버 FCM 반경 매칭)
+class RecruitmentPushTargetArgs {
+  const RecruitmentPushTargetArgs({
+    required this.latitude,
+    required this.longitude,
+    required this.radiusMeters,
+    this.label = '',
+  });
+
+  final double latitude;
+  final double longitude;
+  final int radiusMeters;
+  final String label;
+
+  Map<String, dynamic> toJson() => {
+        'latitude': latitude,
+        'longitude': longitude,
+        'radius_meters': radiusMeters,
+        'label': label,
+      };
+}
+
 /// PUSH 발송 완료 화면 인자
 class PushDispatchArgs {
   const PushDispatchArgs({
@@ -14,6 +36,7 @@ class PushDispatchArgs {
     this.companyName,
     this.targetLabel,
     this.targetKind,
+    this.recruitmentTargets,
   });
 
   final PushRadiusTier radiusTier;
@@ -25,6 +48,7 @@ class PushDispatchArgs {
   final String? companyName;
   final String? targetLabel;
   final PushDispatchTargetKind? targetKind;
+  final List<RecruitmentPushTargetArgs>? recruitmentTargets;
 }
 
 /// 예상 PUSH 도달 인원 (MVP mock — 추후 서버 집계로 교체)

@@ -1,9 +1,12 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:map/core/api/iljari_api_client.dart';
+import 'package:map/core/config/env_config.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 import 'package:map/features/job_seeker/data/repositories/seeker_push_inbox_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_push_notification.dart';
-import 'package:map/features/corporate/domain/utils/push_reach_estimator.dart';
 
 /// 공고 등록 완료 후 PUSH 알림 전송 진행·완료 화면
 class CorporateJobPostPushDispatchPage extends StatefulWidget {
@@ -44,10 +47,39 @@ class _CorporateJobPostPushDispatchPageState
             _completed = true;
             _displayReach = _targetReach;
           });
-          _recordSeekerPushDelivery();
+          _dispatchRealPush();
         }
       });
     _controller.forward();
+  }
+
+  Future<void> _dispatchRealPush() async {
+    await _recordSeekerPushDelivery();
+    final args = widget.args;
+    final targets = args.recruitmentTargets;
+    if (targets == null ||
+        targets.isEmpty ||
+        !EnvConfig.isComplianceApiEnabled) {
+      return;
+    }
+    final postId = args.jobPostId;
+    if (postId == null || postId.isEmpty) return;
+
+    final profile = AuthSession.instance.currentUser?.corporateProfile;
+    final client = IljariApiClient();
+    if (!client.isEnabled) return;
+
+    try {
+      await client.dispatchRecruitmentPush(
+        postId: postId,
+        title: args.jobTitle ?? '',
+        companyName: args.companyName ?? profile?.companyName ?? '',
+        companyKey: profile?.companyKey ?? '',
+        targets: targets.map((item) => item.toJson()).toList(),
+      );
+    } on Object {
+      // 로컬 받은함·UI는 유지 — FCM 미설정·오프라인
+    }
   }
 
   void _onProgress() {

@@ -8,7 +8,15 @@ from fastapi.staticfiles import StaticFiles
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.config import settings
-from app.database import Base, engine, ensure_qc_member_schema
+from app.database import (
+    Base,
+    engine,
+    ensure_abuse_flag_schema,
+    ensure_admin_announcement_schema,
+    ensure_qc_member_schema,
+    ensure_push_wallet_schema,
+)
+from app.notification_models import DevicePushTokenRow  # noqa: F401
 from app.insurance_auth_models import (  # noqa: F401
     InsuranceAuthSession,
     MonthlyReemployment,
@@ -23,12 +31,21 @@ from app.job_sync_models import (  # noqa: F401
     JobPostRow,
     PaymentOrderRow,
 )
+from app.pilot_models import AppPilotProgramRow, BusLocationTowerSessionRow  # noqa: F401
+from app.shuttle_models import (
+    CommuteRouteRow,
+    SeekerShuttlePreferenceRow,
+    ShuttleRouteShareConsentRow,
+)
 from app.qc_models import (  # noqa: F401
     AdminAuditLogRow,
     ClosedGhostPinRow,
+    ClosedGhostRouteRow,
+    AdminAnnouncementRow,
     CompanySanctionRow,
     JobPostEntitlementRow,
     MemberSanctionHistoryRow,
+    MemberSocialLinkRow,
     QcMemberRow,
 )
 from app.permanent_commission_models import (  # noqa: F401
@@ -37,6 +54,7 @@ from app.permanent_commission_models import (  # noqa: F401
     PermanentEmployment,
 )
 from app.jobs.scheduler import start_reverify_scheduler, stop_reverify_scheduler
+from app.services.social_auth_service import social_mock_enabled
 from app.routers import (
     addresses,
     admin,
@@ -50,17 +68,23 @@ from app.routers import (
     job_import,
     job_media,
     metrics,
-    ocr,
+    pilot,
+    shuttle,
     notifications,
+    ocr,
     payment_webhook,
     payments,
     permanent_commission,
     push_wallet,
+    social_auth,
     sync,
 )
 
 Base.metadata.create_all(bind=engine)
 ensure_qc_member_schema()
+ensure_push_wallet_schema()
+ensure_admin_announcement_schema()
+ensure_abuse_flag_schema()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -94,6 +118,7 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 app.include_router(compliance.router)
 app.include_router(auth.router)
+app.include_router(social_auth.router)
 app.include_router(addresses.router)
 app.include_router(admin.router)
 app.include_router(admin.sub_router)
@@ -108,6 +133,8 @@ app.include_router(push_wallet.router)
 app.include_router(notifications.router)
 app.include_router(job_board.router)
 app.include_router(job_import.router)
+app.include_router(pilot.router)
+app.include_router(shuttle.router)
 app.include_router(job_media.router)
 app.include_router(hiring.router)
 app.include_router(chat_sync.router)
@@ -141,6 +168,7 @@ def health():
         "status": "ok",
         "nts_configured": bool(settings.nts_api_key),
         "toss_configured": bool(settings.toss_secret_key),
+        "free_exposure_promo": settings.is_free_exposure_promo,
         "toss_client_configured": bool(settings.toss_client_key),
         "database_url": settings.database_url.split("://", 1)[0],
         "insurance_cert_provider": (
@@ -165,4 +193,5 @@ def health():
         "qc_payment_mode": settings.qc_payment_mode,
         "auth_configured": bool(settings.auth_token_secret or settings.admin_api_key),
         "sms_provider": settings.sms_provider,
+        "social_auth_mock": social_mock_enabled(),
     }

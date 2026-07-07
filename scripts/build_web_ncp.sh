@@ -65,16 +65,22 @@ case "${VARIANT}" in
 esac
 
 naver_sync_flutter_defines || true
+chmod +x ./scripts/sync_web_icons.sh
+./scripts/sync_web_icons.sh
 flutter pub get
 
 echo "[web] build variant=${VARIANT} base-href=${BASE_HREF} api=${API_URL}"
 # shellcheck disable=SC2086
-flutter build web --release \
+if ! flutter build web --release \
   --base-href="${BASE_HREF}" \
   "${EXTRA_DEFINES[@]}" \
-  ${WEB_DEFINE} ${NAVER_DEFINE}
+  ${WEB_DEFINE} ${NAVER_DEFINE}; then
+  echo "ERROR: flutter build web failed (variant=${VARIANT})" >&2
+  exit 1
+fi
 
 rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}"
 cp -R build/web/. "${OUT_DIR}/"
+date > "${OUT_DIR}/.iljari_build_ok"
 echo "[web] artifact → ${OUT_DIR}"

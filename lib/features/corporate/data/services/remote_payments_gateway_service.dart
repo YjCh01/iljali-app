@@ -24,6 +24,9 @@ class RemotePaymentsGatewayService implements PaymentGatewayService {
   @override
   Future<PaymentResult> requestPayment(PaymentRequest request) async {
     if (_baseUrl.isEmpty) {
+      if (kReleaseMode && !EnvConfig.qcMode) {
+        return PaymentResult.fail('결제 서버가 설정되지 않았습니다.');
+      }
       return _fallback.requestPayment(request);
     }
 
@@ -64,6 +67,9 @@ class RemotePaymentsGatewayService implements PaymentGatewayService {
         mock: map['mock'] as bool? ?? false,
       );
     } on Object {
+      if (kReleaseMode && !EnvConfig.qcMode) {
+        return PaymentResult.fail('결제 서버에 연결할 수 없습니다.');
+      }
       return _fallback.requestPayment(request);
     }
   }

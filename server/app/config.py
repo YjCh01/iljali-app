@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +15,8 @@ class Settings(BaseSettings):
     nts_api_url: str = "https://api.odcloud.kr/api/nts-businessman/v1/status"
     toss_secret_key: str = ""
     toss_client_key: str = ""
+    # true/false 강제. 비우면 toss_secret_key 미설정 시 무료 노출 프로모션 ON
+    free_exposure_promo: str = ""
     clova_ocr_invoke_url: str = ""
     clova_ocr_secret: str = ""
     toss_webhook_secret: str = ""
@@ -75,10 +78,49 @@ class Settings(BaseSettings):
     sms_aligo_user_id: str = ""
     sms_sender_id: str = ""
     require_nts_api_key: bool = False
+    require_clova_ocr: bool = False
 
     # 공고 본문 이미지 — FastAPI StaticFiles `/media/job-posts`
     job_media_dir: str = "./uploads/job-media"
     api_public_base_url: str = "http://127.0.0.1:8000"
+
+    # Firebase Cloud Messaging — 서비스 계정 JSON (한 줄 문자열)
+    fcm_service_account_json: str = ""
+
+    # 소셜 로그인 OAuth (미설정 시 mock 모드)
+    social_auth_mock: bool = False
+    social_app_success_url: str = "https://iljari.app/auth/social-complete"
+    kakao_oauth_client_id: str = ""
+    kakao_oauth_client_secret: str = ""
+    naver_oauth_client_id: str = ""
+    naver_oauth_client_secret: str = ""
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+
+    @property
+    def is_free_exposure_promo(self) -> bool:
+        raw = self.free_exposure_promo.strip().lower()
+        if raw in ("1", "true", "yes", "on"):
+            return True
+        if raw in ("0", "false", "no", "off"):
+            return False
+        return not bool(self.toss_secret_key)
+
+    @field_validator(
+        "kakao_oauth_client_id",
+        "kakao_oauth_client_secret",
+        "naver_oauth_client_id",
+        "naver_oauth_client_secret",
+        "google_oauth_client_id",
+        "google_oauth_client_secret",
+        "kakao_rest_api_key",
+        mode="before",
+    )
+    @classmethod
+    def _strip_oauth_secrets(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 settings = Settings()

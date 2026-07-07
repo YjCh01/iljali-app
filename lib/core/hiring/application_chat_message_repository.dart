@@ -49,15 +49,14 @@ class ApplicationChatMessageRepository {
       if (client.isEnabled) {
         try {
           final remote = await client.listChatMessages(applicationId);
-          if (remote.isNotEmpty) {
-            final mapped = remote.map(_fromServerRow).toList()
-              ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
-            await saveAll(applicationId, mapped);
-            return mapped;
-          }
+          final mapped = remote.map(_fromServerRow).toList()
+            ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+          await saveAll(applicationId, mapped);
+          return mapped;
         } on Object {
           // 서버 실패 시 로컬 폴백
         }
+        return load(applicationId);
       }
     }
 
@@ -69,6 +68,21 @@ class ApplicationChatMessageRepository {
     );
   }
 
+  /// 지원 ID 불일치 시 로컬·서버 채팅 키 통합
+  Future<void> migrateApplicationId(String fromId, String toId) async {
+    if (fromId.isEmpty || toId.isEmpty || fromId == toId) return;
+    final fromMessages = await load(fromId);
+    if (fromMessages.isEmpty) {
+      await _prefs.remove(_key(fromId));
+      return;
+    }
+    final toMessages = await load(toId);
+    final merged = [...toMessages, ...fromMessages]
+      ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    await saveAll(toId, merged);
+    await _prefs.remove(_key(fromId));
+  }
+
   Future<void> saveAll(
     String applicationId,
     List<ApplicationChatMessage> messages,
@@ -77,13 +91,49 @@ class ApplicationChatMessageRepository {
     await _prefs.setString(_key(applicationId), encoded);
   }
 
-  Future<void> append(
+  Future<ApplicationChatMessage> append(
     String applicationId,
     ApplicationChatMessage message,
   ) async {
     final current = await load(applicationId);
-    await saveAll(applicationId, [...current, message]);
-    await _pushToServer(applicationId, message);
+    var stored = message;
+    final serverRow = await _pushToServer(applicationId, message);
+    if (serverRow != null) {
+      stored = parseServerRow(serverRow, fallback: message);
+    }
+    await saveAll(applicationId, [...current, stored]);
+    return stored;
+  }
+
+  /// WebSocket·REST 수신 메시지를 로컬에 병합 (중복 ID 스킵)
+  Future<ApplicationChatMessage?> applyIncomingRow(
+    String applicationId,
+    Map<String, dynamic> row,
+  ) async {
+    final parsed = parseServerRow(row);
+    final current = await load(applicationId);
+    if (parsed.id != null && current.any((m) => m.id == parsed.id)) {
+      return null;
+    }
+    await saveAll(applicationId, [...current, parsed]);
+    return parsed;
+  }
+
+  ApplicationChatMessage parseServerRow(
+    Map<String, dynamic> row, {
+    ApplicationChatMessage? fallback,
+  }) {
+    final mapped = _fromServerRow(row);
+    if (mapped.id != null || fallback == null) return mapped;
+    return ApplicationChatMessage(
+      id: fallback.id,
+      fromEmployer: mapped.fromEmployer,
+      text: mapped.text,
+      sentAt: mapped.sentAt,
+      isSystem: mapped.isSystem,
+      kind: mapped.kind,
+      attachmentPath: fallback.attachmentPath,
+    );
   }
 
   Future<void> appendSystemMessage({
@@ -130,22 +180,22 @@ class ApplicationChatMessageRepository {
     return seeded;
   }
 
-  Future<void> _pushToServer(
+  Future<Map<String, dynamic>?> _pushToServer(
     String applicationId,
     ApplicationChatMessage message,
   ) async {
-    if (!EnvConfig.isComplianceApiEnabled) return;
+    if (!EnvConfig.isComplianceApiEnabled) return null;
     final client = IljariApiClient();
-    if (!client.isEnabled) return;
+    if (!client.isEnabled) return null;
     try {
-      await client.appendChatMessage(applicationId, {
+      return await client.appendChatMessage(applicationId, {
         'sender_role': _senderRole(message),
         'sender_name': message.fromEmployer ? 'employer' : 'seeker',
         'body': message.text,
         'message_type': message.kind.name,
       });
     } on Object {
-      // 로컬 메시지는 유지
+      return null;
     }
   }
 

@@ -12,9 +12,11 @@ import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/domain/entities/shuttle_operation_guide_copy.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_color_utils.dart';
+import 'package:map/features/commute/domain/utils/shuttle_route_schedule.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_route_color_picker.dart';
-import 'package:map/features/commute/presentation/widgets/shuttle_route_stop_editor_sheet.dart';
+import 'package:map/features/commute/presentation/widgets/shuttle_stop_photo_actions.dart';
+import 'package:map/features/commute/presentation/widgets/shuttle_stop_time_picker.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_route_stop_row_list.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
@@ -181,22 +183,59 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
     });
   }
 
-  Future<void> _editStopDetails(int index) async {
+  Future<void> _editWorkplaceArrival() async {
+    final time = await showShuttleStopTimePickerDialog(
+      context,
+      initialTime: _workplaceStop.arrivalTime,
+      title: '근무지 도착 시각',
+      subtitle: '버스 이동 알림 기준의 도착 시각입니다.',
+      required: true,
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _workplaceStop = time.isEmpty
+          ? _workplaceStop.copyWith(clearArrivalTime: true)
+          : _workplaceStop.copyWith(arrivalTime: time);
+    });
+  }
+
+  Future<void> _pickStopPhoto(int index) async {
     if (_isStopLocked(index)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('노출 중인 정류장은 수정할 수 없습니다.')),
       );
       return;
     }
-    final saved = await ShuttleRouteStopEditorSheet.showDetails(
-      context,
-      initialStop: _intermediateStops[index],
-      siblingStops: _stops,
-      isLastStopHint: false,
-    );
-    if (saved == null || !mounted) return;
+    final path = await ShuttleStopPhotoActions.pickFromGallery(context);
+    if (path == null || !mounted) return;
     setState(() {
-      _intermediateStops[index] = saved;
+      _intermediateStops[index] =
+          _intermediateStops[index].copyWith(photoPath: path);
+    });
+  }
+
+  Future<void> _editStopTime(int index) async {
+    if (_isStopLocked(index)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('노출 중인 정류장은 수정할 수 없습니다.')),
+      );
+      return;
+    }
+    final isFirst = index == 0;
+    final time = await showShuttleStopTimePickerDialog(
+      context,
+      initialTime: _intermediateStops[index].departureTime,
+      title: isFirst ? '첫 정류장 탑승 시각' : '정류장 탑승 시각',
+      subtitle: isFirst
+          ? '노선 저장 시 필수입니다. 버스가 이 정류장을 지나는 시각을 입력하세요.'
+          : '선택 입력 · 비우면 경유·도착 정류장으로 처리됩니다.',
+      required: isFirst,
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _intermediateStops[index] = time.isEmpty
+          ? _intermediateStops[index].copyWith(clearDepartureTime: true)
+          : _intermediateStops[index].copyWith(departureTime: time);
     });
   }
 
@@ -366,6 +405,16 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
       ),
       vehicleGuide: _vehicleGuideController.text.trim(),
     );
+
+    final scheduleError = ShuttleRouteSchedule.validateRequiredTimes(route);
+    if (scheduleError != null) {
+      if (showValidationErrors) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(scheduleError)),
+        );
+      }
+      return null;
+    }
 
     final repo = await CommuteRouteRepository.create();
     await repo.upsert(route);
@@ -592,10 +641,11 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
                   routeColorHex: _colorHex,
                   showActivationControls: false,
                   lockedStopIds: widget.lockedStopIds,
-                  onSelect: _selectStop,
                   onRemove: _removeStop,
                   onAdd: _addStop,
-                  onEditDetails: _editStopDetails,
+                  onPickPhoto: _pickStopPhoto,
+                  onEditTime: _editStopTime,
+                  onEditWorkplaceArrival: _editWorkplaceArrival,
                   onAdjustPosition: _startPositionAdjust,
                   onReorder: _onReorder,
                 ),

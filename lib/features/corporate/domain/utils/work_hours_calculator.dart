@@ -67,6 +67,21 @@ abstract final class WorkHoursCalculator {
       return total / count;
     }
 
+    if (spec.mode == WorkScheduleMode.fixedWeekdays && spec.hasVariedWeekdayHours) {
+      var total = 0.0;
+      var count = 0;
+      for (final index in spec.weekdays) {
+        final hours = spec.hoursForWeekday(index);
+        final dayHours =
+            _hoursBetween(hours.start, hours.end, daytime: true);
+        if (dayHours == null) continue;
+        total += dayHours;
+        count++;
+      }
+      if (count == 0) return null;
+      return total / count;
+    }
+
     final dayHours = _hoursBetween(spec.dayStart, spec.dayEnd, daytime: true);
     if (spec.mode != WorkScheduleMode.rotatingShift) {
       return dayHours;

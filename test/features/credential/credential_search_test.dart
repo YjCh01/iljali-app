@@ -15,4 +15,16 @@ void main() {
     final ids = results.map((e) => e.id).toSet();
     expect(ids, contains(CredentialCatalog.securityGuardTraining.id));
   });
+
+  test('보건 검색 시 보건증·건설 안전보건교육 둘 다 (식품 먼저)', () {
+    final results = CredentialSearchService.search('보건');
+    expect(results.length, 2);
+    expect(results[0].id, CredentialCatalog.healthCertificate.id);
+    expect(results[1].id, CredentialCatalog.constructionSafetyBasic.id);
+  });
+
+  test('보건증 검색', () {
+    final results = CredentialSearchService.search('보건증');
+    expect(results.first.id, CredentialCatalog.healthCertificate.id);
+  });
 }

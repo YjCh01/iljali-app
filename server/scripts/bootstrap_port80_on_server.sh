@@ -53,6 +53,7 @@ location /corporate/ {
     try_files $uri $uri/ /corporate/index.html;
 }
 location /admin/ {
+    include /etc/nginx/snippets/admin-ip-allow.conf;
     root /usr/share/nginx/html;
     try_files $uri $uri/ /admin/index.html;
 }

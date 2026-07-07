@@ -7,6 +7,8 @@ import 'package:map/core/session/member_type.dart';
 import 'package:map/features/auth/data/repositories/corporate_auth_repository.dart';
 import 'package:map/features/auth/data/repositories/individual_auth_repository.dart';
 import 'package:map/features/auth/domain/usecases/validate_login_form_usecase.dart';
+import 'package:map/features/auth/domain/utils/auth_error_message.dart';
+import 'package:map/features/auth/presentation/widgets/auth_error_dialog.dart';
 import 'package:map/features/auth/presentation/widgets/auth_form_card.dart';
 import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart';
 import 'package:map/features/auth/presentation/widgets/auth_scaffold.dart';
@@ -106,11 +108,10 @@ class _LoginPageState extends State<LoginPage> {
     } on Object catch (error) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      final message = error
-          .toString()
-          .replaceFirst('ArgumentError: ', '')
-          .replaceFirst('IljariApiException: ', '');
-      _showValidationSnackBar(message);
+      await showAuthErrorDialog(
+        context,
+        message: AuthErrorMessage.fromObject(error),
+      );
     }
   }
 
@@ -122,11 +123,17 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _goToFindAccount() {
-    Navigator.of(context).pushNamed(AppRoutes.findAccount);
+    Navigator.of(context).pushNamed(
+      AppRoutes.findAccount,
+      arguments: widget.memberType,
+    );
   }
 
   void _goToResetPassword() {
-    Navigator.of(context).pushNamed(AppRoutes.resetPassword);
+    Navigator.of(context).pushNamed(
+      AppRoutes.resetPassword,
+      arguments: widget.memberType,
+    );
   }
 
   @override
@@ -183,6 +190,39 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               if (_isIndividual) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: _goToFindAccount,
+                      child: const Text(
+                        '아이디 찾기',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '|',
+                      style: TextStyle(
+                        color: AppColors.textSecondary.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _goToResetPassword,
+                      child: const Text(
+                        '비밀번호 찾기',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

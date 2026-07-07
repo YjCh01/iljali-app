@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
+import 'package:map/core/notifications/push_notification_bootstrap.dart';
+import 'package:map/core/pilot/bus_location_tower_pilot_service.dart';
 import 'package:map/features/corporate/data/repositories/corporate_account_registry.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/services/corporate_org_join_service.dart';
@@ -32,6 +34,9 @@ class AuthSession {
 
   /// 기업 프로필 변경 시 UI 갱신용 (구독·플랜 전환 등)
   final ValueNotifier<int> corporateProfileRevision = ValueNotifier(0);
+
+  /// 구직자 프로필·자격증 변경 시 UI 갱신용
+  final ValueNotifier<int> seekerProfileRevision = ValueNotifier(0);
 
   AuthUser? get currentUser => _user;
 
@@ -132,9 +137,12 @@ class AuthSession {
     if (user.isCorporate && user.corporateProfile != null) {
       await const CorporateOrgJoinService().syncCurrentUser();
     }
+    await PushNotificationBootstrap.bindToSession();
   }
 
   Future<void> signOut() async {
+    await PushNotificationBootstrap.clearOnSignOut();
+    BusLocationTowerPilotService.invalidate();
     _user = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyName);
@@ -169,6 +177,7 @@ class AuthSession {
       email: user.email,
       profile: profile,
     );
+    seekerProfileRevision.value++;
   }
 
   Future<void> updateCorporateProfile(CorporateMemberProfile profile) async {

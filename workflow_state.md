@@ -2,11 +2,11 @@
 
 ## Current Task
 
-- **Admin Web Console Phase A** — 완료; 다음: 구직자 핵심 UX (Phase B)
+- **지원자 채팅 검증 제한 제거** — 완료
 
 ## Backlog (priority order)
 
-1. [ ] **구직자 핵심 4화면** — 지도·상세·지원·채팅·내 지원
+1. [ ] **어드민 셔틀 참여자 UI** — `/shuttle/participants` 패널 카드
 2. [ ] **AdaptiveSheet (웹 우측 패널)** — 결제·알림핀·정류장 핵심만
 3. [ ] **QC DB 스냅샷** — export/import SQL for team-shared baseline
 4. [ ] **공고 full JSON sync** — CorporateJobPost 전체 필드 server payload
@@ -23,6 +23,18 @@
 - `workflow_state.md` updated
 
 ## Progress
+
+- [x] **지원자 채팅 검증 제한 제거** — 서버 `evaluate_contact`·클라이언트 entitlement·지원자/채팅 탭 제한 카드 제거, pytest 2 pass
+
+- [x] **내 버스 세로 노선 타임라인** — `ShuttleRouteVerticalTracker`, seeker my-bus 연동, timeline position test 4 pass
+
+- [x] **셔틀 서버 영속화** — commute_routes·preferences API, repo 서버 우선, pytest 4 pass
+
+- [x] **통근버스 PRD** — 근무지 도착시각·첫정류장 필수, 노선공유 opt-in, 1노선1정류장, ±30분 추적, 관제탑 동의, `shuttle_route_schedule_test` 4 pass
+
+- [x] **셔틀 근무 시작시간 + 내 버스** — admin work_start_time + 확인 다이얼로그, KST 도착 간주 시 추적 중지, 지원·근무 탭 「내 버스」 지도+ETA, pytest 6 pass
+
+- [x] **실시간 셔틀 위치 파일럿** — 어드민 휴대폰 검색·회사/노선 지정·오늘 위치 세션 중지, 담당자 30초 자동 위치 공유, 같은 회사·같은 셔틀 탑승자 20초 추적
 
 - [x] **Admin Web Console Phase A** — shell, 6 panels, stats API, run_admin.sh, Admin 실행.command
 
@@ -88,6 +100,10 @@
 
 ## Completed (recent)
 
+- 2026-07-07 — **내 버스 세로 노선 타임라인** — 공항버스 스타일 노선·정류장·버스 위치 UI, seeker my-bus 연동, test 4 pass
+
+- 2026-07-04 — **실시간 셔틀 위치 파일럿** — A 담당자 위치 공유 + 같은 회사·같은 셔틀 오늘 탑승자 추적; pytest 5 pass; changed Dart analyze no issues
+
 - 2026-06-19 — **웹 PUSH·정류장 지도 + Mac** — NAVER Circle overlay js interop fix; `run_web.sh`; map tests 3 pass
 - 2026-06-19 — **웹 주소 검색 Phase 3** — DaumPostcodeWebEmbed, Chrome 근무지 Daum 플로우, Kakao geocode, web build + 7 tests pass
 
@@ -132,10 +148,9 @@
 
 ## Blockers
 
-- **서버 pytest**: 로컬 venv 미구성
-- **analyze**: `showsShuttleRouteOverlay` 관련 기존 4 errors (extension import, pre-existing)
+- none
 
 ## Verification
 
-- Tests: address QC + map — 7 pass; web build pass
-- Lint: analyze on changed address files — 0 errors (info only)
+- Tests: `flutter test test/features/commute/shuttle_bus_timeline_position_test.dart` — 4 passed
+- Lint: `flutter analyze` on commute timeline files — 0 errors (info only)

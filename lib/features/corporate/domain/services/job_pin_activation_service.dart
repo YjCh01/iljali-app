@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/config/free_exposure_launch_policy.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/features/corporate/domain/entities/exposure_activation_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/corporate_payment_preference.dart';
 import 'package:map/features/corporate/domain/entities/exposure_activation_credit_mode.dart';
@@ -8,6 +10,7 @@ import 'package:map/features/corporate/domain/entities/push_notification_setting
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/services/corporate_payment_navigation_helper.dart';
 import 'package:map/features/corporate/domain/services/exposure_activation_service.dart';
+import 'package:map/features/corporate/domain/services/promo_exposure_activation_helper.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/domain/utils/exposure_slot_policy.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
@@ -31,12 +34,15 @@ class JobPinActivationService {
   JobPinActivationService({
     PushWalletService? walletService,
     ExposureActivationService? exposureActivationService,
+    PromoExposureActivationHelper? promoHelper,
   })  : _walletService = walletService ?? PushWalletService(),
         _exposureActivationService =
-            exposureActivationService ?? ExposureActivationService();
+            exposureActivationService ?? ExposureActivationService(),
+        _promoHelper = promoHelper ?? PromoExposureActivationHelper();
 
   final PushWalletService _walletService;
   final ExposureActivationService _exposureActivationService;
+  final PromoExposureActivationHelper _promoHelper;
 
   Future<JobPinActivationResult> activateSelected({
     required BuildContext context,
@@ -81,6 +87,30 @@ class JobPinActivationService {
     }
 
     final updated = List<PushNotificationBasePoint>.from(points);
+
+    if (await FreeExposureLaunchPolicy.isActive()) {
+      final quota = await _promoHelper.tryConsume(
+        companyKey: profile.companyKey,
+        count: targets.length,
+      );
+      if (!quota.success) {
+        return JobPinActivationResult(
+          success: false,
+          message: quota.message,
+        );
+      }
+      for (final index in targets) {
+        updated[index] = _promoHelper.lockJobPinPromo(updated[index]);
+      }
+      final left = quota.remainingThisMonth;
+      final suffix = left == null ? '' : ' (이번 달 무료 $left회 남음)';
+      return JobPinActivationResult(
+        success: true,
+        updatedPoints: updated,
+        message: '${FreeExposureLaunchPolicy.promoActivationMessage}$suffix',
+      );
+    }
+
     var pending = List<int>.from(targets);
     ExposureActivationCreditMode? preferredMode;
 
@@ -113,7 +143,10 @@ class JobPinActivationService {
       if (!consumed.success) break;
 
       final index = pending.removeAt(0);
-      updated[index] = ExposureSlotPolicy.lockActivation(updated[index]);
+      updated[index] = ExposureSlotPolicy.lockActivation(
+        updated[index],
+        activationSource: ExposureActivationSource.credit,
+      );
     }
 
     if (pending.isEmpty) {
@@ -168,7 +201,10 @@ class JobPinActivationService {
     }
 
     for (final index in pending) {
-      updated[index] = ExposureSlotPolicy.lockActivation(updated[index]);
+      updated[index] = ExposureSlotPolicy.lockActivation(
+        updated[index],
+        activationSource: ExposureActivationSource.payment,
+      );
     }
 
     return JobPinActivationResult(

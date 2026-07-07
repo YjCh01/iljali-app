@@ -115,10 +115,11 @@ class _IndividualHomeShellPageState extends State<IndividualHomeShellPage> {
           ),
           IndividualMyJobsTab(
             key: ValueKey('jobs_${_applicationsRevision}_$_workRevision'),
+            isActive: _currentIndex == 2,
             isWorkSegmentActive: _currentIndex == 2 && _myJobsSegment == 1,
             initialSegment: _myJobsSegment,
           ),
-          const IndividualChatTab(),
+          IndividualChatTab(isActive: _currentIndex == 3),
           const IndividualMoreTab(),
         ],
       ),

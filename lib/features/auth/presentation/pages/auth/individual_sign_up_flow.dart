@@ -20,7 +20,7 @@ enum _IndividualSignUpStep {
   account,
 }
 
-/// 개인회원 1단계 가입 — 휴대폰 본인인증 + 이메일(아이디)·비밀번호
+/// 개인회원 1단계 가입 — 휴대폰 문자 인증(6자리) + 이메일(아이디)·비밀번호
 ///
 /// 실주소·근무지역·스케줄 등 2단계는 [SeekerProfileOnboardingFlow].
 class IndividualSignUpFlow extends StatefulWidget {
@@ -63,7 +63,7 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
   String? _passwordConfirmError;
   String? _termsError;
 
-  static const _stepLabels = ['휴대폰', '본인인증', '계정 만들기'];
+  static const _stepLabels = ['휴대폰', '문자 인증', '계정 만들기'];
 
   @override
   void dispose() {
@@ -180,7 +180,7 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
     if (_submitting) return;
     final token = _phoneVerifiedToken;
     if (token == null || !_phoneVerified) {
-      _snack('휴대폰 본인인증을 완료해 주세요.');
+      _snack('휴대폰 문자 인증을 완료해 주세요.');
       return;
     }
 
@@ -280,7 +280,7 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          '휴대폰 본인인증',
+          '휴대폰 문자 인증',
           style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.w800,
@@ -290,7 +290,7 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
         const SizedBox(height: 8),
         Text(
           '본인 확인을 위해 휴대폰 번호를 인증합니다.\n'
-          '(추후 다날 등 본인인증 연동 예정)',
+          '가입 휴대폰으로 발송된 6자리 인증번호를 입력해 주세요.',
           style: TextStyle(
             fontSize: 14,
             height: 1.45,

@@ -188,13 +188,28 @@ class _SeekerMyDocumentsPageState extends State<SeekerMyDocumentsPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               children: [
-                Text(
-                  '채팅에서 바로 보낼 수 있도록 미리 등록해 두세요.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.45,
-                    color: AppColors.textSecondary.withValues(alpha: 0.95),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '채팅에서 바로 보낼 수 있도록 미리 등록해 보세요!',
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.45,
+                        color: AppColors.textSecondary.withValues(alpha: 0.95),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '개인정보 보호를 위해, 서류 파일은 채용이 확정된 기업회원만 열람할 수 있으니 안심하셔도 됩니다.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.45,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 _DocumentConsentCard(

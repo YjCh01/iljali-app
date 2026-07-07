@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 
-/// 공고 상세 하단 — 문의 · 지원 · 북마크 정사각형 그리드
+/// 공고 상세 하단 — 문의 · 지원 · 북마크
 class JobPostActionGrid extends StatelessWidget {
   const JobPostActionGrid({
     super.key,
@@ -15,6 +15,9 @@ class JobPostActionGrid extends StatelessWidget {
     this.canWithdrawApplication = false,
     this.onWithdrawApply,
   });
+
+  static const _barMaxWidth = 520.0;
+  static const _buttonHeight = 48.0;
 
   final VoidCallback onInquire;
   final VoidCallback onApply;
@@ -45,55 +48,61 @@ class JobPostActionGrid extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: _ActionTile(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  label: '문의하기',
-                  onTap: previewMode ? null : onInquire,
-                  muted: previewMode,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _ActionTile(
-                  icon: canWithdrawApplication
-                      ? Icons.cancel_outlined
-                      : hasApplied
-                          ? Icons.check_circle_outline
-                          : Icons.send_rounded,
-                  label: canWithdrawApplication
-                      ? '지원취소'
-                      : hasApplied
-                          ? '지원됨'
-                          : '지원하기',
-                  onTap: previewMode
-                      ? null
-                      : canWithdrawApplication
-                          ? onWithdrawApply
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _barMaxWidth),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _ActionButton(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      label: '문의하기',
+                      onTap: previewMode ? null : onInquire,
+                      muted: previewMode,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: _ActionButton(
+                      icon: canWithdrawApplication
+                          ? Icons.cancel_outlined
                           : hasApplied
-                              ? null
-                              : onApply,
-                  accent: !previewMode && !hasApplied,
-                  muted: previewMode,
-                  danger: canWithdrawApplication,
-                ),
+                              ? Icons.check_circle_outline
+                              : Icons.send_rounded,
+                      label: canWithdrawApplication
+                          ? '지원취소'
+                          : hasApplied
+                              ? '지원됨'
+                              : '지원하기',
+                      onTap: previewMode
+                          ? null
+                          : canWithdrawApplication
+                              ? onWithdrawApply
+                              : hasApplied
+                                  ? null
+                                  : onApply,
+                      accent: !previewMode && !hasApplied,
+                      muted: previewMode,
+                      danger: canWithdrawApplication,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _ActionButton(
+                      icon: isBookmarked
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                      onTap: previewMode || bookmarkBusy ? null : onBookmark,
+                      label: isBookmarked ? '저장됨' : '북마크',
+                      highlighted: isBookmarked,
+                      muted: previewMode,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _ActionTile(
-                  icon: isBookmarked
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  label: isBookmarked ? '저장됨' : '북마크',
-                  onTap: previewMode || bookmarkBusy ? null : onBookmark,
-                  highlighted: isBookmarked,
-                  muted: previewMode,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -101,8 +110,8 @@ class JobPostActionGrid extends StatelessWidget {
   }
 }
 
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
     required this.icon,
     required this.label,
     this.onTap,
@@ -137,38 +146,40 @@ class _ActionTile extends StatelessWidget {
                 ? AppColors.primary
                 : AppColors.textPrimary;
 
-    return Material(
-      color: muted ? AppColors.background.withValues(alpha: 0.6) : bg,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: AspectRatio(
-          aspectRatio: 1,
+    return SizedBox(
+      height: JobPostActionGrid._buttonHeight,
+      child: Material(
+        color: muted ? AppColors.background.withValues(alpha: 0.6) : bg,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   icon,
-                  size: 26,
+                  size: 18,
                   color: muted
                       ? AppColors.textSecondary.withValues(alpha: 0.45)
                       : fg,
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: muted
-                        ? AppColors.textSecondary.withValues(alpha: 0.45)
-                        : fg,
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: muted
+                          ? AppColors.textSecondary.withValues(alpha: 0.45)
+                          : fg,
+                    ),
                   ),
                 ),
               ],

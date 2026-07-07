@@ -13,6 +13,7 @@ import 'package:map/features/corporate/domain/entities/job_post_payment_record.d
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/salary_payment_schedule.dart';
 import 'package:map/features/corporate/domain/entities/salary_pay_type.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
@@ -89,7 +90,10 @@ CorporateJobPostResult? _validateWorkSchedule({
   required String workSchedule,
   required WorkerCategory workerCategory,
   bool workPeriodNegotiable = false,
+  bool workScheduleNegotiable = false,
 }) {
+  if (workScheduleNegotiable) return null;
+  if (WorkScheduleNegotiable.isLabel(workSchedule)) return null;
   if (workSchedule.trim().isEmpty) {
     return const CorporateJobPostResult.failure('근무 일·시간을 선택해 주세요.');
   }
@@ -108,6 +112,19 @@ CorporateJobPostResult? _validateWorkSchedule({
     }
   }
   return null;
+}
+
+String _normalizedWorkSchedule(
+  String workSchedule, {
+  required bool workScheduleNegotiable,
+}) {
+  final trimmed = workSchedule.trim();
+  if (workScheduleNegotiable) {
+    if (trimmed.isEmpty || WorkScheduleNegotiable.isLabel(trimmed)) {
+      return WorkScheduleNegotiable.label;
+    }
+  }
+  return trimmed;
 }
 
 ({String jobDescription, String summary}) _resolvedDescriptionFields(
@@ -151,6 +168,7 @@ class CreateCorporateJobPostUseCase {
     bool hasShuttleRouteOverlay = false,
     String? workCategoryId,
     bool workPeriodNegotiable = false,
+    bool workScheduleNegotiable = false,
     List<ResumeItemKind> requiredResumeItems = const [],
     List<String> requiredCredentialIds = const [],
   }) async {
@@ -164,27 +182,14 @@ class CreateCorporateJobPostUseCase {
       workplace: workplace,
       profile: registeredBy,
     );
-    if (!mismatch.allowed && registeredBy != null && !kDebugMode) {
-      final headOffice = registeredBy.businessHeadOfficeAddress?.trim();
-      if (headOffice == null || headOffice.isEmpty) {
-        return Future.value(
-          CorporateJobPostResult.failure(
-            mismatch.reason ??
-                '사업자 본사 주소를 먼저 등록해야 공고를 올릴 수 있습니다.',
-          ),
-        );
-      }
-      return _blockWorkplaceMismatch(
-        profile: registeredBy,
-        mismatch: mismatch,
-      );
-    }
     if (hourlyWage.trim().isEmpty || salaryPayDigits(hourlyWage).isEmpty) {
       return Future.value(
         const CorporateJobPostResult.failure('급여를 입력해 주세요.'),
       );
     }
-    if (workSchedule.trim().isEmpty) {
+    if (!workScheduleNegotiable &&
+        workSchedule.trim().isEmpty &&
+        !WorkScheduleNegotiable.isLabel(workSchedule)) {
       return Future.value(
         const CorporateJobPostResult.failure('근무 일·시간을 선택해 주세요.'),
       );
@@ -193,6 +198,7 @@ class CreateCorporateJobPostUseCase {
       workSchedule: workSchedule,
       workerCategory: workerCategory,
       workPeriodNegotiable: workPeriodNegotiable,
+      workScheduleNegotiable: workScheduleNegotiable,
     );
     if (scheduleError != null) {
       return Future.value(scheduleError);
@@ -212,7 +218,10 @@ class CreateCorporateJobPostUseCase {
     final mapPinTier = MapPinTierResolver.resolveForNewPost(
       registeredBy: registeredBy,
       hourlyWage: hourlyWage,
-      workSchedule: workSchedule.trim(),
+      workSchedule: _normalizedWorkSchedule(
+        workSchedule,
+        workScheduleNegotiable: workScheduleNegotiable,
+      ),
     );
 
     final resolvedWorkCategoryId = WorkCategoryClassifierService.resolveCategoryId(
@@ -225,6 +234,9 @@ class CreateCorporateJobPostUseCase {
     final workplaceCoord = await _workplaceCoordinateFields(workplace);
 
     final postedAt = DateTime.now();
+    final notifyAdminMismatch = !kDebugMode &&
+        registeredBy != null &&
+        mismatch.notifyAdmin;
     final post = CorporateJobPost(
       id: 'post_${postedAt.millisecondsSinceEpoch}',
       title: title.trim(),
@@ -235,7 +247,10 @@ class CreateCorporateJobPostUseCase {
       workplaceLongitude: workplaceCoord.longitude,
       hourlyWage: formatCorporateHourlyWage(hourlyWage),
       dailyWage: dailyWage,
-      workSchedule: workSchedule.trim(),
+      workSchedule: _normalizedWorkSchedule(
+        workSchedule,
+        workScheduleNegotiable: workScheduleNegotiable,
+      ),
       jobDescription: descFields.jobDescription,
       descriptionBody: descriptionBody,
       summary: descFields.summary,
@@ -244,6 +259,7 @@ class CreateCorporateJobPostUseCase {
       paymentDayOfMonth: paymentFields.paymentDayOfMonth,
       paymentDateNegotiable: paymentFields.paymentDateNegotiable,
       workPeriodNegotiable: workPeriodNegotiable,
+      workScheduleNegotiable: workScheduleNegotiable,
       notificationSettings: notificationSettings,
       registeredBy: registeredBy,
       recruiterEmail: AuthSession.instance.currentUser?.email,
@@ -265,6 +281,13 @@ class CreateCorporateJobPostUseCase {
 
     return _dataSource.createJobPost(post).then((_) async {
       await JobPostSyncService().pushPost(post);
+      if (notifyAdminMismatch) {
+        await _reportWorkplaceMismatchForAdmin(
+          profile: registeredBy!,
+          mismatch: mismatch,
+          post: post,
+        );
+      }
       return CorporateJobPostResult.success(post);
     });
   }
@@ -343,6 +366,7 @@ class DuplicateCorporateJobPostUseCase {
       paymentDayOfMonth: original.paymentDayOfMonth,
       paymentDateNegotiable: original.paymentDateNegotiable,
       workPeriodNegotiable: original.workPeriodNegotiable,
+      workScheduleNegotiable: original.workScheduleNegotiable,
       notificationSettings: original.notificationSettings,
       registeredBy: original.registeredBy,
       recruiterEmail: AuthSession.instance.currentUser?.email ??
@@ -395,6 +419,7 @@ class UpdateCorporateJobPostUseCase {
     bool? hasShuttleRouteOverlay,
     String? workCategoryId,
     bool workPeriodNegotiable = false,
+    bool workScheduleNegotiable = false,
     List<ResumeItemKind>? requiredResumeItems,
     List<String>? requiredCredentialIds,
   }) async {
@@ -408,6 +433,7 @@ class UpdateCorporateJobPostUseCase {
       workSchedule: workSchedule,
       workerCategory: workerCategory,
       workPeriodNegotiable: workPeriodNegotiable,
+      workScheduleNegotiable: workScheduleNegotiable,
     );
     if (scheduleError != null) {
       return scheduleError;
@@ -416,29 +442,21 @@ class UpdateCorporateJobPostUseCase {
       workplace: workplace,
       profile: original.registeredBy,
     );
-    if (!mismatch.allowed && original.registeredBy != null && !kDebugMode) {
-      final headOffice =
-          original.registeredBy!.businessHeadOfficeAddress?.trim();
-      if (headOffice == null || headOffice.isEmpty) {
-        return Future.value(
-          CorporateJobPostResult.failure(
-            mismatch.reason ??
-                '사업자 본사 주소를 먼저 등록해야 공고를 올릴 수 있습니다.',
-          ),
-        );
-      }
-      return _blockWorkplaceMismatch(
-        profile: original.registeredBy!,
-        mismatch: mismatch,
-      );
-    }
 
+    final notifyAdminMismatch = !kDebugMode &&
+        original.registeredBy != null &&
+        mismatch.notifyAdmin &&
+        status == CorporateJobPostStatus.recruiting;
+    final resolvedStatus = status;
     final paymentFields = _paymentFieldsFromSchedule(paymentSchedule);
     final profile = original.registeredBy;
     final mapPinTier = MapPinTierResolver.resolveForNewPost(
       registeredBy: profile,
       hourlyWage: hourlyWage,
-      workSchedule: workSchedule.trim(),
+      workSchedule: _normalizedWorkSchedule(
+        workSchedule,
+        workScheduleNegotiable: workScheduleNegotiable,
+      ),
     );
     final descriptionError = _validateDescriptionBody(descriptionBody);
     if (descriptionError != null) {
@@ -465,7 +483,10 @@ class UpdateCorporateJobPostUseCase {
       workplaceLongitude: workplaceCoord.longitude,
       hourlyWage: formatCorporateHourlyWage(hourlyWage),
       dailyWage: dailyWage ?? original.dailyWage,
-      workSchedule: workSchedule.trim(),
+      workSchedule: _normalizedWorkSchedule(
+        workSchedule,
+        workScheduleNegotiable: workScheduleNegotiable,
+      ),
       jobDescription: descFields.jobDescription,
       descriptionBody: descriptionBody,
       summary: descFields.summary,
@@ -474,6 +495,7 @@ class UpdateCorporateJobPostUseCase {
       paymentDayOfMonth: paymentFields.paymentDayOfMonth,
       paymentDateNegotiable: paymentFields.paymentDateNegotiable,
       workPeriodNegotiable: workPeriodNegotiable,
+      workScheduleNegotiable: workScheduleNegotiable,
       notificationSettings: notificationSettings,
       registeredBy: original.registeredBy,
       recruiterEmail: original.recruiterEmail,
@@ -494,7 +516,7 @@ class UpdateCorporateJobPostUseCase {
           requiredResumeItems ?? original.requiredResumeItems,
       requiredCredentialIds:
           requiredCredentialIds ?? original.requiredCredentialIds,
-      status: status,
+      status: resolvedStatus,
       applicantCount: original.applicantCount,
       postedAt: original.postedAt,
       expiresAt: original.expiresAt,
@@ -507,35 +529,41 @@ class UpdateCorporateJobPostUseCase {
         )
         .then((_) async {
       await JobPostSyncService().pushPostUpdate(updated);
+      if (notifyAdminMismatch) {
+        await _reportWorkplaceMismatchForAdmin(
+          profile: original.registeredBy!,
+          mismatch: mismatch,
+          post: updated,
+        );
+      }
       return CorporateJobPostResult.success(updated);
     });
   }
 }
 
-Future<CorporateJobPostResult> _blockWorkplaceMismatch({
+Future<void> _reportWorkplaceMismatchForAdmin({
   required CorporateMemberProfile profile,
   required WorkplaceAddressMismatchResult mismatch,
+  required CorporateJobPost post,
 }) async {
-  final reason = mismatch.reason ?? '사업자 본사 주소와 근무지가 일치하지 않아 공고 노출이 제한됩니다.';
-  final restricted = profile.copyWith(
-    requiresAdminReview: true,
-    adminReviewApproved: false,
-    adminReviewReason: reason,
-  );
-  await AuthSession.instance.updateCorporateProfile(restricted);
+  final reason = mismatch.reason ??
+      '실근무지와 사업자 소재지가 다릅니다. 어드민 검토 대상입니다.';
   await AbuseDetectionService().reportWorkplaceMismatch(
     companyKey: profile.companyKey,
+    companyName: profile.companyName,
     headOfficeAddress: mismatch.headOfficeAddress ?? '',
     workplaceAddress: mismatch.workplaceAddress ?? '',
     reason: reason,
     distanceMeters: mismatch.distanceMeters,
+    postId: post.id,
+    postTitle: post.title,
   );
-  return CorporateJobPostResult.failure(reason);
 }
 
 class CorporateJobPostResult {
   const CorporateJobPostResult._({
     required this.isSuccess,
+    this.isPendingReview = false,
     this.message,
     this.post,
   });
@@ -543,10 +571,21 @@ class CorporateJobPostResult {
   const CorporateJobPostResult.success(CorporateJobPost post)
       : this._(isSuccess: true, post: post);
 
+  const CorporateJobPostResult.pendingReview(
+    CorporateJobPost post, {
+    String? message,
+  }) : this._(
+          isSuccess: false,
+          isPendingReview: true,
+          post: post,
+          message: message,
+        );
+
   const CorporateJobPostResult.failure(String message)
       : this._(isSuccess: false, message: message);
 
   final bool isSuccess;
+  final bool isPendingReview;
   final String? message;
   final CorporateJobPost? post;
 }

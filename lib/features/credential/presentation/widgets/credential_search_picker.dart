@@ -4,6 +4,7 @@ import 'package:map/features/credential/domain/entities/credential_catalog.dart'
 import 'package:map/features/credential/domain/entities/credential_category.dart';
 import 'package:map/features/credential/domain/entities/credential_definition.dart';
 import 'package:map/features/credential/domain/services/credential_search_service.dart';
+import 'package:map/features/credential/presentation/widgets/credential_guide_link.dart';
 
 /// 자격증 검색 + 연관검색어 추천 + 다중 선택
 class CredentialSearchPickerSheet extends StatefulWidget {
@@ -218,12 +219,27 @@ class _CredentialCheckTile extends StatelessWidget {
         definition.label,
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       ),
-      subtitle: Text(
-        definition.category.label,
-        style: TextStyle(
-          fontSize: 11,
-          color: AppColors.textSecondary.withValues(alpha: 0.85),
-        ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            definition.category.label,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary.withValues(alpha: 0.85),
+            ),
+          ),
+          if (definition.summary != null && definition.summary!.isNotEmpty)
+            Text(
+              definition.summary!,
+              style: TextStyle(
+                fontSize: 10,
+                height: 1.35,
+                color: AppColors.textSecondary.withValues(alpha: 0.75),
+              ),
+            ),
+          CredentialGuideLink(definition: definition, dense: true),
+        ],
       ),
     );
   }

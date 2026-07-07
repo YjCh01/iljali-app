@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +15,10 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_overlay.dart';
 import 'package:map/features/corporate/domain/services/corporate_shuttle_density_loader.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_home_naver_map.dart';
+import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/job_seeker/data/datasources/closed_ghost_pin_local_data_source.dart';
+import 'package:map/features/job_seeker/data/datasources/closed_ghost_route_local_data_source.dart';
+import 'package:map/features/job_seeker/domain/entities/closed_ghost_route.dart';
 import 'package:map/features/job_seeker/domain/entities/closed_ghost_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
@@ -32,6 +36,7 @@ class AdminMapPanel extends StatefulWidget {
 class _AdminMapPanelState extends State<AdminMapPanel> {
   List<JobMapPin> _pins = const [];
   List<ClosedGhostPin> _ghostPins = const [];
+  List<ClosedGhostRoute> _ghostRoutes = const [];
   List<CorporateShuttleMapOverlay> _shuttleOverlays = const [];
   Map<String, CorporateJobPost> _mergedPostsById = const {};
   JobMapPin? _selected;
@@ -42,16 +47,51 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
   bool _shuttleLayerEnabled = true;
   bool _shuttleSelectedOnly = false;
   bool _ghostPlacementMode = false;
+  bool _ghostRoutePlacementMode = false;
+  int? _routePlannedTotal;
+  GeoCoordinate? _draftWorkplace;
+  List<GeoCoordinate> _draftStops = const [];
+  ClosedGhostRoute? _selectedGhostRoute;
 
-  List<JobMapPin> get _mapPins => [
-        ..._pins,
-        ..._ghostPins.map(
-          (ghost) => ClosedGhostJobMapPinFactory.fromAdminPin(
-            ghost,
-            sourcePost: _mergedPostsById[ghost.sourcePostId ?? ''],
+  Set<String> get _routeLinkedGhostPinIds => {
+        for (final route in _ghostRoutes)
+          if (route.ghostPinId != null && route.ghostPinId!.isNotEmpty)
+            route.ghostPinId!,
+      };
+
+  List<JobMapPin> get _mapPins {
+    final linkedPins = _routeLinkedGhostPinIds;
+    final pins = <JobMapPin>[
+      ..._pins,
+      ..._ghostPins
+          .where((ghost) => !linkedPins.contains(ghost.id))
+          .map(
+            (ghost) => ClosedGhostJobMapPinFactory.fromAdminPin(
+              ghost,
+              sourcePost: _mergedPostsById[ghost.sourcePostId ?? ''],
+            ),
           ),
-        ),
-      ];
+    ];
+    return pins;
+  }
+
+  List<ClosedGhostRoute> get _ghostRoutesForMap {
+    final routes = List<ClosedGhostRoute>.from(_ghostRoutes);
+    final draft = _draftRoutePreview;
+    if (draft != null) routes.add(draft);
+    return routes;
+  }
+
+  ClosedGhostRoute? get _draftRoutePreview {
+    if (!_ghostRoutePlacementMode || _draftStops.isEmpty) return null;
+    return ClosedGhostRoute(
+      id: '_draft',
+      label: '배치 중',
+      workplaceLatitude: _draftWorkplace?.latitude ?? 0,
+      workplaceLongitude: _draftWorkplace?.longitude ?? 0,
+      stops: List<GeoCoordinate>.from(_draftStops),
+    );
+  }
 
   static const _localPosts = CorporateJobPostLocalDataSourceImpl();
 
@@ -77,6 +117,7 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
   Future<void> _selectPin(JobMapPin pin) async {
     setState(() {
       _selected = pin;
+      _selectedGhostRoute = null;
       _selectedDetail = null;
       _detailLoading = !pin.isClosedGhost;
     });
@@ -112,6 +153,7 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
         _loading = false;
       });
       await _loadGhostPins();
+      await _loadGhostRoutes();
       await _reloadShuttleOverlays();
     } on Object catch (e) {
       if (!mounted) return;
@@ -142,6 +184,212 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
       if (!mounted) return;
       setState(() => _error = AdminApiErrors.format(e));
     }
+  }
+
+  Future<void> _loadGhostRoutes() async {
+    if (!widget.controller.apiConnected) {
+      final local =
+          await const ClosedGhostRouteLocalDataSourceImpl().fetchAll();
+      if (!mounted) return;
+      setState(() => _ghostRoutes = local);
+      return;
+    }
+    try {
+      final raw = await widget.controller.client.listGhostRoutes();
+      if (!mounted) return;
+      final mapped = raw
+          .map((json) => ClosedGhostRoute.fromJson(json))
+          .where((route) => route.id.isNotEmpty)
+          .toList();
+      ClosedGhostRouteLocalDataSourceImpl.replaceFromServer(mapped);
+      setState(() => _ghostRoutes = mapped);
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _error = AdminApiErrors.format(e));
+    }
+  }
+
+  void _startGhostRoutePlacement() {
+    unawaited(_beginGhostRouteWizard());
+  }
+
+  Future<void> _beginGhostRouteWizard() async {
+    final count = await showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const _GhostRouteStopCountDialog(),
+    );
+    if (!mounted || count == null) return;
+    setState(() {
+      _ghostRoutePlacementMode = true;
+      _ghostPlacementMode = false;
+      _selected = null;
+      _selectedGhostRoute = null;
+      _routePlannedTotal = count;
+      _draftWorkplace = null;
+      _draftStops = const [];
+    });
+  }
+
+  void _cancelGhostRoutePlacement() {
+    setState(() {
+      _ghostRoutePlacementMode = false;
+      _routePlannedTotal = null;
+      _draftWorkplace = null;
+      _draftStops = const [];
+    });
+  }
+
+  void _undoLastDraftStop() {
+    if (_draftWorkplace != null) {
+      setState(() => _draftWorkplace = null);
+      return;
+    }
+    if (_draftStops.isEmpty) return;
+    setState(
+      () => _draftStops = _draftStops.sublist(0, _draftStops.length - 1),
+    );
+  }
+
+  Future<void> _handleGhostRouteMapTap(double latitude, double longitude) async {
+    final planned = _routePlannedTotal;
+    if (planned == null || planned < 2) return;
+
+    final point = GeoCoordinate(latitude: latitude, longitude: longitude);
+    final boardStops = planned - 1;
+
+    if (_draftStops.length < boardStops) {
+      setState(() => _draftStops = [..._draftStops, point]);
+      return;
+    }
+
+    setState(() => _draftWorkplace = point);
+    await _saveGhostRoute();
+  }
+
+  Future<void> _saveGhostRoute() async {
+    final workplace = _draftWorkplace;
+    if (workplace == null || _draftStops.isEmpty) return;
+
+    final travelStops = [
+      for (final stop in _draftStops)
+        {
+          'latitude': stop.latitude,
+          'longitude': stop.longitude,
+        },
+    ];
+
+    final c = widget.controller;
+    try {
+      if (c.apiConnected) {
+        await c.run(
+          () => c.client.createGhostRoute(
+            workplaceLatitude: workplace.latitude,
+            workplaceLongitude: workplace.longitude,
+            stops: travelStops,
+            label: '종료된 셔틀 노선',
+          ),
+          successMessage: '유령노선도 등록 완료',
+        );
+      } else {
+        final route = ClosedGhostRoute(
+          id: 'ghost_route_local_${DateTime.now().millisecondsSinceEpoch}',
+          label: '종료된 셔틀 노선',
+          workplaceLatitude: workplace.latitude,
+          workplaceLongitude: workplace.longitude,
+          stops: List<GeoCoordinate>.from(_draftStops),
+          createdAt: DateTime.now(),
+        );
+        ClosedGhostRouteLocalDataSourceImpl.upsertLocal(route);
+      }
+      _cancelGhostRoutePlacement();
+      await _loadGhostRoutes();
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _error = AdminApiErrors.format(e));
+    }
+  }
+
+  Future<void> _deleteGhostRoute(ClosedGhostRoute route) async {
+    final c = widget.controller;
+    try {
+      if (c.apiConnected) {
+        await c.run(
+          () => c.client.deleteGhostRoute(route.id),
+          successMessage: '유령노선도 삭제',
+        );
+      } else {
+        ClosedGhostRouteLocalDataSourceImpl.removeLocal(route.id);
+        final pinId = route.ghostPinId;
+        if (pinId != null && pinId.isNotEmpty) {
+          ClosedGhostPinLocalDataSourceImpl.removeLocal(pinId);
+        }
+      }
+      if (!mounted) return;
+      setState(() => _selectedGhostRoute = null);
+      await _loadGhostRoutes();
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _error = AdminApiErrors.format(e));
+    }
+  }
+
+  Future<void> _onGhostRouteWorkplaceTap(ClosedGhostRoute route) async {
+    if (_ghostRoutePlacementMode || route.id.startsWith('_')) return;
+
+    setState(() {
+      _selectedGhostRoute = route;
+      _selected = null;
+      _selectedDetail = null;
+    });
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('유령노선도 삭제'),
+        content: Text(
+          '근무지(종점) 기준 · 정류장 ${route.stops.length}곳 노선을 삭제할까요?\n\n'
+          '${route.label}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _deleteGhostRoute(route);
+    }
+  }
+
+  void _onMapTap(double latitude, double longitude) {
+    if (_ghostRoutePlacementMode) {
+      unawaited(_handleGhostRouteMapTap(latitude, longitude));
+      return;
+    }
+    if (_ghostPlacementMode) {
+      unawaited(_placeGhostPin(latitude, longitude));
+    }
+  }
+
+  String get _ghostRoutePlacementHint {
+    final planned = _routePlannedTotal;
+    if (planned == null) return '';
+    final boardStops = planned - 1;
+    final picked = _draftStops.length;
+    if (picked == 0) {
+      return '출발지 정류장을 선택하십시오. (총 $planned개 · 근무지 포함)';
+    }
+    if (picked < boardStops) {
+      return '${picked + 1}번째 정류장을 선택하십시오. ($picked/$boardStops)';
+    }
+    return '근무지(종점)를 선택하십시오.';
   }
 
   Future<void> _placeGhostPin(double latitude, double longitude) async {
@@ -272,7 +520,7 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
           Row(
             children: [
               Text(
-                '서버 공고 ${_pins.length}건 · 유령 ${_ghostPins.length}건',
+                '서버 공고 ${_pins.length}건 · 유령 ${_ghostPins.length}건 · 유령노선 ${_ghostRoutes.length}건',
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
@@ -336,11 +584,54 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
               FilterChip(
                 label: const Text('마감유령핀 배치', style: TextStyle(fontSize: 12)),
                 selected: _ghostPlacementMode,
-                onSelected: (v) => setState(() => _ghostPlacementMode = v),
+                onSelected: (v) => setState(() {
+                  _ghostPlacementMode = v;
+                  if (v) {
+                    _ghostRoutePlacementMode = false;
+                    _cancelGhostRoutePlacement();
+                  }
+                }),
+              ),
+              OutlinedButton.icon(
+                onPressed: widget.controller.busy
+                    ? null
+                    : () {
+                        if (_ghostRoutePlacementMode) {
+                          _cancelGhostRoutePlacement();
+                        } else {
+                          _startGhostRoutePlacement();
+                        }
+                      },
+                icon: Icon(
+                  _ghostRoutePlacementMode ? Icons.close : Icons.add_road,
+                  size: 18,
+                ),
+                label: Text(
+                  _ghostRoutePlacementMode
+                      ? '유령노선도 만들기 취소'
+                      : '유령노선도 만들기',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
               if (_ghostPlacementMode)
                 Text(
                   '지도를 클릭해 회색 마감유령핀을 배치하세요.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                  ),
+                ),
+              if (_ghostRoutePlacementMode)
+                Text(
+                  '${_ghostRoutePlacementHint} · 잘못 찍었으면 「이전 정류장 삭제」',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                  ),
+                )
+              else if (_ghostRoutes.isNotEmpty)
+                Text(
+                  '유령노선도 근무지(종점) 점을 클릭하면 삭제할 수 있습니다.',
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary.withValues(alpha: 0.9),
@@ -367,6 +658,35 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
               ),
             ],
           ),
+          if (_ghostRoutePlacementMode)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (_routePlannedTotal != null)
+                    Chip(
+                      label: Text(
+                        '정류장 $_routePlannedTotal개 (근무지 포함)',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  if (_draftStops.isNotEmpty)
+                    OutlinedButton(
+                      onPressed: _undoLastDraftStop,
+                      child: Text(
+                        '이전 정류장 삭제 (${_draftStops.length}번째)',
+                      ),
+                    ),
+                  TextButton(
+                    onPressed: _cancelGhostRoutePlacement,
+                    child: const Text('배치 취소'),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 8),
           Expanded(
             child: Row(
@@ -387,13 +707,18 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
                             pins: _mapPins,
                             ownPostIds: const {},
                             shuttleOverlays: _visibleShuttleOverlays,
+                            ghostRoutes: _ghostRoutesForMap,
                             selectedPostId: _selected?.mapMarkerId ??
                                 _selected?.post.id,
                             centerOnPin: _selected,
                             onPinTap: _selectPin,
-                            onMapCoordinateTap: _ghostPlacementMode
-                                ? _placeGhostPin
-                                : null,
+                            onGhostRouteWorkplaceTap: _ghostRoutePlacementMode
+                                ? null
+                                : _onGhostRouteWorkplaceTap,
+                            onMapCoordinateTap:
+                                _ghostRoutePlacementMode || _ghostPlacementMode
+                                    ? _onMapTap
+                                    : null,
                           ),
                           if (_pins.isEmpty && !_loading)
                             Container(
@@ -440,6 +765,13 @@ class _AdminMapPanelState extends State<AdminMapPanel> {
                     pin: _selected,
                     detail: _selectedDetail,
                     loading: _detailLoading,
+                    ghostRoutes: _ghostRoutes,
+                    selectedGhostRoute: _selectedGhostRoute,
+                    onSelectGhostRoute: (route) => setState(() {
+                      _selectedGhostRoute = route;
+                      _selected = null;
+                    }),
+                    onDeleteGhostRoute: _deleteGhostRoute,
                     onTogglePin: c.apiConnected &&
                             _selected != null &&
                             !_selected!.isClosedGhost
@@ -502,6 +834,10 @@ class _JobDetailCard extends StatelessWidget {
     required this.pin,
     required this.detail,
     required this.loading,
+    this.ghostRoutes = const [],
+    this.selectedGhostRoute,
+    this.onSelectGhostRoute,
+    this.onDeleteGhostRoute,
     this.onTogglePin,
     this.onToggleShuttle,
     this.onDeleteGhost,
@@ -510,22 +846,93 @@ class _JobDetailCard extends StatelessWidget {
   final JobMapPin? pin;
   final Map<String, dynamic>? detail;
   final bool loading;
+  final List<ClosedGhostRoute> ghostRoutes;
+  final ClosedGhostRoute? selectedGhostRoute;
+  final ValueChanged<ClosedGhostRoute>? onSelectGhostRoute;
+  final Future<void> Function(ClosedGhostRoute route)? onDeleteGhostRoute;
   final VoidCallback? onTogglePin;
   final VoidCallback? onToggleShuttle;
   final VoidCallback? onDeleteGhost;
 
   @override
   Widget build(BuildContext context) {
+    if (selectedGhostRoute != null) {
+      final route = selectedGhostRoute!;
+      return AdminCard(
+        title: '유령노선도',
+        subtitle: route.label,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '종료된 셔틀 노선 — 회색 점선과 번호 정류장·근무지 점만 표시됩니다.\n'
+              '지도에서 근무지(종점) 점을 클릭해도 삭제할 수 있습니다.',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            _row('ID', route.id),
+            _row('정류장', '${route.stops.length}곳'),
+            _row(
+              '근무지',
+              '${route.workplaceLatitude.toStringAsFixed(5)}, '
+              '${route.workplaceLongitude.toStringAsFixed(5)}',
+            ),
+            if (onDeleteGhostRoute != null) ...[
+              const SizedBox(height: 16),
+              OutlinedButton(
+                onPressed: () => onDeleteGhostRoute!(route),
+                child: const Text('유령노선도 삭제'),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
     if (pin == null) {
       return AdminCard(
         title: '공고 상세',
         subtitle: '지도에서 핀을 선택하세요',
-        child: Text(
-          '핀 색: 회색=일반 · 하늘=고시급 · 보라=유료핀 · 연회색×=마감유령핀',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.textSecondary.withValues(alpha: 0.9),
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '핀 색: 회색=일반 · 하늘=고시급 · 보라=유료핀 · 연회색=마감유령핀\n'
+              '유령노선도: 근무지(종점) 점 클릭 → 삭제',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
+              ),
+            ),
+            if (ghostRoutes.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text(
+                '유령노선도',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              for (final route in ghostRoutes)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    route.label.isNotEmpty ? route.label : route.id,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    '정류장 ${route.stops.length}곳 · 근무지 포함',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary.withValues(alpha: 0.9),
+                    ),
+                  ),
+                  onTap: onSelectGhostRoute == null
+                      ? null
+                      : () => onSelectGhostRoute!(route),
+                ),
+            ],
+          ],
         ),
       );
     }
@@ -708,6 +1115,86 @@ class _JobDetailCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 유령노선도 — 정류장 개수(근무지 포함) 선택
+class _GhostRouteStopCountDialog extends StatefulWidget {
+  const _GhostRouteStopCountDialog();
+
+  @override
+  State<_GhostRouteStopCountDialog> createState() =>
+      _GhostRouteStopCountDialogState();
+}
+
+class _GhostRouteStopCountDialogState extends State<_GhostRouteStopCountDialog> {
+  static const _min = 2;
+  static const _max = 30;
+  int _count = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('유령노선도 만들기'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            '종점(근무지)를 포함하여 몇 개의 정류장이 있습니까?',
+            style: TextStyle(fontSize: 14, height: 1.45),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton.filledTonal(
+                onPressed: _count <= _min
+                    ? null
+                    : () => setState(() => _count -= 1),
+                icon: const Icon(Icons.remove),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  '$_count',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton.filledTonal(
+                onPressed: _count >= _max
+                    ? null
+                    : () => setState(() => _count += 1),
+                icon: const Icon(Icons.add),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '예: $_count개 → 출발지 포함 정류장 ${_count - 1}곳 선택 후 근무지',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: AppColors.textSecondary.withValues(alpha: 0.95),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_count),
+          child: const Text('확인'),
+        ),
+      ],
     );
   }
 }

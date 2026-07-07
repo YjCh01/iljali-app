@@ -18,6 +18,7 @@ class EmployerPushWalletRow(Base):
     company_key: Mapped[str] = mapped_column(String(10), primary_key=True)
     cash_balance_krw: Mapped[int] = mapped_column(Integer, default=0)
     package_credits: Mapped[int] = mapped_column(Integer, default=0)
+    push_ticket_credits: Mapped[int] = mapped_column(Integer, default=0)
     signup_bonus_remaining: Mapped[int] = mapped_column(Integer, default=0)
     location_slots_from_packages: Mapped[int] = mapped_column(Integer, default=0)
     last_free_push_day_key: Mapped[str | None] = mapped_column(String(10), nullable=True)

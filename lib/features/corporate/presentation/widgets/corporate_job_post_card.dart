@@ -527,8 +527,8 @@ class _ActionGrid extends StatelessWidget {
           children: [
             Expanded(
               child: _ActionButton(
-                label: '공고보기',
-                icon: Icons.visibility_outlined,
+                label: '지도보기',
+                icon: Icons.map_outlined,
                 onPressed: onView,
               ),
             ),

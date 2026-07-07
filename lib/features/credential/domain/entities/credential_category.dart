@@ -4,6 +4,7 @@ enum CredentialCategory {
   logisticsDriving,
   facilitySecurity,
   cleaningCare,
+  foodService,
 }
 
 extension CredentialCategoryX on CredentialCategory {
@@ -13,6 +14,7 @@ extension CredentialCategoryX on CredentialCategory {
         CredentialCategory.logisticsDriving => '물류 및 유통·운전',
         CredentialCategory.facilitySecurity => '시설관리(전기·소방·영선) 및 경비',
         CredentialCategory.cleaningCare => '미화 및 요양·돌봄',
+        CredentialCategory.foodService => '식품·외식·제조',
       };
 
   String get id => name;

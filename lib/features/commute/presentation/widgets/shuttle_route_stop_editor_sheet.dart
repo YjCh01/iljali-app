@@ -1,19 +1,20 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:map/features/commute/presentation/widgets/shuttle_stop_photo_actions.dart';
 import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
+import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
 import 'package:map/features/commute/domain/utils/shuttle_stop_photo_storage.dart';
 import 'package:map/features/commute/presentation/pages/shuttle_stop_map_picker_page.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 
-/// 정류장 추가·수정 — 이름, 지도 핀, 사진, 탑승 시간
-enum ShuttleRouteStopEditorMode { full, detailsOnly }
+/// 정류장 추가·수정 — 이름, 지도 핀, 사진, 탑승/도착 시간
+enum ShuttleRouteStopEditorMode { full, detailsOnly, workplace }
 
 class ShuttleRouteStopEditorSheet extends StatefulWidget {
   const ShuttleRouteStopEditorSheet({
@@ -77,6 +78,27 @@ class ShuttleRouteStopEditorSheet extends StatefulWidget {
     );
   }
 
+  /// 근무지 도착 시각 편집
+  static Future<CommuteRouteStop?> showWorkplaceArrival(
+    BuildContext context, {
+    required CommuteRouteStop initialStop,
+  }) {
+    return showAdaptiveSheet<CommuteRouteStop>(
+      context: context,
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: ShuttleRouteStopEditorSheet(
+          initialStop: initialStop,
+          siblingStops: const [],
+          isLastStopHint: true,
+          mode: ShuttleRouteStopEditorMode.workplace,
+        ),
+      ),
+    );
+  }
+
   @override
   State<ShuttleRouteStopEditorSheet> createState() =>
       _ShuttleRouteStopEditorSheetState();
@@ -94,7 +116,12 @@ class _ShuttleRouteStopEditorSheetState extends State<ShuttleRouteStopEditorShee
     super.initState();
     final initial = widget.initialStop;
     _labelController = TextEditingController(text: initial?.label ?? '');
-    _timeController = TextEditingController(text: initial?.departureTime ?? '');
+    final isWorkplace = widget.mode == ShuttleRouteStopEditorMode.workplace;
+    _timeController = TextEditingController(
+      text: isWorkplace
+          ? (initial?.arrivalTime ?? '')
+          : (initial?.departureTime ?? ''),
+    );
     _coordinate = initial?.coordinate ??
         widget.initialCoordinate ??
         defaultPushMapCenter();
@@ -137,13 +164,7 @@ class _ShuttleRouteStopEditorSheetState extends State<ShuttleRouteStopEditorShee
   Future<void> _pickPhoto() async {
     setState(() => _pickingPhoto = true);
     try {
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1280,
-        imageQuality: 82,
-      );
-      if (file == null) return;
-      final path = await ShuttleStopPhotoStorage.persistFromPicker(file);
+      final path = await ShuttleStopPhotoActions.pickFromGallery(context);
       if (!mounted || path == null) return;
       setState(() => _photoPath = path);
     } finally {
@@ -154,26 +175,48 @@ class _ShuttleRouteStopEditorSheetState extends State<ShuttleRouteStopEditorShee
   void _removePhoto() => setState(() => _photoPath = null);
 
   void _save() {
+    final isWorkplace = widget.mode == ShuttleRouteStopEditorMode.workplace;
     final label = _labelController.text.trim();
-    if (label.isEmpty) {
+    if (!isWorkplace && label.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('정류장 이름을 입력해 주세요.')),
       );
       return;
     }
     final time = _timeController.text.trim();
+    if (widget.mode == ShuttleRouteStopEditorMode.workplace &&
+        (time.isEmpty || !_looksLikeHhMm(time))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('근무지 도착 시각(HH:MM)을 입력해 주세요.')),
+      );
+      return;
+    }
     final base = widget.initialStop;
+    final isWorkplaceMode = widget.mode == ShuttleRouteStopEditorMode.workplace;
     Navigator.of(context).pop(
       CommuteRouteStop(
         id: base?.id ?? 'stop_${DateTime.now().millisecondsSinceEpoch}',
-        label: label,
-        coordinate: widget.mode == ShuttleRouteStopEditorMode.detailsOnly
+        label: isWorkplaceMode
+            ? ShuttleRouteStopPolicy.workplaceLabel
+            : label,
+        coordinate: widget.mode == ShuttleRouteStopEditorMode.detailsOnly ||
+                isWorkplaceMode
             ? base!.coordinate
             : _coordinate,
-        departureTime: time.isEmpty ? null : time,
+        departureTime: isWorkplaceMode ? null : (time.isEmpty ? null : time),
+        arrivalTime: isWorkplaceMode ? time : null,
         photoPath: _photoPath,
       ),
     );
+  }
+
+  bool _looksLikeHhMm(String raw) {
+    final parts = raw.split(':');
+    if (parts.length != 2) return false;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return false;
+    return h >= 0 && h <= 23 && m >= 0 && m <= 59;
   }
 
   @override
@@ -198,40 +241,50 @@ class _ShuttleRouteStopEditorSheetState extends State<ShuttleRouteStopEditorShee
           ),
           const SizedBox(height: 16),
           Text(
-            widget.mode == ShuttleRouteStopEditorMode.detailsOnly
-                ? '정류장 편집'
-                : widget.initialStop == null
-                    ? '정류장 추가'
-                    : '정류장 수정',
+            widget.mode == ShuttleRouteStopEditorMode.workplace
+                ? '근무지 도착 시각'
+                : widget.mode == ShuttleRouteStopEditorMode.detailsOnly
+                    ? '정류장 편집'
+                    : widget.initialStop == null
+                        ? '정류장 추가'
+                        : '정류장 수정',
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),
           Text(
-            widget.mode == ShuttleRouteStopEditorMode.detailsOnly
-                ? '이름·탑승 시간·사진을 입력하세요. 위치는 목록의 「수정」에서 조정합니다.'
-                : '지도 상에서 포인트를 직접 선택하고 이름과 사진을 저장하세요.',
+            widget.mode == ShuttleRouteStopEditorMode.workplace
+                ? '버스 이동 알림 기준의 근무지 도착 시각을 입력하세요.'
+                : widget.mode == ShuttleRouteStopEditorMode.detailsOnly
+                    ? '이름·탑승 시간·사진을 입력하세요. 위치는 목록에서 정류장을 탭해 조정합니다.'
+                    : '지도 상에서 포인트를 직접 선택하고 이름과 사진을 저장하세요.',
             style: TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary.withValues(alpha: 0.95),
             ),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _labelController,
-            decoration: const InputDecoration(
-              labelText: '정류장 이름',
-              hintText: '예: 평택중학교 정문앞',
+          if (widget.mode != ShuttleRouteStopEditorMode.workplace) ...[
+            TextField(
+              controller: _labelController,
+              decoration: const InputDecoration(
+                labelText: '정류장 이름',
+                hintText: '예: 평택중학교 정문앞',
+              ),
+              textInputAction: TextInputAction.next,
             ),
-            textInputAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
           TextField(
             controller: _timeController,
             decoration: InputDecoration(
-              labelText: '탑승 시간 (선택)',
-              hintText: widget.isLastStopHint
-                  ? '마지막 정류장은 비워두면 도착'
-                  : '예: 07:30',
+              labelText: widget.mode == ShuttleRouteStopEditorMode.workplace
+                  ? '근무지 도착 시각 (필수)'
+                  : '탑승 시간 (선택)',
+              hintText: widget.mode == ShuttleRouteStopEditorMode.workplace
+                  ? '예: 08:30'
+                  : widget.isLastStopHint
+                      ? '마지막 정류장은 비워두면 도착'
+                      : '예: 07:30',
             ),
             keyboardType: TextInputType.datetime,
           ),

@@ -44,5 +44,5 @@ The user wants **Plan → Execute → Verify → Improve → next task** without
 
 - `flutter analyze`: **0 errors**
 - `flutter test`: **all pass**
-- UI copy aligned with `map/PUSH_PACKAGE_PRICING.md` (1km, BRN bonus 5, no tier names)
+- UI copy aligned with `map/PUSH_PACKAGE_PRICING.md` (700m, BRN bonus 5, no tier names)
 - `workflow_state.md` updated

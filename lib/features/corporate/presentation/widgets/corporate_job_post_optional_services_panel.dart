@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/config/free_exposure_launch_policy.dart';
+import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
@@ -81,6 +83,7 @@ class _CorporateJobPostOptionalServicesPanelState
   String? _fallbackJobPostId;
   CorporatePaymentDelegateInfo? _delegateInfo;
   List<JobPostPaymentRequest> _myPendingRequests = [];
+  bool _freeExposurePromo = false;
 
   JobPostNotificationSettings? get _effectiveNotificationSettings =>
       widget.notificationSettings ?? _fallbackNotificationSettings;
@@ -133,6 +136,24 @@ class _CorporateJobPostOptionalServicesPanelState
   bool get _needsShuttlePayment =>
       _hasShuttleRoute && _shuttleUnpaidStopCount > 0;
 
+  /// 등록만 되고 지도 노출(활성화)이 안 된 정류장
+  bool get _needsShuttleActivation => _needsShuttlePayment;
+
+  bool get _needsShuttlePaymentEffective =>
+      !_freeExposurePromo && _needsShuttlePayment;
+
+  bool get _shuttleFullyExposed =>
+      _hasShuttleRoute &&
+      _shuttleExposureActive &&
+      _shuttleUnpaidStopCount == 0;
+
+  String get _shuttleExposureActionLabel => _freeExposurePromo
+      ? '무료 노출 적용'
+      : '정류장 표시핀 결제';
+
+  bool get _needsJobPinPaymentEffective =>
+      _hasExtraPins && !_hasActivatedJobPins && !_freeExposurePromo;
+
   @override
   void initState() {
     super.initState();
@@ -141,6 +162,8 @@ class _CorporateJobPostOptionalServicesPanelState
   }
 
   Future<void> _bootstrapContext() async {
+    final promo = await FreeExposureLaunchPolicy.isActive();
+    if (mounted) setState(() => _freeExposurePromo = promo);
     await _loadPaymentAccess();
     await _loadFallbackJobContext();
     await _loadShuttleRouteName();
@@ -399,12 +422,13 @@ class _CorporateJobPostOptionalServicesPanelState
     required bool enabled,
     required VoidCallback onDirectPay,
     required VoidCallback onRequestPay,
+    String? directPayLabel,
   }) {
     if (!_showDualPayment) {
       return _ServicePaymentButton(
         onPressed: enabled ? onDirectPay : null,
         icon: Icons.payments_outlined,
-        label: '$product 결제',
+        label: directPayLabel ?? '$product 결제',
       );
     }
     final delegate = _delegateInfo!;
@@ -414,7 +438,7 @@ class _CorporateJobPostOptionalServicesPanelState
         _ServicePaymentButton(
           onPressed: enabled ? onDirectPay : null,
           icon: Icons.payments_outlined,
-          label: delegate.directPayLabel(product),
+          label: directPayLabel ?? delegate.directPayLabel(product),
         ),
         const SizedBox(height: 8),
         _ServiceOutlineButton(
@@ -447,7 +471,7 @@ class _CorporateJobPostOptionalServicesPanelState
         ),
       );
     }
-    if (_needsShuttlePayment && _unactivatedShuttleStopCount > 0) {
+    if (_needsShuttlePaymentEffective && _unactivatedShuttleStopCount > 0) {
       final count = _unactivatedShuttleStopCount;
       items.add(
         JobPostPaymentLineItem(
@@ -549,7 +573,7 @@ class _CorporateJobPostOptionalServicesPanelState
   Future<void> _openShuttlePayment({
     CorporatePaymentPreference preference = CorporatePaymentPreference.direct,
   }) async {
-    if (!_needsShuttlePayment) return;
+    if (!_needsShuttleActivation) return;
 
     final jobPostId = _effectiveJobPostId?.trim();
     if (jobPostId == null || jobPostId.isEmpty) return;
@@ -566,6 +590,7 @@ class _CorporateJobPostOptionalServicesPanelState
 
     if (result?.paid == true) {
       widget.onShuttleRouteChanged(hasShuttleRouteOverlay: true);
+      JobBoardRefresh.markUpdated();
     }
     await _loadShuttleRouteName();
     await _loadPushWallet();
@@ -901,16 +926,29 @@ class _CorporateJobPostOptionalServicesPanelState
               const SizedBox(height: 8),
               _buildExposurePaymentActions(
                 product: '정류장 표시핀',
-                enabled: _needsShuttlePayment,
+                enabled: _needsShuttleActivation,
+                directPayLabel: _shuttleExposureActionLabel,
                 onDirectPay: () => _openShuttlePayment(),
                 onRequestPay: () => _openShuttlePayment(
                   preference: CorporatePaymentPreference.request,
                 ),
               ),
-              if (_hasShuttleRoute && !_needsShuttlePayment) ...[
+              if (_shuttleFullyExposed) ...[
                 const SizedBox(height: 8),
                 Text(
                   '모든 정류장 표시핀이 지도에 노출 중입니다. 추가 결제가 필요 없습니다.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                  ),
+                ),
+              ] else if (_hasShuttleRoute && _needsShuttleActivation) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _freeExposurePromo
+                      ? '정류장을 등록했습니다. 「무료 노출 적용」을 누르면 지도에 표시됩니다.'
+                      : '정류장을 등록했습니다. 결제 후 지도에 노출됩니다.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 11,
@@ -975,18 +1013,20 @@ class _CorporateJobPostOptionalServicesPanelState
         _PushReadinessSummary(
           pushCredits: _pushTicketCredits,
           eligibleLocations: _pushEligibleLocationCount,
-          needsJobPinPayment: _hasExtraPins && !_hasActivatedJobPins,
-          needsShuttlePayment: _needsShuttlePayment,
+          needsJobPinPayment: _needsJobPinPaymentEffective,
+          needsShuttlePayment: _needsShuttleActivation,
           onJobPinPayment:
               _hasExtraPins ? () => _openJobPinPayment() : null,
           onShuttlePayment:
-              _hasShuttleRoute ? () => _openShuttlePayment() : null,
+              _hasShuttleRoute && _needsShuttleActivation
+                  ? () => _openShuttlePayment()
+                  : null,
           jobPinPayLabel: _showDualPayment
               ? _delegateInfo!.directPayLabel('일자리 알림핀')
               : '일자리 알림핀 결제',
           shuttlePayLabel: _showDualPayment
               ? _delegateInfo!.directPayLabel('정류장 표시핀')
-              : '정류장 표시핀 결제',
+              : _shuttleExposureActionLabel,
         ),
         const SizedBox(height: 10),
         _buildExposurePaymentActions(
@@ -1005,18 +1045,19 @@ class _CorporateJobPostOptionalServicesPanelState
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: _PushBlockedHint(
-              needsJobPinPayment: _hasExtraPins && !_hasActivatedJobPins,
-              needsShuttlePayment: _needsShuttlePayment,
+              needsJobPinPayment: _needsJobPinPaymentEffective,
+              needsShuttlePayment: _needsShuttleActivation,
               onJobPinPayment:
                   _hasExtraPins ? () => _openJobPinPayment() : null,
-              onShuttlePayment:
-                  _hasShuttleRoute ? () => _openShuttlePayment() : null,
+              onShuttlePayment: _hasShuttleRoute && _needsShuttleActivation
+                  ? () => _openShuttlePayment()
+                  : null,
               jobPinPayLabel: _showDualPayment
                   ? _delegateInfo!.directPayLabel('일자리 알림핀')
                   : '일자리 알림핀 결제',
               shuttlePayLabel: _showDualPayment
                   ? _delegateInfo!.directPayLabel('정류장 표시핀')
-                  : '정류장 표시핀 결제',
+                  : _shuttleExposureActionLabel,
             ),
           ),
       ],

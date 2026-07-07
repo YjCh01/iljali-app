@@ -1,13 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.models import Company, industry_requires_review
-
-PAID_TIERS = {"starter", "growth", "enterprise"}
-
-BASIC_CONTACT_BLOCK_REASON = (
-    "BASIC 플랜은 푸시·공고 등록만 가능합니다. "
-    "지원자 연락·채팅은 Starter 이상 파트너십 가입 후 이용할 수 있습니다."
-)
+from app.models import Company
 
 
 def normalize_brn(value: str) -> str:
@@ -30,27 +23,14 @@ def get_or_create_company(db: Session, brn: str, company_name: str, entity_type:
 
 
 def evaluate_contact(db: Session, company: Company) -> dict:
+    """지원자 연락·채팅 — 기본 플랜 포함. 계정 정지만 차단."""
     if company.is_suspended:
         return {
             "allowed": False,
             "block_reason": "계정이 정지되었습니다.",
             "show_partnership_upsell": False,
         }
-    if company.requires_admin_review and not company.admin_review_approved:
-        return {
-            "allowed": False,
-            "block_reason": company.admin_review_reason
-            or "관리자 검토 중입니다. Enterprise 가입·승인 후 연락 기능이 활성화됩니다.",
-            "show_partnership_upsell": True,
-        }
-    if company.partnership_tier in PAID_TIERS and company.monthly_subscription_active:
-        return {"allowed": True, "show_partnership_upsell": False}
-
-    return {
-        "allowed": False,
-        "block_reason": BASIC_CONTACT_BLOCK_REASON,
-        "show_partnership_upsell": True,
-    }
+    return {"allowed": True, "show_partnership_upsell": False}
 
 
 def increment_contact(db: Session, company_key: str) -> None:

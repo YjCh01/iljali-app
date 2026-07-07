@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.qc_models import QcMemberRow
+from app.services.entitlement_service import normalize_brn
 from app.services import phone_verify_service as phone_svc
 
 client = TestClient(app)
@@ -74,6 +75,33 @@ def test_phone_verify_mock_returns_token():
     body = verify.json()
     assert body["verified"] is True
     assert body["phone_verified_token"]
+
+
+def test_phone_send_reuses_pending_code_without_error():
+    phone = "01055557777"
+    phone_svc._store.clear()
+    phone_svc._last_sent.clear()
+    first = client.post("/v1/auth/phone/send", json={"phone": phone})
+    assert first.status_code == 200
+    assert first.json()["sms_sent"] is True
+    second = client.post("/v1/auth/phone/send", json={"phone": phone})
+    assert second.status_code == 200
+    assert second.json()["sms_sent"] is False
+
+
+def test_phone_send_allowed_immediately_after_verify():
+    phone = "01055558888"
+    phone_svc._store.clear()
+    phone_svc._last_sent.clear()
+    client.post("/v1/auth/phone/send", json={"phone": phone})
+    verify = client.post(
+        "/v1/auth/phone/verify",
+        json={"phone": phone, "code": "123456", "purpose": "signup"},
+    )
+    assert verify.status_code == 200
+    again = client.post("/v1/auth/phone/send", json={"phone": phone})
+    assert again.status_code == 200
+    assert again.json()["sms_sent"] is True
 
 
 def test_signup_login_find_email_reset_password():
@@ -172,25 +200,30 @@ def test_signup_rejects_weak_password():
 
 def test_corporate_signup_login_cross_device():
     email = f"corp-{uuid4().hex[:8]}@example.com"
+    phone = f"010{uuid4().int % 10**8:08d}"
+    company_key = normalize_brn(f"1234567{uuid4().int % 1000:03d}")
+    signup_token = _verify_phone(phone, purpose="signup")
+    handler_code = f"{1000 + uuid4().int % 8999}"
     signup = client.post(
         "/v1/auth/signup/corporate",
         json={
             "email": email,
             "password": "SecurePass1!",
             "display_name": "김담당",
-            "phone": "01099998888",
+            "phone": phone,
+            "phone_verified_token": signup_token,
             "company_name": "테스트물류",
-            "company_key": f"1234567{uuid4().int % 1000:03d}",
+            "company_key": company_key,
             "department": "인사팀",
             "contact_person_name": "김담당",
-            "handler_code": f"{1000 + uuid4().int % 8999}",
+            "handler_code": handler_code,
         },
     )
     assert signup.status_code == 200, signup.text
     data = signup.json()
     assert data["member_type"] == "corporate"
-    assert data["company_key"] == "1234567890"
-    assert data["handler_code"] == "1001"
+    assert data["company_key"] == company_key
+    assert data["handler_code"] == handler_code
 
     login = client.post(
         "/v1/auth/login",

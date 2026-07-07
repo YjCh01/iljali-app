@@ -25,19 +25,22 @@ class CorporateChatRoomCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 24,
-            backgroundColor: room.isOfficialNotice
+            backgroundColor: room.isReadOnlyNotice
                 ? AppColors.primary.withValues(alpha: 0.15)
                 : AppColors.primaryLight.withValues(alpha: 0.35),
-            child: room.isOfficialNotice
-                ? const Icon(Icons.workspace_premium_outlined,
+            child: room.isAdminNotice
+                ? const Icon(Icons.campaign_outlined,
                     color: AppColors.primary, size: 22)
-                : Text(
-                    room.applicantName.characters.first,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
+                : room.isOfficialNotice
+                    ? const Icon(Icons.workspace_premium_outlined,
+                        color: AppColors.primary, size: 22)
+                    : Text(
+                        room.applicantName.characters.first,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -104,7 +107,7 @@ class CorporateChatRoomCard extends StatelessWidget {
               ),
             ),
           ],
-          if (onLeave != null && !room.isOfficialNotice) ...[
+          if (onLeave != null && !room.isReadOnlyNotice) ...[
             const SizedBox(width: 4),
             ChatRoomLeaveMenu(onLeave: onLeave!),
           ],

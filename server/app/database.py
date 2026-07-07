@@ -68,15 +68,141 @@ _JOB_POST_COLUMNS_POSTGRES = {
     "workplace_longitude": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_longitude DOUBLE PRECISION",
 }
 
+_JOB_APPLICATION_COLUMNS_SQLITE = {
+    "commute_route_id": "ALTER TABLE job_applications ADD COLUMN commute_route_id VARCHAR(64) DEFAULT ''",
+    "commute_route_name": "ALTER TABLE job_applications ADD COLUMN commute_route_name VARCHAR(200) DEFAULT ''",
+    "shuttle_stop_id": "ALTER TABLE job_applications ADD COLUMN shuttle_stop_id VARCHAR(64) DEFAULT ''",
+    "shuttle_stop_label": "ALTER TABLE job_applications ADD COLUMN shuttle_stop_label VARCHAR(200) DEFAULT ''",
+    "shuttle_pickup_time": "ALTER TABLE job_applications ADD COLUMN shuttle_pickup_time VARCHAR(32) DEFAULT ''",
+    "shuttle_shift_date": "ALTER TABLE job_applications ADD COLUMN shuttle_shift_date VARCHAR(10) DEFAULT ''",
+}
+
+_JOB_APPLICATION_COLUMNS_POSTGRES = {
+    "commute_route_id": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS commute_route_id VARCHAR(64) DEFAULT ''",
+    "commute_route_name": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS commute_route_name VARCHAR(200) DEFAULT ''",
+    "shuttle_stop_id": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS shuttle_stop_id VARCHAR(64) DEFAULT ''",
+    "shuttle_stop_label": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS shuttle_stop_label VARCHAR(200) DEFAULT ''",
+    "shuttle_pickup_time": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS shuttle_pickup_time VARCHAR(32) DEFAULT ''",
+    "shuttle_shift_date": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS shuttle_shift_date VARCHAR(10) DEFAULT ''",
+}
+
+_PILOT_PROGRAM_COLUMNS_SQLITE = {
+    "company_key": "ALTER TABLE app_pilot_programs ADD COLUMN company_key VARCHAR(10) DEFAULT ''",
+    "company_name": "ALTER TABLE app_pilot_programs ADD COLUMN company_name VARCHAR(200) DEFAULT ''",
+    "route_id": "ALTER TABLE app_pilot_programs ADD COLUMN route_id VARCHAR(64) DEFAULT ''",
+    "route_name": "ALTER TABLE app_pilot_programs ADD COLUMN route_name VARCHAR(200) DEFAULT ''",
+    "work_start_time": "ALTER TABLE app_pilot_programs ADD COLUMN work_start_time VARCHAR(5) DEFAULT ''",
+}
+
+_PILOT_PROGRAM_COLUMNS_POSTGRES = {
+    "company_key": "ALTER TABLE app_pilot_programs ADD COLUMN IF NOT EXISTS company_key VARCHAR(10) DEFAULT ''",
+    "company_name": "ALTER TABLE app_pilot_programs ADD COLUMN IF NOT EXISTS company_name VARCHAR(200) DEFAULT ''",
+    "route_id": "ALTER TABLE app_pilot_programs ADD COLUMN IF NOT EXISTS route_id VARCHAR(64) DEFAULT ''",
+    "route_name": "ALTER TABLE app_pilot_programs ADD COLUMN IF NOT EXISTS route_name VARCHAR(200) DEFAULT ''",
+    "work_start_time": "ALTER TABLE app_pilot_programs ADD COLUMN IF NOT EXISTS work_start_time VARCHAR(5) DEFAULT ''",
+}
+
+_PILOT_SESSION_COLUMNS_SQLITE = {
+    "work_start_time": "ALTER TABLE bus_location_tower_sessions ADD COLUMN work_start_time VARCHAR(5) DEFAULT ''",
+    "arrived_at_workplace": "ALTER TABLE bus_location_tower_sessions ADD COLUMN arrived_at_workplace BOOLEAN DEFAULT 0",
+}
+
+_PILOT_SESSION_COLUMNS_POSTGRES = {
+    "work_start_time": "ALTER TABLE bus_location_tower_sessions ADD COLUMN IF NOT EXISTS work_start_time VARCHAR(5) DEFAULT ''",
+    "arrived_at_workplace": "ALTER TABLE bus_location_tower_sessions ADD COLUMN IF NOT EXISTS arrived_at_workplace BOOLEAN DEFAULT FALSE",
+}
+
 
 def ensure_qc_member_schema() -> None:
     """Rolling deploy — add qc_members / job_posts columns if missing."""
     if settings.database_url.startswith("sqlite"):
         _ensure_sqlite_columns("qc_members", _QC_MEMBER_COLUMNS_SQLITE)
         _ensure_sqlite_columns("job_posts", _JOB_POST_COLUMNS_SQLITE)
+        _ensure_sqlite_columns("job_applications", _JOB_APPLICATION_COLUMNS_SQLITE)
+        _ensure_sqlite_columns("app_pilot_programs", _PILOT_PROGRAM_COLUMNS_SQLITE)
+        _ensure_sqlite_columns("bus_location_tower_sessions", _PILOT_SESSION_COLUMNS_SQLITE)
     else:
         _ensure_postgres_columns(_QC_MEMBER_COLUMNS_POSTGRES)
         _ensure_postgres_columns(_JOB_POST_COLUMNS_POSTGRES)
+        _ensure_postgres_columns(_JOB_APPLICATION_COLUMNS_POSTGRES)
+        _ensure_postgres_columns(_PILOT_PROGRAM_COLUMNS_POSTGRES)
+        _ensure_postgres_columns(_PILOT_SESSION_COLUMNS_POSTGRES)
+
+
+_PUSH_WALLET_COLUMNS_SQLITE = {
+    "push_ticket_credits": (
+        "ALTER TABLE employer_push_wallets ADD COLUMN push_ticket_credits INTEGER DEFAULT 0"
+    ),
+}
+
+_PUSH_WALLET_COLUMNS_POSTGRES = {
+    "push_ticket_credits": (
+        "ALTER TABLE employer_push_wallets ADD COLUMN IF NOT EXISTS "
+        "push_ticket_credits INTEGER DEFAULT 0"
+    ),
+}
+
+
+def ensure_push_wallet_schema() -> None:
+    if settings.database_url.startswith("sqlite"):
+        _ensure_sqlite_columns("employer_push_wallets", _PUSH_WALLET_COLUMNS_SQLITE)
+    else:
+        _ensure_postgres_columns(_PUSH_WALLET_COLUMNS_POSTGRES)
+
+
+_ADMIN_ANNOUNCEMENT_COLUMNS_SQLITE = {
+    "audience": (
+        "ALTER TABLE admin_announcements ADD COLUMN audience VARCHAR(16) DEFAULT 'all'"
+    ),
+}
+
+_ADMIN_ANNOUNCEMENT_COLUMNS_POSTGRES = {
+    "audience": (
+        "ALTER TABLE admin_announcements ADD COLUMN IF NOT EXISTS "
+        "audience VARCHAR(16) DEFAULT 'all'"
+    ),
+}
+
+
+def ensure_admin_announcement_schema() -> None:
+    if settings.database_url.startswith("sqlite"):
+        _ensure_sqlite_columns(
+            "admin_announcements", _ADMIN_ANNOUNCEMENT_COLUMNS_SQLITE
+        )
+    else:
+        _ensure_postgres_columns(_ADMIN_ANNOUNCEMENT_COLUMNS_POSTGRES)
+
+
+_ABUSE_FLAG_COLUMNS_SQLITE = {
+    "post_id": "ALTER TABLE abuse_flags ADD COLUMN post_id VARCHAR(64)",
+    "post_title": "ALTER TABLE abuse_flags ADD COLUMN post_title VARCHAR(200)",
+    "company_name": "ALTER TABLE abuse_flags ADD COLUMN company_name VARCHAR(200)",
+    "head_office_address": "ALTER TABLE abuse_flags ADD COLUMN head_office_address TEXT",
+    "workplace_address": "ALTER TABLE abuse_flags ADD COLUMN workplace_address TEXT",
+    "distance_meters": "ALTER TABLE abuse_flags ADD COLUMN distance_meters INTEGER",
+    "review_status": "ALTER TABLE abuse_flags ADD COLUMN review_status VARCHAR(32)",
+    "resolved_action": "ALTER TABLE abuse_flags ADD COLUMN resolved_action VARCHAR(64)",
+    "resolved_at": "ALTER TABLE abuse_flags ADD COLUMN resolved_at DATETIME",
+}
+
+_ABUSE_FLAG_COLUMNS_POSTGRES = {
+    "post_id": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS post_id VARCHAR(64)",
+    "post_title": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS post_title VARCHAR(200)",
+    "company_name": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS company_name VARCHAR(200)",
+    "head_office_address": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS head_office_address TEXT",
+    "workplace_address": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS workplace_address TEXT",
+    "distance_meters": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS distance_meters INTEGER",
+    "review_status": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS review_status VARCHAR(32)",
+    "resolved_action": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS resolved_action VARCHAR(64)",
+    "resolved_at": "ALTER TABLE abuse_flags ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",
+}
+
+
+def ensure_abuse_flag_schema() -> None:
+    if settings.database_url.startswith("sqlite"):
+        _ensure_sqlite_columns("abuse_flags", _ABUSE_FLAG_COLUMNS_SQLITE)
+    else:
+        _ensure_postgres_columns(_ABUSE_FLAG_COLUMNS_POSTGRES)
 
 
 def _ensure_sqlite_columns(table: str, alters: dict[str, str]) -> None:

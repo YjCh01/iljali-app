@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/config/free_exposure_launch_policy.dart';
+import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
@@ -68,6 +70,7 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
   CorporateJobPost? _jobPost;
   bool _loading = true;
   bool _paying = false;
+  bool _freeExposurePromo = false;
 
   bool _isStopLocked(_ShuttlePayRow row) =>
       _jobPost?.isShuttleStopExposureLocked(row.routeId, row.stop.id) == true;
@@ -88,16 +91,27 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
       _chargeableCount * PushPackageCatalog.exposureUnitPriceKrw;
 
   String get _checkoutButtonLabel {
-    if (_paying) return '결제하기';
+    if (_paying) {
+      return _freeExposurePromo ? '적용 중…' : '결제하기';
+    }
     if (_selectedCount == 0) return '노출할 정류장을 선택해 주세요';
     if (_chargeableCount == 0) return '노출 중인 정류장은 결제할 수 없습니다';
-    return '결제하기';
+    return _freeExposurePromo ? '무료 노출 적용' : '결제하기';
   }
+
+  String get _pageTitle =>
+      _freeExposurePromo ? '정류장 표시핀 무료 노출' : '정류장 표시핀 결제';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final promo = await FreeExposureLaunchPolicy.isActive();
+    if (mounted) setState(() => _freeExposurePromo = promo);
+    await _load();
   }
 
   Future<void> _load() async {
@@ -285,6 +299,7 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
       }
 
       if (!mounted) return;
+      JobBoardRefresh.markUpdated();
       Navigator.of(context).pop(const ShuttleStopPaymentPageResult(paid: true));
     } finally {
       if (mounted) setState(() => _paying = false);
@@ -363,9 +378,9 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         automaticallyImplyLeading: false,
-        title: const Text(
-          '정류장 표시핀 결제',
-          style: TextStyle(fontWeight: FontWeight.w800),
+        title: Text(
+          _pageTitle,
+          style: const TextStyle(fontWeight: FontWeight.w800),
         ),
       ),
       body: _loading
@@ -568,7 +583,7 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (_selectedCount > 0)
+                          if (_selectedCount > 0 && !_freeExposurePromo)
                             Align(
                               alignment: Alignment.centerRight,
                               child: Text(
@@ -576,6 +591,19 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          if (_selectedCount > 0 && _freeExposurePromo)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '출시 기념 무료 노출 · $_chargeableCount곳',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textSecondary
+                                      .withValues(alpha: 0.95),
                                 ),
                               ),
                             ),

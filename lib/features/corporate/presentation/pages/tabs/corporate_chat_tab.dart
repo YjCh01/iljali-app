@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/hiring/chat_room_leave_service.dart';
 import 'package:map/core/config/product_feature_flags.dart';
-import 'package:map/core/compliance/presentation/partnership_upsell_dialog.dart';
-import 'package:map/core/compliance/services/contact_entitlement_service.dart';
 import 'package:map/core/constants/app_colors.dart';
-import 'package:map/core/constants/app_routes.dart';
-import 'package:map/core/dev/dev_chat_test_support.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/commission_chat_prompt_service.dart';
 import 'package:map/core/hiring/hiring_refresh.dart';
@@ -18,6 +14,7 @@ import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart'
 import 'package:map/features/corporate/domain/usecases/get_corporate_chat_rooms_usecase.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_chat_room_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
+import 'package:map/features/chat/presentation/pages/admin_announcement_chat_page.dart';
 import 'package:map/features/corporate/presentation/pages/official_notice_chat_page.dart';
 import 'package:map/features/hiring/presentation/pages/application_chat_page.dart';
 import 'package:map/features/hiring/presentation/widgets/commission_payment_dialog.dart';
@@ -39,7 +36,6 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
 
   List<CorporateChatRoom> _rooms = [];
   bool _loading = true;
-  bool _contactAllowed = false;
   int _pendingCommissionCount = 0;
 
   @override
@@ -62,16 +58,6 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final profile = AuthSession.instance.currentUser?.corporateProfile;
-    var allowed = false;
-    final devChatReady = await DevChatTestSupport.ensureCorporateChatReady();
-    if (devChatReady) {
-      allowed = true;
-    } else if (profile != null) {
-      final access =
-          await ContactEntitlementService().evaluateWithUsage(profile);
-      allowed = access.allowed;
-    }
     final rooms = await _getChatRooms();
     final myEmail = AuthSession.instance.currentUser?.email ?? '';
     final repo = await LocalHiringRepository.create();
@@ -89,13 +75,12 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
 
     if (!mounted) return;
     setState(() {
-      _contactAllowed = allowed;
-      _rooms = allowed ? rooms : const [];
+      _rooms = rooms;
       _pendingCommissionCount = pendingCommissions.length;
       _loading = false;
     });
 
-    if (!allowed || !widget.isActive) return;
+    if (!widget.isActive) return;
 
     for (final applicationId in promptIds) {
       final app = await repo.findById(applicationId);
@@ -128,6 +113,15 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
   }
 
   Future<void> _openRoom(CorporateChatRoom room) async {
+    if (room.isAdminNotice) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => AdminAnnouncementChatPage(room: room),
+        ),
+      );
+      if (mounted) await _load();
+      return;
+    }
     if (room.isOfficialNotice) {
       final renewed = await Navigator.of(context).push<bool>(
         MaterialPageRoute<bool>(
@@ -143,20 +137,6 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
       return;
     }
 
-    if (!_contactAllowed) {
-      if (await DevChatTestSupport.ensureCorporateChatReady()) {
-        if (mounted) setState(() => _contactAllowed = true);
-      } else {
-        final profile = AuthSession.instance.currentUser?.corporateProfile;
-        if (profile != null) {
-          final access =
-              await ContactEntitlementService().evaluateWithUsage(profile);
-          if (!mounted) return;
-          await ensureContactAccess(context, access);
-        }
-        return;
-      }
-    }
     final policy = ChatAccessPolicy.evaluatePair(
       requester: MemberType.corporate,
       peer: MemberType.individual,
@@ -196,10 +176,8 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
       );
     }
 
-    final showRestriction = !_contactAllowed;
-    final showEmpty = _contactAllowed && _rooms.isEmpty;
-    final itemCount = (showRestriction ? 1 : 0) +
-        (_pendingCommissionCount > 0 ? 1 : 0) +
+    final showEmpty = _rooms.isEmpty;
+    final itemCount = (_pendingCommissionCount > 0 ? 1 : 0) +
         (showEmpty ? 1 : 0) +
         _rooms.length;
 
@@ -215,15 +193,6 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             var cursor = 0;
-            if (showRestriction) {
-              if (index == cursor) {
-                return _RestrictionCard(
-                  onOpenProfile: () =>
-                      Navigator.of(context).pushNamed(AppRoutes.corporateMyInfo),
-                );
-              }
-              cursor++;
-            }
             if (_pendingCommissionCount > 0) {
               if (index == cursor) {
                 return _CommissionBanner(count: _pendingCommissionCount);
@@ -240,7 +209,7 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
             return CorporateChatRoomCard(
               room: room,
               onTap: () => _openRoom(room),
-              onLeave: room.isOfficialNotice ? null : () => _leaveRoom(room),
+              onLeave: room.isReadOnlyNotice ? null : () => _leaveRoom(room),
             );
           },
         ),
@@ -269,37 +238,6 @@ class _CommissionBanner extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RestrictionCard extends StatelessWidget {
-  const _RestrictionCard({required this.onOpenProfile});
-
-  final VoidCallback onOpenProfile;
-
-  @override
-  Widget build(BuildContext context) {
-    return CorporateSurfaceCard(
-      onTap: onOpenProfile,
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '지원자 채팅 이용 제한',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary,
-            ),
-          ),
-          SizedBox(height: 6),
-          Text(
-            '계정·사업자 검증을 완료하면 지원자와 채팅할 수 있습니다.',
-            style: TextStyle(fontSize: 13, height: 1.45),
           ),
         ],
       ),

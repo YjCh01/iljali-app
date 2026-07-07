@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/branding/iljari_ad_campaign.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/legal/widgets/site_legal_footer.dart';
 
 /// Auth 화면 공통 — 짙은 퍼플 배경 + 상단 타이틀
 class AuthScaffold extends StatelessWidget {
@@ -52,18 +53,31 @@ class AuthScaffold extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: 8),
                 child: IljariAdCampaignCopy(),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Expanded(
                 child: SingleChildScrollView(
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: body,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      body,
+                      const SizedBox(height: 20),
+                      const SiteLegalFooter(variant: SiteLegalFooterVariant.dark),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ),
               if (bottom != null) ...[
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                  child: bottom!,
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: bottom!,
+                    ),
+                  ),
                 ),
               ],
             ],

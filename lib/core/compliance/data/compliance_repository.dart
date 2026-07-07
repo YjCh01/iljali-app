@@ -81,10 +81,42 @@ class ComplianceRepository {
   Future<void> addAbuseFlag(Map<String, dynamic> flag) async {
     final flags = await fetchAbuseFlags();
     flags.insert(0, {
+      'id': 'abuse_${DateTime.now().millisecondsSinceEpoch}',
       ...flag,
       'createdAt': DateTime.now().toIso8601String(),
     });
     await _prefs.setString(_keyAbuseFlags, jsonEncode(flags));
+  }
+
+  Future<List<Map<String, dynamic>>> fetchWorkplaceMismatchPendingFlags() async {
+    final flags = await fetchAbuseFlags();
+    return flags.where((f) {
+      if (f['type'] != 'workplaceMismatch') return false;
+      final status = f['reviewStatus'] as String? ?? 'pending';
+      return status == 'pending';
+    }).toList();
+  }
+
+  Future<Map<String, dynamic>?> findAbuseFlagById(String id) async {
+    for (final flag in await fetchAbuseFlags()) {
+      if (flag['id'] == id) return flag;
+    }
+    return null;
+  }
+
+  Future<bool> updateAbuseFlagById(
+    String id,
+    Map<String, dynamic> patch,
+  ) async {
+    final flags = await fetchAbuseFlags();
+    final index = flags.indexWhere((f) => f['id'] == id);
+    if (index < 0) return false;
+    flags[index] = {
+      ...flags[index],
+      ...patch,
+    };
+    await _prefs.setString(_keyAbuseFlags, jsonEncode(flags));
+    return true;
   }
 
   Future<List<Map<String, dynamic>>> fetchAbuseFlags() async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +12,7 @@ import 'package:map/core/compliance/services/abuse_detection_service.dart';
 import 'package:map/core/compliance/services/contact_entitlement_service.dart';
 import 'package:map/core/dev/dev_chat_test_support.dart';
 import 'package:map/core/hiring/chat_room_leave_service.dart';
+import 'package:map/core/hiring/application_chat_realtime_client.dart';
 import 'package:map/core/hiring/application_chat_message.dart';
 import 'package:map/core/hiring/application_chat_message_repository.dart';
 import 'package:map/core/hiring/chat_message_kind.dart';
@@ -59,6 +62,9 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
   final _controller = TextEditingController();
   final _inputFocus = FocusNode();
   bool _accessDenied = false;
+  ApplicationChatRealtimeClient? _realtime;
+  StreamSubscription<Map<String, dynamic>>? _realtimeSub;
+  Timer? _fallbackPollTimer;
 
   bool get _isEmployer =>
       AuthSession.instance.currentUser?.memberType == MemberType.corporate;
@@ -71,6 +77,9 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
 
   @override
   void dispose() {
+    _fallbackPollTimer?.cancel();
+    unawaited(_realtimeSub?.cancel());
+    unawaited(_realtime?.dispose());
     _controller.dispose();
     _inputFocus.dispose();
     super.dispose();
@@ -160,6 +169,8 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
         ..addAll(stored);
     });
 
+    await _startRealtime(app);
+
     if (_isEmployer &&
         ProductFeatureFlags.isHiringCommissionEnabled &&
         app.status == HiringApplicationStatus.checkedIn &&
@@ -167,6 +178,57 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
         mounted) {
       await showCommissionPaymentDialog(context, app);
     }
+  }
+
+  Future<void> _startRealtime(HiringApplication app) async {
+    await _realtimeSub?.cancel();
+    await _realtime?.dispose();
+    _fallbackPollTimer?.cancel();
+
+    final role = _isEmployer ? 'employer' : 'seeker';
+    final client = ApplicationChatRealtimeClient(
+      applicationId: widget.applicationId,
+      senderRole: role,
+      onConnectionStateChanged: _onRealtimeConnectionChanged,
+    );
+    _realtime = client;
+
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    _realtimeSub = client.incomingMessages.listen((row) async {
+      final parsed = await chatRepo.applyIncomingRow(widget.applicationId, row);
+      if (parsed == null || !mounted) return;
+      setState(() => _messages.add(parsed));
+    });
+
+    await client.connect();
+  }
+
+  void _onRealtimeConnectionChanged(bool connected) {
+    _fallbackPollTimer?.cancel();
+    if (connected || !mounted) return;
+    _fallbackPollTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => unawaited(_refreshMessages()),
+    );
+  }
+
+  Future<void> _refreshMessages() async {
+    final app = _application;
+    if (app == null || !mounted) return;
+
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    final stored = await chatRepo.loadSynced(
+      applicationId: widget.applicationId,
+      companyName: app.companyName,
+      postTitle: app.postTitle,
+      seekerName: app.seekerName,
+    );
+    if (!mounted) return;
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(stored);
+    });
   }
 
   void _insertMacro(String text) {
@@ -272,9 +334,15 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     }
 
     final chatRepo = await ApplicationChatMessageRepository.create();
-    await chatRepo.append(widget.applicationId, message);
+    final stored = await chatRepo.append(widget.applicationId, message);
     if (!mounted) return;
-    setState(() => _messages.add(message));
+    setState(() {
+      if (stored.id != null &&
+          _messages.any((item) => item.id == stored.id)) {
+        return;
+      }
+      _messages.add(stored);
+    });
 
     if (message.kind == ChatMessageKind.text &&
         ChatContactFilter.containsPhoneNumber(message.text)) {
@@ -561,11 +629,8 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
       builder: (sheetContext) => JobPostDetailSheet(
         pin: pin,
         onClose: () => Navigator.of(sheetContext).pop(),
-        onApply: () async {
-          final applied = await showJobApplyDialog(sheetContext, pin);
-          if (applied && sheetContext.mounted) {
-            Navigator.of(sheetContext).pop();
-          }
+        onApply: () {
+          if (sheetContext.mounted) Navigator.of(sheetContext).pop();
         },
       ),
     );

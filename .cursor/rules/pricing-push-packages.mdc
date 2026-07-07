@@ -14,9 +14,10 @@ alwaysApply: true
 | Field | Value |
 |-------|-------|
 | Name | `기본 플랜` (no tier enum labels) |
-| Push radius | **1km** (interim: same as package) |
-| Daily free push | **1/day** |
-| Signup bonus | **5 packages per BRN** (90-day expiry; not per account) |
+| Push radius | **700m** (interim: same as package) |
+| Daily free push | **none** (signup + verification bonus only) |
+| Signup bonus | **2 packages per BRN** (90-day expiry) |
+| Verification bonus | **5 packages per BRN** (90-day expiry) |
 | Base locations | **1** |
 | Monthly fee | **0** |
 
@@ -24,7 +25,7 @@ Free is **stingy by design** — drive package purchases (extra bases + pushes).
 
 ## Core product
 
-**`푸시·거점 패키지`** — **5,000 KRW** = **1 location + 1 push** (push at **1km** from that location).
+**`푸시·거점 패키지`** — **5,000 KRW** = **1 location + 1 push** (push at **700m** from that location).
 
 ## Bundles
 
@@ -38,24 +39,26 @@ Credits expire **365 days** after purchase.
 
 ## Depletion order
 
-1. Daily free (1km, 1/day)  
-2. Signup bonus (1km, BRN ledger)  
-3. Package credits (1km at chosen base point)
+1. Signup bonus (700m, BRN ledger)  
+2. Verification bonus (700m, BRN ledger)  
+3. Package credits (700m at chosen base point)
 
 ## BRN bonus ledger
 
-- `CompanyBonusLedgerRepository.tryClaimSignupBonus(companyKey)` — once per BRN  
+- Signup: `CompanyBonusLedgerRepository.tryClaimSignupBonus` — 2 per BRN  
+- Verification: separate ledger — 5 per BRN  
 - Wallet keyed by `companyKey`; handlers share balance
 
-## Revenue mix
+## Revenue mix (main app)
 
-- **Primary**: package sales  
-- **Secondary**: daily-worker check-in fee (10,000 KRW), permanent-worker 5.5% — unchanged unless PRD updates
+- **Primary**: 알림핀 패키지 (5,000 KRW / push+base)  
+- **Not charged on main app**: daily-worker success commission, permanent-worker 5.5% — gated by `ENABLE_HIRING_COMMISSION` / `ENABLE_PERMANENT_HIRE` (default **off**)
 
 ## UX copy rules
 
-- Home/marketing: **1km · 1/day · BRN bonus 5** vs **package = extra bases + pushes**  
-- Never show tier comparison grids or “upgrade plan”
+- Home/marketing: **공고 무료 · 700m 핀 · 보너스 알림핀** vs **패키지 = extra bases + pushes**  
+- Never show tier comparison grids or “upgrade plan”  
+- Never promise “출근 확인 시 수수료” on main app builds
 
 ## Code migration
 

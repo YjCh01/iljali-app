@@ -1,4 +1,5 @@
 import 'package:map/core/compliance/data/compliance_repository.dart';
+import 'package:map/core/compliance/data/workplace_mismatch_flag_repository.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 
@@ -146,17 +147,20 @@ extension AbuseDetectionWorkplaceMismatch on AbuseDetectionService {
     required String workplaceAddress,
     String? reason,
     int? distanceMeters,
+    String? companyName,
+    String? postId,
+    String? postTitle,
   }) async {
-    final repo = await _repo();
-    await repo.addAbuseFlag({
-      'type': AbuseAlertType.workplaceMismatch.name,
-      'severity': AbuseSeverity.high.name,
-      'companyKey': companyKey,
-      'headOfficeAddress': headOfficeAddress,
-      'workplaceAddress': workplaceAddress,
-      if (distanceMeters != null) 'distanceMeters': distanceMeters,
-      'message': reason ?? '실근무지와 사업자 소재지 불일치 감지 — 노출 제한 및 관리자 검토 필요',
-    });
+    await WorkplaceMismatchFlagRepository.report(
+      companyKey: companyKey,
+      headOfficeAddress: headOfficeAddress,
+      workplaceAddress: workplaceAddress,
+      reason: reason,
+      distanceMeters: distanceMeters,
+      companyName: companyName,
+      postId: postId,
+      postTitle: postTitle,
+    );
   }
 }
 

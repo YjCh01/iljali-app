@@ -1,3 +1,4 @@
+import 'package:map/features/corporate/domain/entities/exposure_activation_source.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/push_dispatch_target.dart';
@@ -18,11 +19,13 @@ abstract final class ExposureSlotPolicy {
   static PushNotificationBasePoint lockActivation(
     PushNotificationBasePoint point, {
     DateTime? paidAt,
+    ExposureActivationSource? activationSource,
   }) {
     return point.copyWith(
       exposureActivated: true,
       activationCoordinate: point.coordinate,
       exposurePaidAt: point.exposurePaidAt ?? paidAt ?? DateTime.now(),
+      exposureActivationSource: activationSource ?? point.exposureActivationSource,
     );
   }
 
@@ -30,11 +33,13 @@ abstract final class ExposureSlotPolicy {
   static PushNotificationBasePoint renewActivation(
     PushNotificationBasePoint point, {
     DateTime? paidAt,
+    ExposureActivationSource? activationSource,
   }) {
     return point.copyWith(
       exposureActivated: true,
       activationCoordinate: point.activationCoordinate ?? point.coordinate,
       exposurePaidAt: paidAt ?? DateTime.now(),
+      exposureActivationSource: activationSource ?? point.exposureActivationSource,
     );
   }
 
@@ -98,6 +103,7 @@ abstract final class ExposureSlotPolicy {
         exposureActivated: true,
         activationCoordinate: prev.activationCoordinate ?? prev.coordinate,
         exposurePaidAt: prev.exposurePaidAt,
+        exposureActivationSource: prev.exposureActivationSource,
       );
     }
 

@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:map/core/api/iljari_api_client.dart';
+import 'package:map/core/config/dev_experience_flags.dart';
 import 'package:map/core/config/env_config.dart';
 import 'package:map/core/dev/dev_test_data_seeder.dart';
 import 'package:map/core/session/auth_session.dart';
@@ -17,8 +17,7 @@ abstract final class QcAuthService {
 
   static const qcSeekerPassword = 'QcTest1234!';
 
-  static bool get isQcSeekerEmailEnabled =>
-      kDebugMode && (EnvConfig.qcMode || EnvConfig.isComplianceApiEnabled);
+  static bool get isQcSeekerEmailEnabled => DevExperienceFlags.enabled;
 
   static bool isQcSeekerEmail(String email) =>
       _seekerEmail.hasMatch(email.trim().toLowerCase());

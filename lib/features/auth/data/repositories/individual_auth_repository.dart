@@ -8,6 +8,7 @@ import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/auth_user.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/core/sync/qc_sync_bootstrap.dart';
+import 'package:map/features/auth/domain/utils/auth_error_message.dart';
 import 'package:map/features/auth/data/local/local_individual_auth_store.dart';
 import 'package:map/features/auth/domain/validators/name_validator.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.dart';
@@ -60,15 +61,9 @@ abstract final class IndividualAuthRepository {
         await QcSyncBootstrap.pullIfEnabled();
         return;
       } on IljariApiException catch (e) {
-        final local = await LocalIndividualAuthStore.authenticate(
-          email: normalizedEmail,
-          password: password,
+        throw ArgumentError(
+          AuthErrorMessage.loginFailure(e, memberType: MemberType.individual),
         );
-        if (local != null) {
-          await _signInFromLocalRow(local);
-          return;
-        }
-        throw ArgumentError(_loginErrorMessage(e));
       }
     }
 
@@ -80,6 +75,27 @@ abstract final class IndividualAuthRepository {
       throw ArgumentError('이메일 또는 비밀번호가 올바르지 않습니다.');
     }
     await _signInFromLocalRow(local);
+  }
+
+  /// 소셜 로그인·가입 API 응답으로 세션 완료
+  static Future<void> completeRemoteLogin(Map<String, dynamic> result) async {
+    _ensureIndividualMemberType(result);
+    final token = result['access_token'] as String?;
+    if (token != null && token.isNotEmpty) {
+      await AuthSession.instance.setAccessToken(token);
+    }
+    final email = (result['email'] as String?) ?? '';
+    await _signInFromLoginResult(
+      result,
+      fallbackEmail: email,
+    );
+    try {
+      await QcSyncBootstrap.pullIfEnabled();
+    } on QcMemberSanctionException {
+      rethrow;
+    } on Object {
+      // offline — 로그인은 유지
+    }
   }
 
   static Future<void> signUp({
@@ -193,18 +209,9 @@ abstract final class IndividualAuthRepository {
     }
   }
 
-  static String _loginErrorMessage(IljariApiException error) {
-    final message = error.message.trim();
-    if (message.contains('이메일 또는 비밀번호')) {
-      return '이메일 또는 비밀번호가 올바르지 않습니다. '
-          '다른 기기에서 가입했다면 비밀번호 찾기를 이용하거나, '
-          '기업회원으로 가입했는지 확인해 주세요.';
-    }
-    if (message.contains('이용 제한')) {
-      return message;
-    }
-    return message.isNotEmpty ? message : '로그인에 실패했습니다.';
-  }
+  @visibleForTesting
+  static String loginErrorMessageForTest(IljariApiException error) =>
+      AuthErrorMessage.loginFailure(error, memberType: MemberType.individual);
 
   static Future<void> _signInFromLoginResult(
     Map<String, dynamic> result, {
@@ -317,8 +324,4 @@ abstract final class IndividualAuthRepository {
   @visibleForTesting
   static void ensureIndividualMemberTypeForTest(Map<String, dynamic> result) =>
       _ensureIndividualMemberType(result);
-
-  @visibleForTesting
-  static String loginErrorMessageForTest(IljariApiException error) =>
-      _loginErrorMessage(error);
 }

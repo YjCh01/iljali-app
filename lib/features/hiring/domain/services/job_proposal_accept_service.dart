@@ -9,8 +9,10 @@ import 'package:map/features/commute/data/repositories/shuttle_booking_repositor
 import 'package:map/features/commute/domain/entities/shuttle_booking.dart';
 import 'package:map/features/commute/domain/services/shuttle_reminder_service.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart';
+import 'package:map/core/session/member_type.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/hiring/data/repositories/job_proposal_repository.dart';
 import 'package:map/features/hiring/domain/entities/job_proposal.dart';
 import 'package:map/features/job_seeker/data/repositories/job_application_repository.dart';
@@ -32,6 +34,21 @@ abstract final class JobProposalAcceptService {
   }) async {
     final user = AuthSession.instance.currentUser;
     if (user == null) return false;
+
+    if (user.memberType != MemberType.individual) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '기업회원 계정에서는 지원할 수 없습니다. '
+              '개인회원으로 로그인해 주세요.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return false;
+    }
 
     final post = await const CorporateJobPostLocalDataSourceImpl()
         .findById(proposal.postId);
@@ -88,6 +105,8 @@ abstract final class JobProposalAcceptService {
       workSchedule: post.workSchedule,
       workerCategory: post.effectiveWorkerCategory,
       hasShuttle: shuttleRoute != null,
+      workScheduleNegotiable: post.workScheduleNegotiable ||
+          WorkScheduleNegotiable.isLabel(post.workSchedule),
       shuttleRoute: shuttleRoute,
     );
     if (flowResult == null || !context.mounted) return false;
@@ -101,10 +120,13 @@ abstract final class JobProposalAcceptService {
     }
 
     final shuttleSel = flowResult.shuttleSelection;
-    final shiftDateIso = SelectedShiftDates.encode(flowResult.selectedDates);
+    final shiftDateIso = flowResult.scheduleNegotiable
+        ? ''
+        : SelectedShiftDates.encode(flowResult.selectedDates);
     String? bookingId;
     if (shuttleSel != null && shuttleRoute != null) {
-      final shuttleDateIso = SelectedShiftDates.encode([flowResult.primaryDate]);
+      final shuttleDay = flowResult.primaryDate ?? DateTime.now();
+      final shuttleDateIso = SelectedShiftDates.encode([shuttleDay]);
       bookingId = 'book_${DateTime.now().millisecondsSinceEpoch}';
       final booking = ShuttleBooking(
         id: bookingId,

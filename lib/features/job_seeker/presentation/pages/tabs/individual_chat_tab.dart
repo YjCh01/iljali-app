@@ -1,21 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/hiring/chat_room_leave_service.dart';
+import 'package:map/core/hiring/hiring_refresh.dart';
 import 'package:map/core/hiring/hiring_application.dart';
-import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/hiring/seeker_attendance_gate_service.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/features/chat/domain/services/chat_access_policy.dart';
+import 'package:map/features/chat/domain/services/seeker_chat_room_list_policy.dart';
 import 'package:map/features/hiring/presentation/widgets/chat/chat_room_leave_menu.dart';
 import 'package:map/features/hiring/presentation/pages/application_chat_page.dart';
 import 'package:map/features/hiring/presentation/widgets/seeker_attendance_lock_dialog.dart';
+import 'package:map/features/chat/domain/services/admin_announcement_room_service.dart';
+import 'package:map/features/chat/presentation/pages/admin_announcement_chat_page.dart';
+import 'package:map/features/corporate/domain/entities/corporate_chat_room.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_chat_room_card.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
+import 'package:map/features/commute/presentation/widgets/bus_location_tower_pilot_entry_card.dart';
 
 /// 구직자 5번 탭 — 기업 채팅 (↔ 기업 채팅)
 class IndividualChatTab extends StatefulWidget {
-  const IndividualChatTab({super.key});
+  const IndividualChatTab({super.key, this.isActive = false});
+
+  /// 활성 탭일 때만 목록 갱신
+  final bool isActive;
 
   @override
   State<IndividualChatTab> createState() => _IndividualChatTabState();
@@ -24,12 +33,25 @@ class IndividualChatTab extends StatefulWidget {
 class _IndividualChatTabState extends State<IndividualChatTab> {
   SeekerAttendanceGateResult? _gate;
   List<HiringApplication> _applications = [];
+  List<CorporateChatRoom> _noticeRooms = const [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.isActive) _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant IndividualChatTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      _load();
+      return;
+    }
+    if (widget.isActive && HiringRefresh.consumeIfDirty()) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -41,24 +63,30 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
     final gate = await SeekerAttendanceGateService().evaluate(email);
     final repo = await LocalHiringRepository.create();
     final apps = await repo.fetchForSeeker(email);
-    final active = apps
-        .where((a) =>
-            a.status != HiringApplicationStatus.rejected &&
-            a.status != HiringApplicationStatus.noShow &&
-            a.status != HiringApplicationStatus.commissionPaid)
-        .toList();
+    final active = SeekerChatRoomListPolicy.filterForChatList(apps);
     final visible = await ChatRoomLeaveService.filterVisible(
       items: active,
       applicationIdOf: (a) => a.id,
       userEmail: email,
     );
+    final noticeRooms = await AdminAnnouncementRoomService.fetchNoticeRooms();
     if (mounted) {
       setState(() {
         _gate = gate;
         _applications = visible;
+        _noticeRooms = noticeRooms;
         _loading = false;
       });
     }
+  }
+
+  Future<void> _openNotice(CorporateChatRoom room) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AdminAnnouncementChatPage(room: room),
+      ),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _leaveChat(HiringApplication app) async {
@@ -101,7 +129,10 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
       );
     }
 
-    if (_applications.isEmpty && _gate?.isLocked != true) {
+    final hasNotices = _noticeRooms.isNotEmpty;
+    final hasApps = _applications.isNotEmpty;
+
+    if (!hasApps && !hasNotices && _gate?.isLocked != true) {
       return ColoredBox(
         color: AppColors.background,
         child: RefreshIndicator(
@@ -111,6 +142,8 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             children: const [
+              BusLocationTowerPilotEntryCard(),
+              SizedBox(height: 12),
               SizedBox(height: 48),
               Center(
                 child: Text(
@@ -125,6 +158,12 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
       );
     }
 
+    final noticeCount = _noticeRooms.length;
+    final bannerCount = _gate?.isLocked == true ? 1 : 0;
+    final appCount = _applications.length;
+    const pilotHeaderCount = 1;
+    final itemCount = pilotHeaderCount + noticeCount + bannerCount + appCount;
+
     return ColoredBox(
       color: AppColors.background,
       child: RefreshIndicator(
@@ -133,10 +172,22 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
         child: ListView.separated(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          itemCount: _applications.length + (_gate?.isLocked == true ? 1 : 0),
+          itemCount: itemCount,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
-            if (_gate?.isLocked == true && index == 0) {
+            if (index == 0) {
+              return const BusLocationTowerPilotEntryCard();
+            }
+            final contentIndex = index - pilotHeaderCount;
+            if (contentIndex < noticeCount) {
+              final room = _noticeRooms[contentIndex];
+              return CorporateChatRoomCard(
+                room: room,
+                onTap: () => _openNotice(room),
+              );
+            }
+            final afterNotices = contentIndex - noticeCount;
+            if (_gate?.isLocked == true && afterNotices == 0) {
               return MaterialBanner(
                 backgroundColor: const Color(0xFFFFEBEE),
                 content: Text(
@@ -154,7 +205,7 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
                 ],
               );
             }
-            final roomIndex = _gate?.isLocked == true ? index - 1 : index;
+            final roomIndex = afterNotices - bannerCount;
             final app = _applications[roomIndex];
             return CorporateSurfaceCard(
               onTap: _gate?.isLocked == true ? null : () => _openChat(app),

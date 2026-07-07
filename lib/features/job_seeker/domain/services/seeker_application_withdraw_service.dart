@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
-import 'package:map/features/commute/data/repositories/shuttle_booking_repository.dart';
 import 'package:map/features/job_seeker/data/repositories/job_application_repository.dart';
 
-/// 구직자 지원 취소 — 채용·지원·셔틀 예약 정리
+/// 구직자 지원 취소 — 채용·지원 상태만 정리 (채팅은 별도)
 abstract final class SeekerApplicationWithdrawService {
   static Future<HiringApplication?> findActive({
     required String postId,
@@ -69,10 +68,7 @@ abstract final class SeekerApplicationWithdrawService {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('지원 취소'),
-        content: Text(
-          '「$title」 공고 지원을 취소할까요?\n'
-          '취소하면 기업과의 채팅·셔틀 예약도 함께 해제됩니다.',
-        ),
+        content: Text('「$title」 공고 지원을 취소할까요?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -94,12 +90,6 @@ abstract final class SeekerApplicationWithdrawService {
 
     final appRepo = await JobApplicationRepository.create(email);
     await appRepo?.removeByPostId(postId);
-
-    final bookingId = application.shuttleBookingId;
-    if (bookingId != null && bookingId.isNotEmpty) {
-      final shuttleRepo = await ShuttleBookingRepository.create();
-      await shuttleRepo.removeById(bookingId);
-    }
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

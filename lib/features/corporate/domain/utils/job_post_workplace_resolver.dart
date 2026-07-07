@@ -16,18 +16,71 @@ abstract final class JobPostWorkplaceResolver {
     return settings.basePoints.first.coordinate;
   }
 
-  static GeoCoordinate? storedCoordinate(CorporateJobPost post) {
-    final fromPost = post.workplaceCoordinate;
-    if (fromPost != null) return fromPost;
-    final fromSettings = coordinateFromSettings(post.notificationSettings);
-    if (fromSettings == null) return null;
-    final warehouse = post.warehouseName.trim();
-    if (warehouse.isNotEmpty &&
-        isLikelyDefaultPushMapCenter(fromSettings) &&
-        !isDefaultPushMapAddressLabel(warehouse)) {
-      return null;
+  static GeoCoordinate? storedCoordinate(CorporateJobPost post) =>
+      _trustedCoordinate(post);
+
+  /// 지도·공고 소재지 — 저장 좌표 → 알림 설정 0번(근무지) → 지오코딩
+  static GeoCoordinate resolveMapWorkplaceCoordinate(CorporateJobPost post) {
+    return _trustedCoordinate(post) ?? defaultPushMapCenter();
+  }
+
+  static Future<GeoCoordinate> resolveMapWorkplaceCoordinateAsync(
+    CorporateJobPost post,
+  ) async {
+    final trusted = _trustedCoordinate(post);
+    if (trusted != null) return trusted;
+
+    for (final query in geocodeQueryCandidates(post.warehouseName)) {
+      final geocoded = await AddressGeocoder.geocode(query);
+      if (geocoded != null && !isLikelyDefaultPushMapCenter(geocoded)) {
+        return geocoded;
+      }
     }
-    return fromSettings;
+
+    return defaultPushMapCenter();
+  }
+
+  static List<String> geocodeQueryCandidates(String warehouseName) {
+    final trimmed = warehouseName.trim();
+    if (trimmed.isEmpty) return const [];
+
+    final queries = <String>[trimmed];
+    final withoutParen = trimmed
+        .replaceAll(RegExp(r'\([^)]*\)'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (withoutParen.isNotEmpty && withoutParen != trimmed) {
+      queries.add(withoutParen);
+    }
+
+    final source = withoutParen.isNotEmpty ? withoutParen : trimmed;
+
+    // 상세주소·건물번호만 덧붙인 꼬리 제거 (예: "…소동산길 3-29 1234")
+    final withoutDetailTail = source
+        .replaceFirst(RegExp(r'\s+\d{1,5}$'), '')
+        .trim();
+    if (withoutDetailTail.length >= 6 &&
+        withoutDetailTail != source &&
+        !queries.contains(withoutDetailTail)) {
+      queries.add(withoutDetailTail);
+    }
+
+    final lotNumber = RegExp(r'\d+(?:-\d+)?').firstMatch(source);
+    if (lotNumber != null) {
+      final roadOnly = source.substring(0, lotNumber.end).trim();
+      if (roadOnly.length >= 6 && !queries.contains(roadOnly)) {
+        queries.add(roadOnly);
+      }
+    }
+    return queries;
+  }
+
+  static GeoCoordinate? _workplaceStoredCoordinate(CorporateJobPost post) {
+    final fromPost = post.workplaceCoordinate;
+    if (fromPost != null && !isLikelyDefaultPushMapCenter(fromPost)) {
+      return fromPost;
+    }
+    return null;
   }
 
   /// 근무지 좌표 — 저장 좌표 → 알림 0번 → hint → (비동기) 지오코딩 → 기본 중심
@@ -35,10 +88,8 @@ abstract final class JobPostWorkplaceResolver {
     CorporateJobPost post, {
     WorkplaceAddress? hint,
   }) {
-    final stored = storedCoordinate(post);
+    final stored = _trustedCoordinate(post, hint: hint);
     if (stored != null) return stored;
-
-    if (hint?.coordinate != null) return hint!.coordinate!;
 
     return defaultPushMapCenter();
   }
@@ -47,10 +98,8 @@ abstract final class JobPostWorkplaceResolver {
     CorporateJobPost post, {
     WorkplaceAddress? hint,
   }) async {
-    final stored = storedCoordinate(post);
+    final stored = _trustedCoordinate(post, hint: hint);
     if (stored != null) return stored;
-
-    if (hint?.coordinate != null) return hint!.coordinate!;
 
     final road = post.warehouseName.trim();
     if (road.isNotEmpty) {

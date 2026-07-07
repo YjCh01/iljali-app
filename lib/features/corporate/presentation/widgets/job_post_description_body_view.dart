@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/entities/job_post_description_body.dart';
+import 'package:map/features/corporate/presentation/widgets/job_post_description_image.dart';
 
 /// 공고 상세 본문 — 텍스트·이미지·HTML (구조화 필드와 분리된 영역)
 class JobPostDescriptionBodyView extends StatelessWidget {
@@ -77,47 +78,10 @@ class _BodyImage extends StatelessWidget {
         color: Colors.white,
         child: InkWell(
           onTap: () => _openFullscreen(context),
-          child: Image.network(
-            url,
+          child: JobPostDescriptionImage(
+            url: url,
             fit: BoxFit.contain,
             width: double.infinity,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return AspectRatio(
-                aspectRatio: 4 / 3,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    value: progress.expectedTotalBytes != null
-                        ? progress.cumulativeBytesLoaded /
-                            progress.expectedTotalBytes!
-                        : null,
-                    strokeWidth: 2,
-                  ),
-                ),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                padding: const EdgeInsets.all(24),
-                color: AppColors.primaryLight.withValues(alpha: 0.08),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.broken_image_outlined,
-                      color: AppColors.textSecondary.withValues(alpha: 0.7),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '이미지를 불러올 수 없습니다',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
           ),
         ),
       ),
@@ -136,7 +100,7 @@ class _BodyImage extends StatelessWidget {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4,
-                child: Image.network(url, fit: BoxFit.contain),
+                child: JobPostDescriptionImage(url: url, fit: BoxFit.contain),
               ),
             ),
             Positioned(

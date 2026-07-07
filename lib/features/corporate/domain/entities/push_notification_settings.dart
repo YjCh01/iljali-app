@@ -1,5 +1,6 @@
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_request_kind.dart';
+import 'package:map/features/corporate/domain/entities/exposure_activation_source.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
 import 'package:map/features/corporate/domain/entities/push_ticket_catalog.dart';
 import 'package:map/features/corporate/domain/utils/push_plan_enforcement.dart';
@@ -111,6 +112,7 @@ class PushNotificationBasePoint {
     this.exposureActivated = false,
     this.activationCoordinate,
     this.exposurePaidAt,
+    this.exposureActivationSource,
     this.pinColorHex,
   });
 
@@ -131,6 +133,9 @@ class PushNotificationBasePoint {
   /// 노출 결제 시각 — D+1 23:59:59까지 잠금
   final DateTime? exposurePaidAt;
 
+  /// 활성화 유형 — 프로모션 종료 시 [ExposureActivationSource.promo] 회수
+  final ExposureActivationSource? exposureActivationSource;
+
   /// 일자리 알림핀 색상 (#RRGGBB) — 미설정 시 연보라
   final String? pinColorHex;
 
@@ -147,9 +152,11 @@ class PushNotificationBasePoint {
     bool? exposureActivated,
     GeoCoordinate? activationCoordinate,
     DateTime? exposurePaidAt,
+    ExposureActivationSource? exposureActivationSource,
     String? pinColorHex,
     bool clearActivationCoordinate = false,
     bool clearExposurePaidAt = false,
+    bool clearExposureActivationSource = false,
     bool clearPinColorHex = false,
   }) {
     return PushNotificationBasePoint(
@@ -166,6 +173,9 @@ class PushNotificationBasePoint {
           : activationCoordinate ?? this.activationCoordinate,
       exposurePaidAt:
           clearExposurePaidAt ? null : exposurePaidAt ?? this.exposurePaidAt,
+      exposureActivationSource: clearExposureActivationSource
+          ? null
+          : exposureActivationSource ?? this.exposureActivationSource,
       pinColorHex:
           clearPinColorHex ? null : pinColorHex ?? this.pinColorHex,
     );

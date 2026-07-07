@@ -95,3 +95,71 @@ def test_hiring_and_chat():
     messages = client.get(f"/v1/chat-sync/{app_id}/messages")
     assert messages.status_code == 200
     assert len(messages.json()["messages"]) == 1
+
+
+def test_chat_websocket_broadcast():
+    app_row = client.post(
+        "/v1/hiring/applications",
+        json={
+            "post_id": "post_ws",
+            "seeker_email": "ws@test.iljari.co.kr",
+            "seeker_name": "실시간",
+        },
+    )
+    assert app_row.status_code == 200
+    app_id = app_row.json()["id"]
+
+    with client.websocket_connect(
+        f"/v1/chat-sync/ws/{app_id}?role=employer"
+    ) as ws:
+        hello = ws.receive_json()
+        assert hello["type"] == "connected"
+        assert hello["application_id"] == app_id
+
+        posted = client.post(
+            f"/v1/chat-sync/{app_id}/messages",
+            json={"sender_role": "seeker", "body": "실시간 테스트"},
+        )
+        assert posted.status_code == 200
+
+        pushed = ws.receive_json()
+        assert pushed["type"] == "message"
+        assert pushed["payload"]["body"] == "실시간 테스트"
+
+
+def test_withdraw_application_removes_from_bootstrap():
+    email = "withdraw@test.iljari.co.kr"
+    post_id = "post_withdraw_line"
+    created = client.post(
+        "/v1/hiring/applications",
+        json={
+            "post_id": post_id,
+            "post_title": "라인헬스케어",
+            "seeker_email": email,
+            "seeker_name": "최영진",
+        },
+    )
+    assert created.status_code == 200
+
+    boot_before = client.get(
+        "/v1/sync/bootstrap",
+        params={"seeker_email": email},
+    )
+    assert boot_before.status_code == 200
+    assert boot_before.json()["counts"]["applications"] >= 1
+
+    withdrawn = client.delete(
+        "/v1/hiring/applications",
+        params={"post_id": post_id, "seeker_email": email},
+    )
+    assert withdrawn.status_code == 200
+    assert withdrawn.json()["withdrawn"] is True
+    assert withdrawn.json()["deleted"] >= 1
+
+    boot_after = client.get(
+        "/v1/sync/bootstrap",
+        params={"seeker_email": email},
+    )
+    assert boot_after.status_code == 200
+    apps = boot_after.json()["applications"]
+    assert not any(a["post_id"] == post_id for a in apps)

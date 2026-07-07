@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
+import 'package:map/core/legal/widgets/free_exposure_launch_banner.dart';
 import 'package:map/core/session/guest_browse_intent.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/core/widgets/web_right_navigation_rail.dart';
@@ -59,6 +60,7 @@ class CorporateWebScaffold extends StatelessWidget {
                     subtitle: guest ? '채용 지도를 먼저 둘러보세요' : null,
                     actions: actions,
                   ),
+                  if (!guest) const FreeExposureLaunchBanner(),
                   Expanded(child: body),
                 ],
               ),
@@ -137,7 +139,13 @@ class CorporateWebScaffold extends StatelessWidget {
             ...?actions,
         ],
       ),
-      body: body,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!guest) const FreeExposureLaunchBanner(),
+          Expanded(child: body),
+        ],
+      ),
       bottomNavigationBar: CorporateBottomNav(
         currentIndex: sectionIndex,
         onTap: onSectionChanged,

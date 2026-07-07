@@ -84,6 +84,12 @@ abstract final class LegalDocumentCatalog {
       assetPath: 'assets/legal/10_seeker_document_consent.md',
       consentVersionKey: 'seekerDocument',
     ),
+    LegalDocumentEntry(
+      id: 'criminal_record_consent',
+      title: '범죄경력조회 동의서',
+      shortTabLabel: '범죄경력',
+      assetPath: 'assets/legal/11_criminal_record_consent.md',
+    ),
   ];
 
   static LegalDocumentEntry? byId(String id) {

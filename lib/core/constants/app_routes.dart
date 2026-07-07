@@ -58,6 +58,8 @@ abstract final class AppRoutes {
   static const String corporateTalentSearch = '/corporate/talent-search';
   static const String seekerPushInbox = '/seeker/push-inbox';
   static const String seekerNotificationSettings = '/seeker/notification-settings';
+  static const String seekerBusLocationTowerPilot = '/seeker/bus-location-tower';
+  static const String seekerMyBus = '/seeker/my-bus';
   static const String seekerMyDocuments = '/seeker/my-documents';
   static const String seekerMyResume = '/seeker/my-resume';
   static const String seekerResumeEdit = '/seeker/resume/edit';
@@ -66,6 +68,8 @@ abstract final class AppRoutes {
   static const String seekerHomeAddress = '/seeker/home-address';
   static const String customerSupport = '/support/customer';
   static const String legalDocuments = '/support/legal';
+  static const String publicPricing = '/pricing';
   static const String paymentWebSuccess = '/payment-success';
   static const String paymentWebFail = '/payment-fail';
+  static const String socialAuthComplete = '/auth/social-complete';
 }

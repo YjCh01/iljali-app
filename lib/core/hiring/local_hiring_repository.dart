@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/config/env_config.dart';
+import 'package:map/core/hiring/application_chat_message_repository.dart';
 import 'package:map/core/hiring/attendance_geofence_service.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/hiring/commission_calculator.dart';
@@ -10,10 +11,13 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/job_seeker/domain/entities/resume_item_kind.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/sync/member_sanction_store.dart';
-import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/commission_chat_prompt_service.dart';
 import 'package:map/core/hiring/hiring_refresh.dart';
 import 'package:map/core/hiring/mutual_attendance_side_effects.dart';
+import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
+import 'package:map/features/commute/domain/services/shuttle_route_share_on_hire_side_effects.dart';
+import 'package:map/features/commute/data/repositories/shuttle_booking_repository.dart';
+import 'package:map/features/commute/domain/entities/shuttle_booking.dart';
 import 'package:map/features/corporate/domain/services/commission_payer_resolver.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/attendance/domain/entities/check_in_method.dart';
@@ -26,6 +30,7 @@ class LocalHiringRepository {
   final SharedPreferences _prefs;
 
   static const _keyApplications = 'hiring_applications_v1';
+  static const _keyWithdrawnTombstones = 'hiring_withdrawn_tombstones_v1';
 
   static Future<LocalHiringRepository> create() async {
     final prefs = await SharedPreferences.getInstance();
@@ -105,15 +110,23 @@ class LocalHiringRepository {
     HiringRefresh.markUpdated();
   }
 
-  /// 서버 sync — 동일 공고·구직자 로컬 건이 있으면 추가하지 않고 메타만 갱신
+  /// 서버 sync — 동일 공고·구직자 로컬 건이 있으면 서버 ID로 통합
   Future<void> mergeServerApplication(HiringApplication fromServer) async {
+    if (_isWithdrawnTombstone(fromServer.postId, fromServer.seekerEmail)) {
+      return;
+    }
     final existing = await findActiveForPost(
       postId: fromServer.postId,
       seekerEmail: fromServer.seekerEmail,
     );
     if (existing != null && existing.id != fromServer.id) {
+      await _adoptServerApplicationId(
+        localId: existing.id,
+        serverId: fromServer.id,
+      );
       await _upsert(
         existing.copyWith(
+          id: fromServer.id,
           postTitle: fromServer.postTitle.isNotEmpty
               ? fromServer.postTitle
               : existing.postTitle,
@@ -132,6 +145,24 @@ class LocalHiringRepository {
       return;
     }
     await ensureSeedApplication(fromServer);
+  }
+
+  /// 로컬 지원 ID → 서버 canonical ID (채팅 동기화 키 통일)
+  Future<void> _adoptServerApplicationId({
+    required String localId,
+    required String serverId,
+  }) async {
+    if (localId.isEmpty || serverId.isEmpty || localId == serverId) return;
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    await chatRepo.migrateApplicationId(localId, serverId);
+
+    final all = await fetchAll();
+    final idx = all.indexWhere((item) => item.id == localId);
+    if (idx < 0) return;
+    all.removeWhere((item) => item.id == serverId);
+    all[idx] = all[idx].copyWith(id: serverId);
+    await _save(all);
+    HiringRefresh.markUpdated();
   }
 
   Future<List<HiringApplication>> fetchApplicantsForCorporate({
@@ -249,8 +280,16 @@ class LocalHiringRepository {
     );
     await _upsert(application);
     HiringRefresh.markUpdated();
+    await _clearWithdrawTombstone(
+      postId: application.postId,
+      seekerEmail: application.seekerEmail,
+    );
     await _syncApplicationToServer(application);
-    return application;
+    return await findActiveForPost(
+          postId: postId,
+          seekerEmail: seekerEmail,
+        ) ??
+        application;
   }
 
   Future<HiringApplication?> findActiveForPost({
@@ -307,11 +346,70 @@ class LocalHiringRepository {
       );
     }
 
+    final normalizedEmail = _normalizeEmail(seekerEmail);
     final all = await fetchAll();
-    all.removeWhere((item) => item.id == application.id);
+    all.removeWhere((item) {
+      if (item.postId != postId) return false;
+      if (_normalizeEmail(item.seekerEmail) != normalizedEmail) return false;
+      return canSeekerWithdraw(item);
+    });
     await _save(all);
+    await _recordWithdrawTombstone(postId: postId, seekerEmail: seekerEmail);
+    await _syncWithdrawToServer(postId: postId, seekerEmail: seekerEmail);
     HiringRefresh.markUpdated();
     return true;
+  }
+
+  Future<void> _recordWithdrawTombstone({
+    required String postId,
+    required String seekerEmail,
+  }) async {
+    final email = _normalizeEmail(seekerEmail);
+    final tombstones = _readWithdrawnTombstones();
+    final key = '$email|$postId';
+    if (tombstones.contains(key)) return;
+    tombstones.add(key);
+    await _prefs.setString(_keyWithdrawnTombstones, jsonEncode(tombstones.toList()));
+  }
+
+  Future<void> _clearWithdrawTombstone({
+    required String postId,
+    required String seekerEmail,
+  }) async {
+    final key = '${_normalizeEmail(seekerEmail)}|$postId';
+    final tombstones = _readWithdrawnTombstones();
+    if (!tombstones.remove(key)) return;
+    await _prefs.setString(_keyWithdrawnTombstones, jsonEncode(tombstones.toList()));
+  }
+
+  Set<String> _readWithdrawnTombstones() {
+    final raw = _prefs.getString(_keyWithdrawnTombstones);
+    if (raw == null || raw.isEmpty) return {};
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return {};
+    return decoded.whereType<String>().toSet();
+  }
+
+  bool _isWithdrawnTombstone(String postId, String seekerEmail) {
+    final key = '${_normalizeEmail(seekerEmail)}|$postId';
+    return _readWithdrawnTombstones().contains(key);
+  }
+
+  Future<void> _syncWithdrawToServer({
+    required String postId,
+    required String seekerEmail,
+  }) async {
+    if (!EnvConfig.isComplianceApiEnabled) return;
+    final client = IljariApiClient();
+    if (!client.isEnabled) return;
+    try {
+      await client.withdrawApplication(
+        postId: postId,
+        seekerEmail: seekerEmail,
+      );
+    } on Object {
+      // 로컬·tombstone 유지 — 다음 sync에서도 재유입 차단
+    }
   }
 
   Future<HiringApplication> submitApplication({
@@ -371,8 +469,16 @@ class LocalHiringRepository {
       );
       await _upsert(upgraded);
       HiringRefresh.markUpdated();
+      await _clearWithdrawTombstone(
+        postId: upgraded.postId,
+        seekerEmail: upgraded.seekerEmail,
+      );
       await _syncApplicationToServer(upgraded);
-      return upgraded;
+      return await findActiveForPost(
+            postId: postId,
+            seekerEmail: seekerEmail,
+          ) ??
+          upgraded;
     }
 
     if (await hasApplied(postId, seekerEmail)) {
@@ -421,8 +527,16 @@ class LocalHiringRepository {
 
     await _upsert(application);
     HiringRefresh.markUpdated();
+    await _clearWithdrawTombstone(
+      postId: application.postId,
+      seekerEmail: application.seekerEmail,
+    );
     await _syncApplicationToServer(application);
-    return application;
+    return await findActiveForPost(
+          postId: postId,
+          seekerEmail: seekerEmail,
+        ) ??
+        application;
   }
 
   Future<void> _syncApplicationToServer(HiringApplication application) async {
@@ -430,7 +544,14 @@ class LocalHiringRepository {
     final client = IljariApiClient();
     if (!client.isEnabled) return;
     try {
-      await client.createApplication({
+      final booking = application.shuttleBookingId == null
+          ? null
+          : await (await ShuttleBookingRepository.create())
+              .findById(application.shuttleBookingId!);
+      final route = booking == null
+          ? null
+          : await (await CommuteRouteRepository.create()).findById(booking.routeId);
+      final result = await client.createApplication({
         'post_id': application.postId,
         'post_title': application.postTitle,
         'company_name': application.companyName,
@@ -439,7 +560,24 @@ class LocalHiringRepository {
         'seeker_name': application.seekerName,
         'status': application.status.name,
         'work_schedule': application.workSchedule,
+        if (booking != null) ...{
+          'commute_route_id': booking.routeId,
+          'commute_route_name': route?.routeName ?? '',
+          'shuttle_stop_id': booking.stopId,
+          'shuttle_stop_label': booking.stopLabel,
+          'shuttle_pickup_time': booking.pickupTime,
+          'shuttle_shift_date': booking.shiftDate,
+        },
       });
+      final serverId = result['id'] as String?;
+      if (serverId != null &&
+          serverId.isNotEmpty &&
+          serverId != application.id) {
+        await _adoptServerApplicationId(
+          localId: application.id,
+          serverId: serverId,
+        );
+      }
     } on Object {
       // 로컬 지원은 유지 — 서버 실패는 비차단
     }
@@ -451,6 +589,25 @@ class LocalHiringRepository {
       if (item.id == id) return item;
     }
     return null;
+  }
+
+  /// 내 버스 정류장 선택 — 탑승 예약·서버 동기화
+  Future<HiringApplication?> attachShuttleBooking({
+    required String applicationId,
+    required ShuttleBooking booking,
+  }) async {
+    final bookingRepo = await ShuttleBookingRepository.create();
+    await bookingRepo.save(booking);
+    final existing = await findById(applicationId);
+    if (existing == null) return null;
+    final updated = existing.copyWith(
+      shuttleBookingId: booking.id,
+      preferredStopId: booking.stopId,
+    );
+    await _upsert(updated);
+    HiringRefresh.markUpdated();
+    await _syncApplicationToServer(updated);
+    return updated;
   }
 
   Future<void> startChat(String applicationId) async {
@@ -478,6 +635,7 @@ class LocalHiringRepository {
     );
     await _upsert(scheduled);
     HiringRefresh.markUpdated();
+    await _handleScheduledHire(scheduled);
     return scheduled;
   }
 
@@ -496,6 +654,7 @@ class LocalHiringRepository {
       throw StateError('not_agreeable');
     }
 
+    final wasScheduled = existing.status == HiringApplicationStatus.scheduled;
     final now = DateTime.now();
     var updated = existing.copyWith(
       seekerWorkAgreedAt: asEmployer
@@ -521,6 +680,9 @@ class LocalHiringRepository {
 
     await _upsert(updated);
     HiringRefresh.markUpdated();
+    if (!wasScheduled && updated.status == HiringApplicationStatus.scheduled) {
+      await _handleScheduledHire(updated);
+    }
     return updated;
   }
 
@@ -823,6 +985,10 @@ class LocalHiringRepository {
     HiringApplication application,
   ) async {
     await MutualAttendanceSideEffects.handle(application);
+  }
+
+  static Future<void> _handleScheduledHire(HiringApplication application) async {
+    await ShuttleRouteShareOnHireSideEffects.handle(application);
   }
 
   /// Dev/test — idempotent insert (skips if same id exists).

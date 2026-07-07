@@ -4,6 +4,7 @@ import 'package:map/core/config/env_config.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/sync/local_remote_sync_service.dart';
+import 'package:map/features/admin/presentation/widgets/admin_credit_stepper.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 
 /// 관리자 Ops — 푸시권·핀·제재·시드
@@ -17,7 +18,9 @@ class AdminOpsPage extends StatefulWidget {
 class _AdminOpsPageState extends State<AdminOpsPage> {
   final _client = AdminOpsApiClient();
   final _companyKeyCtrl = TextEditingController(text: '1000000001');
-  final _walletCreditsCtrl = TextEditingController(text: '30');
+  int _recruitmentPinGrant = 1;
+  int _shuttleStopPinGrant = 1;
+  int _pushTicketGrant = 1;
   final _memberEmailCtrl = TextEditingController(text: 'seeker-0001@qc.iljari.co.kr');
   final _postIdCtrl = TextEditingController(text: 'qc_post_real_001');
   final _seekerSeedCountCtrl = TextEditingController(text: '1000');
@@ -36,7 +39,6 @@ class _AdminOpsPageState extends State<AdminOpsPage> {
   @override
   void dispose() {
     _companyKeyCtrl.dispose();
-    _walletCreditsCtrl.dispose();
     _memberEmailCtrl.dispose();
     _postIdCtrl.dispose();
     _seekerSeedCountCtrl.dispose();
@@ -108,23 +110,36 @@ class _AdminOpsPageState extends State<AdminOpsPage> {
             child: Column(
               children: [
                 _Field(label: '사업자번호(BRN)', controller: _companyKeyCtrl),
-                _Field(
-                  label: '패키지 횟수',
-                  controller: _walletCreditsCtrl,
-                  keyboardType: TextInputType.number,
+                AdminCreditStepper(
+                  label: '일자리 알림핀',
+                  subtitle: '근무지·모집지역 노출',
+                  value: _recruitmentPinGrant,
+                  onChanged: (v) => setState(() => _recruitmentPinGrant = v),
+                ),
+                AdminCreditStepper(
+                  label: '정류장 표시핀',
+                  subtitle: '셔틀 정류장 노출',
+                  value: _shuttleStopPinGrant,
+                  onChanged: (v) => setState(() => _shuttleStopPinGrant = v),
+                ),
+                AdminCreditStepper(
+                  label: 'PUSH 알림권',
+                  subtitle: 'PUSH 1회 발송',
+                  value: _pushTicketGrant,
+                  onChanged: (v) => setState(() => _pushTicketGrant = v),
                 ),
                 FilledButton(
                   onPressed: !apiReady || _busy
                       ? null
                       : () => _run(() async {
-                            final credits =
-                                int.tryParse(_walletCreditsCtrl.text) ?? 0;
                             await _client.grantWallet(
                               companyKey: _companyKeyCtrl.text.trim(),
-                              packageCredits: credits,
+                              packageCredits: _recruitmentPinGrant,
+                              shuttleStopCredits: _shuttleStopPinGrant,
+                              pushTicketCredits: _pushTicketGrant,
                             );
-                          }, '푸시·거점 이용권 부여 완료'),
-                  child: const Text('이용권 부여'),
+                          }, '이용권 부여 완료'),
+                  child: const Text('선택 수량 부여'),
                 ),
               ],
             ),

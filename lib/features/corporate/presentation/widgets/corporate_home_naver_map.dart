@@ -14,6 +14,10 @@ import 'package:map/core/utils/naver_map_platform.dart';
 
 import 'package:map/features/commute/presentation/map/shuttle_route_overlay_factory.dart';
 
+import 'package:map/core/map/ghost_route_overlay_factory.dart';
+import 'package:map/core/map/web/ghost_route_web_overlay_builder.dart';
+import 'package:map/features/job_seeker/domain/entities/closed_ghost_route.dart';
+
 import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_overlay.dart';
 
 import 'package:map/features/corporate/presentation/widgets/corporate_exposure_mini_map.dart';
@@ -44,6 +48,8 @@ class CorporateHomeNaverMap extends StatefulWidget {
 
     this.shuttleOverlays = const [],
 
+    this.ghostRoutes = const [],
+
     this.selectedPostId,
 
     this.centerOnPin,
@@ -56,6 +62,14 @@ class CorporateHomeNaverMap extends StatefulWidget {
 
     this.onMapCoordinateTap,
 
+    this.onGhostRouteWorkplaceTap,
+
+    this.onCameraIdle,
+
+    this.onMapReady,
+
+    this.myLocationButtonBottom = 16,
+
   });
 
 
@@ -65,6 +79,8 @@ class CorporateHomeNaverMap extends StatefulWidget {
   final Set<String> ownPostIds;
 
   final List<CorporateShuttleMapOverlay> shuttleOverlays;
+
+  final List<ClosedGhostRoute> ghostRoutes;
 
   final String? selectedPostId;
 
@@ -78,7 +94,13 @@ class CorporateHomeNaverMap extends StatefulWidget {
 
   final void Function(double latitude, double longitude)? onMapCoordinateTap;
 
+  final ValueChanged<ClosedGhostRoute>? onGhostRouteWorkplaceTap;
 
+  final VoidCallback? onCameraIdle;
+
+  final VoidCallback? onMapReady;
+
+  final double myLocationButtonBottom;
 
   @override
 
@@ -134,7 +156,9 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
         widget.ownPostIds != oldWidget.ownPostIds ||
 
-        widget.shuttleOverlays != oldWidget.shuttleOverlays) {
+        widget.shuttleOverlays != oldWidget.shuttleOverlays ||
+
+        widget.ghostRoutes != oldWidget.ghostRoutes) {
 
       _syncOverlays();
 
@@ -176,6 +200,8 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
     }
 
+    widget.onMapReady?.call();
+
   }
 
 
@@ -191,6 +217,8 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
       await _centerOnPendingPin();
 
     }
+
+    widget.onMapReady?.call();
 
   }
 
@@ -281,21 +309,22 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
 
   Future<void> _centerOnPendingPin() async {
-
     final pin = _pendingCenterPin;
-
     if (pin == null) return;
 
-    _pendingCenterPin = null;
-
-    await MapCameraHolder.instance.focusPin(
-
-      latitude: pin.latitude,
-
-      longitude: pin.longitude,
-
-    );
-
+    for (var attempt = 0; attempt < 80; attempt++) {
+      if (!MapCameraHolder.instance.isReady) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        continue;
+      }
+      _pendingCenterPin = null;
+      await MapCameraHolder.instance.focusPin(
+        latitude: pin.latitude,
+        longitude: pin.longitude,
+        zoom: MapConstants.defaultZoom,
+      );
+      return;
+    }
   }
 
 
@@ -326,64 +355,46 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
     final overlays = <NAddableOverlay>{};
 
-    overlays.addAll(
-
-      widget.pins.map((pin) {
-
-        final isOwn = widget.ownPostIds.contains(pin.post.id);
-
-        final isSelected = widget.selectedPostId == pin.post.id;
-
-        return JobMapMarkerFactory.create(
-
+    final markers = <NClusterableMarker>[];
+    for (final pin in widget.pins) {
+      final isOwn = widget.ownPostIds.contains(pin.post.id);
+      final isSelected = widget.selectedPostId == pin.post.id;
+      markers.add(
+        await JobMapMarkerFactory.create(
           pin,
-
           onTap: widget.onPinTap,
-
           isOwn: isOwn,
-
           isSelected: isSelected,
-
-        );
-
-      }),
-
-    );
-
-
+        ),
+      );
+    }
+    overlays.addAll(markers);
 
     for (final entry in widget.shuttleOverlays) {
-
       overlays.addAll(
-
-        ShuttleRouteOverlayFactory.build(
-
+        await ShuttleRouteOverlayFactory.build(
           entry.route,
-
           workplace: entry.workplace,
-
           showStopCaptions: false,
-
           onStopTap: widget.onShuttleStopTap == null
-
               ? null
-
               : (route) {
-
                   final overlay = _overlayForRoute(route.id);
-
                   if (overlay != null) {
-
                     widget.onShuttleStopTap!(overlay);
-
                   }
-
                 },
-
         ),
-
       );
+    }
 
+    for (final route in widget.ghostRoutes) {
+      overlays.addAll(
+        await GhostRouteOverlayFactory.build(
+          route,
+          onWorkplaceTap: widget.onGhostRouteWorkplaceTap,
+        ),
+      );
     }
 
 
@@ -412,6 +423,8 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
         shuttleOverlays: widget.shuttleOverlays,
 
+        ghostRoutes: widget.ghostRoutes,
+
         interactive: true,
 
         onPinTap: widget.onPinTap,
@@ -434,9 +447,19 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
         .peek(MapViewportSessionKeys.corporateHome);
 
-    final initialLat = saved?.latitude ?? MapConstants.warehouseAreaCenter.latitude;
+    final focus = widget.centerOnPin;
 
-    final initialLng = saved?.longitude ?? MapConstants.warehouseAreaCenter.longitude;
+    final initialLat = focus?.latitude ??
+
+        saved?.latitude ??
+
+        MapConstants.warehouseAreaCenter.latitude;
+
+    final initialLng = focus?.longitude ??
+
+        saved?.longitude ??
+
+        MapConstants.warehouseAreaCenter.longitude;
 
     final initialZoom = saved?.zoom ?? MapConstants.warehouseAreaZoom;
 
@@ -452,6 +475,8 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
       final shuttleOverlays = ShuttleMapWebOverlayBuilder.fromShuttleOverlays(
         widget.shuttleOverlays,
       );
+      final ghostOverlays =
+          GhostRouteWebOverlayBuilder.fromRoutes(widget.ghostRoutes);
 
       return Stack(
 
@@ -472,12 +497,19 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
             markers: [
               ...jobMarkers,
               ...shuttleOverlays.markers,
+              ...ghostOverlays.markers,
             ],
-            polylines: shuttleOverlays.polylines,
+            polylines: [
+              ...shuttleOverlays.polylines,
+              ...ghostOverlays.polylines,
+            ],
 
             onMapReady: _handleWebMapReady,
 
-            onCameraIdle: () => unawaited(_persistViewport()),
+            onCameraIdle: () {
+              unawaited(_persistViewport());
+              widget.onCameraIdle?.call();
+            },
 
             onMapTap: widget.onMapCoordinateTap == null &&
                     widget.onMapBackgroundTap == null
@@ -514,6 +546,19 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
                 }
               }
 
+              if (widget.onGhostRouteWorkplaceTap != null) {
+                final routeId =
+                    GhostRouteOverlayFactory.routeIdFromWorkplaceMarkerId(id);
+                if (routeId != null) {
+                  for (final route in widget.ghostRoutes) {
+                    if (route.id == routeId) {
+                      widget.onGhostRouteWorkplaceTap!(route);
+                      return;
+                    }
+                  }
+                }
+              }
+
             },
 
             onInitFailed: () {
@@ -522,7 +567,9 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
           ),
 
-          const MapCurrentLocationButton(),
+          MapCurrentLocationButton(
+            bottom: widget.myLocationButtonBottom,
+          ),
 
         ],
 
@@ -570,7 +617,10 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
           onMapReady: _handleMapReady,
 
-          onCameraIdle: () => unawaited(_persistViewport()),
+          onCameraIdle: () {
+            unawaited(_persistViewport());
+            widget.onCameraIdle?.call();
+          },
 
           onMapTapped: widget.onMapBackgroundTap == null
 
@@ -580,7 +630,10 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
         ),
 
-        MapCurrentLocationButton(controller: _controller),
+        MapCurrentLocationButton(
+          controller: _controller,
+          bottom: widget.myLocationButtonBottom,
+        ),
 
       ],
 

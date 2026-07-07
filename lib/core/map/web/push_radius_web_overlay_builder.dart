@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/core/map/web/naver_map_web_layer.dart';
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
@@ -21,13 +21,7 @@ abstract final class PushRadiusWebOverlayBuilder {
     final circles = <NaverMapWebCircleSpec>[];
 
     for (final point in existingPoints) {
-      final accent = (point.visualTheme ??
-              PushCreditVisualTheme.forRecruitPoint(point.pointIndex))
-          .accent;
-      final alpha = point.draft ? 0.45 : 1.0;
-      final tint = accent.withValues(alpha: alpha);
-      final fillHex = NaverMapWebColors.hex(tint);
-      final strokeHex = NaverMapWebColors.hex(tint.withValues(alpha: 0.55));
+      final fillHex = NaverMapWebColors.hex(MapPinColors.active);
 
       if (point.radiusMeters > 0) {
         circles.add(
@@ -37,7 +31,7 @@ abstract final class PushRadiusWebOverlayBuilder {
             longitude: point.coordinate.longitude,
             radiusMeters: point.radiusMeters.toDouble(),
             fillColorHex: fillHex,
-            strokeColorHex: strokeHex,
+            strokeColorHex: fillHex,
             fillOpacity: 0.12,
             strokeWeight: 2,
           ),
@@ -50,10 +44,10 @@ abstract final class PushRadiusWebOverlayBuilder {
           latitude: point.coordinate.latitude,
           longitude: point.coordinate.longitude,
           colorHex: fillHex,
-          label: point.label.isNotEmpty
-              ? point.label.substring(0, 1)
-              : '${point.pointIndex + 1}',
-          size: 28,
+          label: '',
+          kind: MapPinMarkerKind.notification,
+          size: TeardropMapPinArt.jobWidth * 0.85,
+          height: TeardropMapPinArt.jobHeight * 0.85,
         ),
       );
     }
@@ -79,10 +73,12 @@ abstract final class PushRadiusWebOverlayBuilder {
           id: 'push_active_center',
           latitude: center.latitude,
           longitude: center.longitude,
-          colorHex: NaverMapWebColors.hex(activeTheme.accent),
-          label: '●',
+          colorHex: NaverMapWebColors.hex(MapPinColors.active),
+          label: '',
           isSelected: true,
-          size: 32,
+          kind: MapPinMarkerKind.notification,
+          size: TeardropMapPinArt.jobWidth,
+          height: TeardropMapPinArt.jobHeight,
         ),
       );
     }

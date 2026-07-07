@@ -62,6 +62,17 @@ class JobPostSyncService {
     }
   }
 
+  /// 공고 삭제 — 서버 DB에서 제거 (재시작 시 bootstrap 부활 방지)
+  Future<bool> pushDelete(String postId) async {
+    if (!isEnabled) return true;
+    try {
+      await _client.deleteJobPost(postId);
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
   double? _workplaceLatitude(CorporateJobPost post) {
     final stored = post.workplaceCoordinate;
     if (stored != null) return stored.latitude;

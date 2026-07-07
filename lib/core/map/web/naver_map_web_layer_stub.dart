@@ -26,6 +26,8 @@ class NaverMapWebController {
       getCameraPosition() async =>
           (latitude: 37.5128, longitude: 127.0471, zoom: MapConstants.defaultZoom);
 
+  Future<void> setZoom(double zoom) async {}
+
   void dispose() {}
 }
 
@@ -35,6 +37,12 @@ typedef NaverMapWebIdleCallback = void Function();
 typedef NaverMapWebTapCallback = void Function(double lat, double lng);
 typedef NaverMapWebCenterCallback = void Function(double lat, double lng);
 
+enum MapPinMarkerKind {
+  workplace,
+  notification,
+  busStop,
+}
+
 class NaverMapWebMarkerSpec {
   const NaverMapWebMarkerSpec({
     required this.id,
@@ -42,19 +50,25 @@ class NaverMapWebMarkerSpec {
     required this.longitude,
     required this.colorHex,
     required this.label,
+    this.borderColorHex = '#FFFFFF',
     this.isSelected = false,
     this.isOwn = false,
-    this.size = 28,
+    this.kind = MapPinMarkerKind.workplace,
+    this.size = 40,
+    this.height = 52,
   });
 
   final String id;
   final double latitude;
   final double longitude;
   final String colorHex;
+  final String borderColorHex;
   final String label;
   final bool isSelected;
   final bool isOwn;
+  final MapPinMarkerKind kind;
   final double size;
+  final double height;
 }
 
 class NaverMapWebCircleSpec {
@@ -116,6 +130,9 @@ class NaverMapWebWidget extends StatelessWidget {
     this.onMapTap,
     this.onMarkerTap,
     this.onInitFailed,
+    this.showZoomControls = true,
+    this.minZoom = 6,
+    this.maxZoom = 21,
   });
 
   final String clientId;
@@ -134,6 +151,9 @@ class NaverMapWebWidget extends StatelessWidget {
   final NaverMapWebTapCallback? onMapTap;
   final void Function(String markerId)? onMarkerTap;
   final VoidCallback? onInitFailed;
+  final bool showZoomControls;
+  final double minZoom;
+  final double maxZoom;
 
   @override
   Widget build(BuildContext context) {

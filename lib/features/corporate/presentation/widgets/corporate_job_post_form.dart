@@ -95,17 +95,15 @@ class CorporateJobPostForm extends StatefulWidget {
 
     this.showExposureSection = true,
 
-    this.dailyWorkerAcknowledged = true,
-
     this.onDailyScheduleCommitted,
 
     this.paymentDateNegotiable = false,
 
     required this.onPaymentDateNegotiableChanged,
 
-    this.workPeriodNegotiable = false,
+    this.workScheduleNegotiable = false,
 
-    required this.onWorkPeriodNegotiableChanged,
+    required this.onWorkScheduleNegotiableChanged,
 
   });
 
@@ -169,18 +167,15 @@ class CorporateJobPostForm extends StatefulWidget {
 
   final bool showExposureSection;
 
-  /// 일용직 안내 확인 후에만 근무일정·급여 이하 입력 가능
-  final bool dailyWorkerAcknowledged;
-
   final VoidCallback? onDailyScheduleCommitted;
 
   final bool paymentDateNegotiable;
 
   final ValueChanged<bool> onPaymentDateNegotiableChanged;
 
-  final bool workPeriodNegotiable;
+  final bool workScheduleNegotiable;
 
-  final ValueChanged<bool> onWorkPeriodNegotiableChanged;
+  final ValueChanged<bool> onWorkScheduleNegotiableChanged;
 
 
 
@@ -193,18 +188,6 @@ class CorporateJobPostForm extends StatefulWidget {
 
 
 class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
-  bool get _dailyFieldsBlocked =>
-      widget.workerCategory.usesDailyPickSchedule &&
-      !widget.dailyWorkerAcknowledged;
-
-  Widget _wrapDailyGated(Widget child) {
-    if (!_dailyFieldsBlocked) return child;
-    return Opacity(
-      opacity: 0.45,
-      child: IgnorePointer(child: child),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
 
@@ -332,19 +315,7 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
         ),
 
-        if (_dailyFieldsBlocked) ...[
-          const SizedBox(height: 8),
-          Text(
-            '일용직 안내를 확인하면 근무 일정·급여 항목을 입력할 수 있습니다.',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.35,
-              color: AppColors.textSecondary.withValues(alpha: 0.9),
-            ),
-          ),
-        ],
-
-        _wrapDailyGated(Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
         const SizedBox(height: 16),
@@ -355,8 +326,8 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
           controller: widget.scheduleController,
           dailyOnly: widget.workerCategory.usesDailyPickSchedule,
           firstStartDateOnly: widget.workerCategory.usesFirstStartDateOnly,
-          workPeriodNegotiable: widget.workPeriodNegotiable,
-          onWorkPeriodNegotiableChanged: widget.onWorkPeriodNegotiableChanged,
+          workScheduleNegotiable: widget.workScheduleNegotiable,
+          onWorkScheduleNegotiableChanged: widget.onWorkScheduleNegotiableChanged,
           onDailyScheduleCommitted: widget.onDailyScheduleCommitted,
         ),
 
@@ -540,9 +511,7 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
 
         FilledButton(
 
-          onPressed: (widget.submitting || _dailyFieldsBlocked)
-              ? null
-              : widget.onSubmit,
+          onPressed: widget.submitting ? null : widget.onSubmit,
 
           style: FilledButton.styleFrom(
 
@@ -589,7 +558,7 @@ class _CorporateJobPostFormState extends State<CorporateJobPostForm> {
         ),
 
           ],
-        )),
+        ),
 
         if (widget.afterSubmit != null) ...[
 

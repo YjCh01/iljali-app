@@ -13,10 +13,27 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.qc_models import QcMemberRow
 from app.services.auth_token_service import (
+    issue_email_verified_token,
     issue_phone_verified_token,
     issue_token,
+    verify_email_verified_token,
     verify_phone_verified_token,
     verify_token,
+)
+from app.services.account_recovery_service import (
+    find_corporate_emails,
+    find_corporate_emails_by_email,
+    find_seeker_emails,
+    find_seeker_emails_by_email,
+    reset_corporate_password,
+    reset_corporate_password_by_email,
+    reset_seeker_password,
+    reset_seeker_password_by_email,
+)
+from app.services.email_verify_service import (
+    normalize_email as normalize_email_address,
+    send_code as send_email_code,
+    verify_code as verify_email_code,
 )
 from app.services.password_service import (
     hash_password,
@@ -30,6 +47,18 @@ from app.services.phone_verify_service import normalize_phone, send_code, verify
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 _ALLOWED_PHONE_PURPOSES = frozenset({"signup", "find_email", "reset_password"})
+_ALLOWED_EMAIL_PURPOSES = frozenset({"find_email", "reset_password"})
+
+
+def _phone_send_error_detail(exc: ValueError) -> str:
+    code = str(exc)
+    if code == "rate_limited":
+        return "잠시 후 다시 시도해 주세요."
+    if code == "invalid_phone":
+        return "휴대폰 번호를 확인해 주세요."
+    if code.startswith("sms_failed:"):
+        return "문자 발송에 실패했습니다. 잠시 후 다시 시도해 주세요."
+    return code
 
 
 class LoginBody(BaseModel):
@@ -76,6 +105,7 @@ class PhoneSendResponse(BaseModel):
     hint: str
     mock: bool
     dev_code: str | None = None
+    sms_sent: bool = True
 
 
 class PhoneVerifyBody(BaseModel):
@@ -103,6 +133,7 @@ class CorporateSignUpBody(BaseModel):
     password: str
     display_name: str = Field(min_length=1, max_length=100)
     phone: str = ""
+    phone_verified_token: str = ""
     company_name: str = Field(min_length=1, max_length=200)
     company_key: str = Field(min_length=1, max_length=20)
     department: str = ""
@@ -112,20 +143,60 @@ class CorporateSignUpBody(BaseModel):
 
 
 class FindEmailBody(BaseModel):
-    phone: str
-    phone_verified_token: str
+    method: str = "phone"
+    display_name: str = ""
+    phone: str = ""
+    phone_verified_token: str = ""
+    email: str = ""
+    email_verified_token: str = ""
+
+
+class FindEmailCorporateBody(BaseModel):
+    method: str = "brn"
+    contact_person_name: str = Field(min_length=1, max_length=100)
+    company_key: str = ""
+    email: str = ""
+    email_verified_token: str = ""
+
+
+class EmailSendBody(BaseModel):
+    email: str
+
+
+class EmailSendResponse(BaseModel):
+    sent: bool
+    hint: str
+    mock: bool
+    dev_code: str | None = None
+
+
+class EmailVerifyBody(BaseModel):
+    email: str
+    code: str
+    purpose: str = "find_email"
+
+
+class EmailVerifyResponse(BaseModel):
+    verified: bool
+    email_verified_token: str | None = None
+
+
+class PasswordResetBody(BaseModel):
+    member_type: str = "seeker"
+    method: str = "phone"
+    email: str
+    display_name: str = ""
+    contact_person_name: str = ""
+    company_key: str = ""
+    phone: str = ""
+    phone_verified_token: str = ""
+    email_verified_token: str = ""
+    new_password: str
 
 
 class FindEmailResponse(BaseModel):
     found: bool
     masked_emails: list[str] = Field(default_factory=list)
-
-
-class PasswordResetBody(BaseModel):
-    email: str
-    phone: str
-    phone_verified_token: str
-    new_password: str
 
 
 class PasswordResetResponse(BaseModel):
@@ -206,7 +277,7 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
         )
     _ensure_active_member(row)
 
-    if not verify_password(body.password, row.password_hash or None):
+    if not verify_password(body.password, row.password_hash or None, email=email):
         raise HTTPException(
             status_code=401,
             detail="이메일 또는 비밀번호가 올바르지 않습니다.",
@@ -282,6 +353,18 @@ def signup_corporate(body: CorporateSignUpBody, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="이미 사용 중인 이메일입니다.")
 
     phone = normalize_phone(body.phone) if body.phone.strip() else ""
+    if not phone:
+        raise HTTPException(status_code=400, detail="휴대폰 번호를 입력해 주세요.")
+    if not verify_phone_verified_token(
+        body.phone_verified_token,
+        phone=phone,
+        purpose="signup",
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="휴대폰 인증이 만료되었습니다. 다시 인증해 주세요.",
+        )
+
     contact_name = (body.contact_person_name or body.display_name).strip()
     handler_code = body.handler_code.strip()
     if handler_code:
@@ -310,7 +393,7 @@ def signup_corporate(body: CorporateSignUpBody, db: Session = Depends(get_db)):
         handler_code=handler_code,
         org_role=body.org_role.strip() or "recruiter",
         password_hash=hash_password(body.password),
-        phone_verified_at=datetime.utcnow() if phone else None,
+        phone_verified_at=datetime.utcnow(),
     )
     db.add(row)
     db.commit()
@@ -320,6 +403,36 @@ def signup_corporate(body: CorporateSignUpBody, db: Session = Depends(get_db)):
 
 @router.post("/account/find-email", response_model=FindEmailResponse)
 def find_email(body: FindEmailBody, db: Session = Depends(get_db)):
+    method = (body.method or "phone").strip().lower()
+    display_name = body.display_name.strip()
+
+    if method == "email":
+        email = normalize_email_address(body.email)
+        if not display_name:
+            raise HTTPException(status_code=400, detail="이름을 입력해 주세요.")
+        if not verify_email_verified_token(
+            body.email_verified_token,
+            email=email,
+            purpose="find_email",
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="이메일 인증이 만료되었습니다. 다시 인증해 주세요.",
+            )
+        if display_name:
+            masked = find_seeker_emails_by_email(
+                db, email=email, display_name=display_name
+            )
+        else:
+            row = (
+                db.query(QcMemberRow)
+                .filter(QcMemberRow.email == email)
+                .filter(QcMemberRow.member_type == "seeker")
+                .first()
+            )
+            masked = [mask_email(row.email)] if row else []
+        return FindEmailResponse(found=len(masked) > 0, masked_emails=masked)
+
     phone = normalize_phone(body.phone)
     if not verify_phone_verified_token(
         body.phone_verified_token,
@@ -331,52 +444,198 @@ def find_email(body: FindEmailBody, db: Session = Depends(get_db)):
             detail="휴대폰 인증이 만료되었습니다. 다시 인증해 주세요.",
         )
 
-    rows = (
-        db.query(QcMemberRow)
-        .filter(QcMemberRow.phone == phone)
-        .filter(QcMemberRow.member_type == "seeker")
-        .order_by(QcMemberRow.created_at.desc())
-        .all()
+    if display_name:
+        masked = find_seeker_emails(
+            db, phone=phone, display_name=display_name
+        )
+    else:
+        rows = (
+            db.query(QcMemberRow)
+            .filter(QcMemberRow.phone == phone)
+            .filter(QcMemberRow.member_type == "seeker")
+            .order_by(QcMemberRow.created_at.desc())
+            .all()
+        )
+        masked = [mask_email(row.email) for row in rows]
+    return FindEmailResponse(found=len(masked) > 0, masked_emails=masked)
+
+
+@router.post("/account/find-email/corporate", response_model=FindEmailResponse)
+def find_email_corporate(
+    body: FindEmailCorporateBody, db: Session = Depends(get_db)
+):
+    method = (body.method or "brn").strip().lower()
+    contact_name = body.contact_person_name.strip()
+    if not contact_name:
+        raise HTTPException(status_code=400, detail="담당자명을 입력해 주세요.")
+
+    if method == "email":
+        email = normalize_email_address(body.email)
+        if not verify_email_verified_token(
+            body.email_verified_token,
+            email=email,
+            purpose="find_email",
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="이메일 인증이 만료되었습니다. 다시 인증해 주세요.",
+            )
+        masked = find_corporate_emails_by_email(
+            db, email=email, contact_person_name=contact_name
+        )
+        return FindEmailResponse(found=len(masked) > 0, masked_emails=masked)
+
+    company_key = normalize_brn(body.company_key)
+    if not company_key:
+        raise HTTPException(
+            status_code=400, detail="사업자등록번호를 확인해 주세요."
+        )
+    masked = find_corporate_emails(
+        db, company_key=company_key, contact_person_name=contact_name
     )
-    masked = [mask_email(row.email) for row in rows]
     return FindEmailResponse(found=len(masked) > 0, masked_emails=masked)
 
 
 @router.post("/password/reset", response_model=PasswordResetResponse)
 def reset_password(body: PasswordResetBody, db: Session = Depends(get_db)):
     email = body.email.strip().lower()
-    phone = normalize_phone(body.phone)
-    if not verify_phone_verified_token(
-        body.phone_verified_token,
-        phone=phone,
-        purpose="reset_password",
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="휴대폰 인증이 만료되었습니다. 다시 인증해 주세요.",
-        )
+    member_type = (body.member_type or "seeker").strip().lower()
+    method = (body.method or "phone").strip().lower()
 
     password_error = validate_password_strength(body.new_password)
     if password_error:
         raise HTTPException(status_code=400, detail=password_error)
 
-    row = (
-        db.query(QcMemberRow)
-        .filter(QcMemberRow.email == email)
-        .filter(QcMemberRow.phone == phone)
-        .filter(QcMemberRow.member_type == "seeker")
-        .first()
-    )
+    password_hash = hash_password(body.new_password)
+    row: QcMemberRow | None = None
+
+    if member_type in {"corporate", "employer"}:
+        contact_name = (body.contact_person_name or body.display_name).strip()
+        if not contact_name:
+            raise HTTPException(status_code=400, detail="담당자명을 입력해 주세요.")
+        if method == "email":
+            if not verify_email_verified_token(
+                body.email_verified_token,
+                email=email,
+                purpose="reset_password",
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="이메일 인증이 만료되었습니다. 다시 인증해 주세요.",
+                )
+            row = reset_corporate_password_by_email(
+                db,
+                email=email,
+                contact_person_name=contact_name,
+                password_hash=password_hash,
+            )
+        else:
+            phone = normalize_phone(body.phone)
+            if not verify_phone_verified_token(
+                body.phone_verified_token,
+                phone=phone,
+                purpose="reset_password",
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="휴대폰 인증이 만료되었습니다. 다시 인증해 주세요.",
+                )
+            row = reset_corporate_password(
+                db,
+                email=email,
+                phone=phone,
+                contact_person_name=contact_name,
+                password_hash=password_hash,
+            )
+    else:
+        display_name = body.display_name.strip()
+        if method == "email":
+            if not display_name:
+                raise HTTPException(status_code=400, detail="이름을 입력해 주세요.")
+            if not verify_email_verified_token(
+                body.email_verified_token,
+                email=email,
+                purpose="reset_password",
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="이메일 인증이 만료되었습니다. 다시 인증해 주세요.",
+                )
+            row = reset_seeker_password_by_email(
+                db,
+                email=email,
+                display_name=display_name,
+                password_hash=password_hash,
+            )
+        else:
+            phone = normalize_phone(body.phone)
+            if not verify_phone_verified_token(
+                body.phone_verified_token,
+                phone=phone,
+                purpose="reset_password",
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="휴대폰 인증이 만료되었습니다. 다시 인증해 주세요.",
+                )
+            if display_name:
+                row = reset_seeker_password(
+                    db,
+                    email=email,
+                    phone=phone,
+                    display_name=display_name,
+                    password_hash=password_hash,
+                )
+            else:
+                legacy = (
+                    db.query(QcMemberRow)
+                    .filter(QcMemberRow.email == email)
+                    .filter(QcMemberRow.phone == phone)
+                    .filter(QcMemberRow.member_type == "seeker")
+                    .first()
+                )
+                if legacy is not None:
+                    legacy.password_hash = password_hash
+                    row = legacy
+
     if row is None:
         raise HTTPException(
             status_code=404,
-            detail="이메일과 휴대폰 번호가 일치하는 계정을 찾을 수 없습니다.",
+            detail="입력하신 정보와 일치하는 계정을 찾을 수 없습니다.",
         )
     _ensure_active_member(row)
-
-    row.password_hash = hash_password(body.new_password)
     db.commit()
     return PasswordResetResponse(ok=True)
+
+
+@router.post("/email/send", response_model=EmailSendResponse)
+def email_send(body: EmailSendBody):
+    try:
+        hint, mock = send_email_code(body.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return EmailSendResponse(
+        sent=True,
+        hint=hint,
+        mock=mock,
+        dev_code="123456" if mock else None,
+    )
+
+
+@router.post("/email/verify", response_model=EmailVerifyResponse)
+def email_verify(body: EmailVerifyBody):
+    ok = verify_email_code(body.email, body.code)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="인증번호가 올바르지 않거나 만료되었습니다.",
+        )
+    email = normalize_email_address(body.email)
+    purpose = (
+        body.purpose if body.purpose in _ALLOWED_EMAIL_PURPOSES else "find_email"
+    )
+    token = issue_email_verified_token(email, purpose=purpose)
+    return EmailVerifyResponse(verified=True, email_verified_token=token)
 
 
 def _resolve_bearer(authorization: str | None) -> dict:
@@ -436,14 +695,16 @@ def patch_seeker_profile(
 @router.post("/phone/send", response_model=PhoneSendResponse)
 def phone_send(body: PhoneSendBody):
     try:
-        hint, mock = send_code(body.phone)
+        result = send_code(body.phone)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail = _phone_send_error_detail(exc)
+        raise HTTPException(status_code=400, detail=detail) from exc
     return PhoneSendResponse(
         sent=True,
-        hint=hint,
-        mock=mock,
-        dev_code="123456" if mock else None,
+        hint=result.hint,
+        mock=result.mock,
+        dev_code="123456" if result.mock else None,
+        sms_sent=result.sms_sent,
     )
 
 

@@ -93,10 +93,11 @@ class MapCameraHolder {
     );
   }
 
+  /// [zoom]이 null이면 현재 축척을 유지하고 중심만 이동합니다.
   Future<void> focusPin({
     required double latitude,
     required double longitude,
-    double zoom = 14,
+    double? zoom,
   }) async {
     final web = _webController;
     if (web != null && web.isReady) {
@@ -111,10 +112,11 @@ class MapCameraHolder {
     final controller = _controller;
     if (controller == null) return;
 
+    final effectiveZoom = zoom ?? (await controller.getCameraPosition()).zoom;
     await controller.updateCamera(
       NCameraUpdate.withParams(
         target: NLatLng(latitude, longitude),
-        zoom: zoom,
+        zoom: effectiveZoom,
       ),
     );
   }

@@ -206,8 +206,7 @@ abstract final class DevTestDataSeeder {
       title: title,
       warehouseName: id == _postAlphaId
           ? '다이소 세종물류센터'
-          : (profile.businessHeadOfficeAddress ??
-              '경기도 화성시 동탄대로 123'),
+          : (profile.businessHeadOfficeAddress ?? '세종특별자치시 다이소물류센터'),
       hourlyWage: hourlyWage,
       workSchedule: workSchedule,
       summary: summary,

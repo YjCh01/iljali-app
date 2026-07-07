@@ -1,91 +1,88 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
-/// '일자리' 앱 아이콘 — 보라 배경 + 만세 실루엣 + ●---●---● 별자리
+/// '일자리' 앱 아이콘 — 보라 배경 + 삼태극(보라·민트·노랑)
 class IljariIconPainter extends CustomPainter {
   const IljariIconPainter({
     this.backgroundColor = const Color(0xFF7C5CFC),
-    this.foregroundColor = Colors.white,
     this.transparentBackground = false,
+    this.useGradientBackground = true,
   });
 
   final Color backgroundColor;
-  final Color foregroundColor;
   final bool transparentBackground;
+  final bool useGradientBackground;
 
-  static const double _dotRadius = 0.033;
-  static const double _connectorWidth = 0.017;
-  static const double _limbWidth = 0.086;
-  static const double _headRadius = 0.076;
+  static const Color purple = Color(0xFF7C5CFC);
+  static const Color mint = Color(0xFF5EEAD4);
+  static const Color yellow = Color(0xFFFFE566);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+
+    if (!transparentBackground) {
+      if (useGradientBackground) {
+        final gradient = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [const Color(0xFF2A1B5E), backgroundColor],
+        );
+        canvas.drawRect(
+          rect,
+          Paint()..shader = gradient.createShader(rect),
+        );
+      } else {
+        canvas.drawRect(rect, Paint()..color = backgroundColor);
+      }
+    }
+
     final scale = size.shortestSide;
     final center = Offset(size.width / 2, size.height / 2);
+    final outerRadius = scale * 0.34;
 
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = transparentBackground ? Colors.transparent : backgroundColor,
-    );
+    _drawSamTaegeuk(canvas, center, outerRadius);
+  }
 
-    final paint = Paint()
-      ..color = foregroundColor
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
+  void _drawSamTaegeuk(Canvas canvas, Offset center, double radius) {
+    final smallRadius = radius * 0.5;
+    final offset = radius / 3;
+    final sqrt3 = math.sqrt(3);
 
-    final strokePaint = Paint()
-      ..color = foregroundColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _limbWidth * scale
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..isAntiAlias = true;
+    final lobes = <({Offset smallCenter, Color color})>[
+      (smallCenter: Offset(center.dx, center.dy - offset), color: purple),
+      (
+        smallCenter: Offset(center.dx - sqrt3 * offset, center.dy + offset / 2),
+        color: mint,
+      ),
+      (
+        smallCenter: Offset(center.dx + sqrt3 * offset, center.dy + offset / 2),
+        color: yellow,
+      ),
+    ];
 
-    final connectorPaint = Paint()
-      ..color = foregroundColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _connectorWidth * scale
-      ..strokeCap = StrokeCap.round
-      ..isAntiAlias = true;
+    final outer = Path()
+      ..addOval(Rect.fromCircle(center: center, radius: radius));
 
-    final shoulderY = center.dy + scale * 0.10;
-    final hipY = center.dy + scale * 0.24;
-    final leftShoulder = Offset(center.dx - scale * 0.09, shoulderY);
-    final rightShoulder = Offset(center.dx + scale * 0.09, shoulderY);
-    final leftHand = Offset(center.dx - scale * 0.18, shoulderY - scale * 0.13);
-    final rightHand = Offset(center.dx + scale * 0.18, shoulderY - scale * 0.13);
-    final leftFoot = Offset(center.dx - scale * 0.09, hipY + scale * 0.17);
-    final rightFoot = Offset(center.dx + scale * 0.09, hipY + scale * 0.17);
+    final paint = Paint()..isAntiAlias = true;
 
-    canvas.drawLine(leftHand, leftShoulder, strokePaint);
-    canvas.drawLine(rightHand, rightShoulder, strokePaint);
-    canvas.drawLine(
-      Offset(center.dx, shoulderY),
-      Offset(center.dx, hipY),
-      strokePaint,
-    );
-    canvas.drawLine(Offset(center.dx, hipY), leftFoot, strokePaint);
-    canvas.drawLine(Offset(center.dx, hipY), rightFoot, strokePaint);
-
-    final headCenter = Offset(center.dx, center.dy + scale * 0.02);
-    canvas.drawCircle(headCenter, _headRadius * scale, paint);
-
-    final leftDot = Offset(leftHand.dx, headCenter.dy - scale * 0.26);
-    final centerDot = Offset(headCenter.dx, headCenter.dy - scale * 0.29);
-    final rightDot = Offset(rightHand.dx, headCenter.dy - scale * 0.26);
-
-    canvas.drawLine(leftDot, centerDot, connectorPaint);
-    canvas.drawLine(centerDot, rightDot, connectorPaint);
-
-    for (final dot in [leftDot, centerDot, rightDot]) {
-      canvas.drawCircle(dot, _dotRadius * scale, paint);
+    for (final lobe in lobes) {
+      final small = Path()
+        ..addOval(
+          Rect.fromCircle(center: lobe.smallCenter, radius: smallRadius),
+        );
+      final shape = Path.combine(PathOperation.intersect, outer, small);
+      paint.color = lobe.color;
+      canvas.drawPath(shape, paint);
     }
   }
 
   @override
   bool shouldRepaint(covariant IljariIconPainter oldDelegate) {
     return oldDelegate.backgroundColor != backgroundColor ||
-        oldDelegate.foregroundColor != foregroundColor ||
-        oldDelegate.transparentBackground != transparentBackground;
+        oldDelegate.transparentBackground != transparentBackground ||
+        oldDelegate.useGradientBackground != useGradientBackground;
   }
 }
 

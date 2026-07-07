@@ -10,10 +10,12 @@ import 'package:map/core/constants/map_constants.dart';
 
 import 'package:map/core/geo/device_location_service.dart';
 
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_overlay.dart';
 
 import 'package:map/features/corporate/presentation/widgets/corporate_shuttle_density_painter.dart';
 
+import 'package:map/features/job_seeker/domain/entities/closed_ghost_route.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
@@ -41,6 +43,8 @@ class CorporateExposureMiniMap extends StatefulWidget {
 
     this.shuttleOverlays = const [],
 
+    this.ghostRoutes = const [],
+
     this.interactive = false,
 
     this.onPinTap,
@@ -62,6 +66,8 @@ class CorporateExposureMiniMap extends StatefulWidget {
   final Set<String> ownPostIds;
 
   final List<CorporateShuttleMapOverlay> shuttleOverlays;
+
+  final List<ClosedGhostRoute> ghostRoutes;
 
   final bool interactive;
 
@@ -462,12 +468,14 @@ class _CorporateExposureMiniMapState extends State<CorporateExposureMiniMap> {
                   cluster.singlePin.post.id == widget.selectedPostId;
 
               final size = tier.markerSize * (widget.interactive ? 0.88 : 0.72);
+              final pinHeight =
+                  size * (TeardropMapPinArt.jobHeight / TeardropMapPinArt.jobWidth);
 
               return Positioned(
 
                 left: offset.dx - size / 2,
 
-                top: offset.dy - size / 2,
+                top: offset.dy - pinHeight,
 
                 child: GestureDetector(
 
@@ -573,84 +581,13 @@ class _PinDot extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
-    return Container(
-
-      width: size,
-
-      height: size,
-
-      alignment: Alignment.center,
-
-      decoration: BoxDecoration(
-
-        color: tier.pinColor,
-
-        shape: BoxShape.circle,
-
-        border: Border.all(
-
-          color: isSelected
-
-              ? const Color(0xFFFF6F00)
-
-              : isOwn
-
-                  ? AppColors.primary
-
-                  : tier.pinBorderColor,
-
-          width: isSelected ? 3.5 : isOwn ? 2.5 : tier.borderWidth,
-
-        ),
-
-        boxShadow: [
-
-          BoxShadow(
-
-            color: tier.pinColor.withValues(alpha: 0.3),
-
-            blurRadius: 6,
-
-            offset: const Offset(0, 2),
-
-          ),
-
-          if (isOwn || isSelected)
-
-            BoxShadow(
-
-              color: (isSelected ? const Color(0xFFFF6F00) : AppColors.primary)
-
-                  .withValues(alpha: 0.3),
-
-              blurRadius: isSelected ? 12 : 8,
-
-              spreadRadius: isSelected ? 2 : 1,
-
-            ),
-
-        ],
-
-      ),
-
-      child: Text(
-
-        label,
-
-        style: TextStyle(
-
-          color: Colors.white,
-
-          fontWeight: FontWeight.w800,
-
-          fontSize: size * 0.36,
-
-          height: 1,
-
-        ),
-
-      ),
-
+    return JobTeardropPinWidget(
+      bodyColor: tier.pinColor,
+      style: tier == JobMapPinDisplayTier.packageActive
+          ? MapPinStyle.notification
+          : MapPinStyle.workplace,
+      selected: isSelected,
+      scale: size / TeardropMapPinArt.jobWidth,
     );
 
   }

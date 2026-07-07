@@ -163,6 +163,7 @@ class WorkScheduleSpec {
     this.customExcludedDates = const {},
     this.selectedWorkDates = const {},
     this.dailyHoursByDate = const {},
+    this.weekdayHoursByIndex = const {},
     this.dayStart = const TimeOfDay(hour: 9, minute: 0),
     this.dayEnd = const TimeOfDay(hour: 18, minute: 0),
     this.nightStart = const TimeOfDay(hour: 22, minute: 0),
@@ -194,6 +195,9 @@ class WorkScheduleSpec {
   /// 일용직 — 날짜별 근무 시간 (키: yyyy-MM-dd). 없으면 [dayStart]/[dayEnd] 사용
   final Map<String, DailyDayHours> dailyHoursByDate;
 
+  /// 요일 고정·날짜 맞춤 — 요일(0=월…6=일)별 근무 시간. 없으면 [dayStart]/[dayEnd] 사용
+  final Map<int, DailyDayHours> weekdayHoursByIndex;
+
   final TimeOfDay dayStart;
   final TimeOfDay dayEnd;
   final TimeOfDay nightStart;
@@ -206,9 +210,39 @@ class WorkScheduleSpec {
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
-  DailyDayHours hoursForDate(DateTime date) {
-    return dailyHoursByDate[dateKey(date)] ??
+  DailyDayHours hoursForWeekday(int weekdayIndex) {
+    return weekdayHoursByIndex[weekdayIndex] ??
         DailyDayHours(start: dayStart, end: dayEnd);
+  }
+
+  DailyDayHours hoursForDate(DateTime date) {
+    if (mode == WorkScheduleMode.dailyPick) {
+      return dailyHoursByDate[dateKey(date)] ??
+          DailyDayHours(start: dayStart, end: dayEnd);
+    }
+    if (mode == WorkScheduleMode.fixedWeekdays ||
+        mode == WorkScheduleMode.customDates) {
+      return hoursForWeekday(weekdayIndex(date));
+    }
+    return DailyDayHours(start: dayStart, end: dayEnd);
+  }
+
+  bool get hasVariedWeekdayHours {
+    if (mode != WorkScheduleMode.fixedWeekdays &&
+        mode != WorkScheduleMode.customDates) {
+      return false;
+    }
+    final indices = mode == WorkScheduleMode.fixedWeekdays
+        ? weekdays.toList()
+        : List<int>.generate(7, (i) => i);
+    if (indices.isEmpty) return false;
+    DailyDayHours? baseline;
+    for (final index in indices) {
+      final hours = hoursForWeekday(index);
+      baseline ??= hours;
+      if (hours != baseline) return true;
+    }
+    return false;
   }
 
   bool get hasVariedDailyHours {
@@ -238,7 +272,11 @@ class WorkScheduleSpec {
 
   bool get isComplete => isCompleteFor();
 
-  bool isCompleteFor({bool workPeriodNegotiable = false}) {
+  bool isCompleteFor({
+    bool workPeriodNegotiable = false,
+    bool workScheduleNegotiable = false,
+  }) {
+    if (workScheduleNegotiable) return true;
     if (firstStartDateOnly) {
       final hasStart = startDate != null;
       return switch (mode) {
@@ -275,6 +313,7 @@ class WorkScheduleSpec {
     Set<DateTime>? customExcludedDates,
     Set<DateTime>? selectedWorkDates,
     Map<String, DailyDayHours>? dailyHoursByDate,
+    Map<int, DailyDayHours>? weekdayHoursByIndex,
     TimeOfDay? dayStart,
     TimeOfDay? dayEnd,
     TimeOfDay? nightStart,
@@ -292,6 +331,7 @@ class WorkScheduleSpec {
       customExcludedDates: customExcludedDates ?? this.customExcludedDates,
       selectedWorkDates: selectedWorkDates ?? this.selectedWorkDates,
       dailyHoursByDate: dailyHoursByDate ?? this.dailyHoursByDate,
+      weekdayHoursByIndex: weekdayHoursByIndex ?? this.weekdayHoursByIndex,
       dayStart: dayStart ?? this.dayStart,
       dayEnd: dayEnd ?? this.dayEnd,
       nightStart: nightStart ?? this.nightStart,
@@ -395,6 +435,17 @@ class WorkScheduleSpec {
       return !day.isBefore(s) && !day.isAfter(e);
     }).toSet();
     return copyWith(customExcludedDates: trimmed);
+  }
+
+  WorkScheduleSpec trimWeekdayHoursToSelection() {
+    if (mode == WorkScheduleMode.fixedWeekdays) {
+      final trimmed = {
+        for (final entry in weekdayHoursByIndex.entries)
+          if (weekdays.contains(entry.key)) entry.key: entry.value,
+      };
+      return copyWith(weekdayHoursByIndex: trimmed);
+    }
+    return this;
   }
 
   WorkScheduleSpec trimDailyHoursToSelection() {

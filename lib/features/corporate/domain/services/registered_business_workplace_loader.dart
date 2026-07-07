@@ -1,11 +1,11 @@
-import 'package:map/core/address/address_geocoder.dart';
 import 'package:map/core/compliance/data/compliance_repository.dart';
 import 'package:map/core/compliance/services/mock_business_certificate_ocr_service.dart';
 import 'package:map/core/compliance/services/ocr_service_factory.dart';
+import 'package:map/core/dev/qc_demo_addresses.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
-import 'package:map/features/corporate/domain/usecases/search_workplace_address_usecase.dart';
+import 'package:map/features/corporate/domain/services/workplace_address_resolver.dart';
 
 /// 공고 등록 — 등록증·내정보에 저장된 사업장 소재지 → [WorkplaceAddress]
 class RegisteredBusinessWorkplaceLoadResult {
@@ -31,12 +31,9 @@ class RegisteredBusinessWorkplaceLoadResult {
 
 class RegisteredBusinessWorkplaceLoader {
   RegisteredBusinessWorkplaceLoader({
-    SearchWorkplaceAddressUseCase? search,
     BusinessCertificateOcrService? ocr,
-  })  : _search = search ?? SearchWorkplaceAddressUseCase(),
-        _ocr = ocr ?? OcrServiceFactory.create();
+  }) : _ocr = ocr ?? OcrServiceFactory.create();
 
-  final SearchWorkplaceAddressUseCase _search;
   final BusinessCertificateOcrService _ocr;
 
   Future<RegisteredBusinessWorkplaceLoadResult> load({
@@ -58,7 +55,7 @@ class RegisteredBusinessWorkplaceLoader {
       );
     }
 
-    final workplace = await _toWorkplace(resolved.address);
+    final workplace = await WorkplaceAddressResolver.resolve(resolved.address);
     if (workplace == null) {
       return RegisteredBusinessWorkplaceLoadResult.failure(
         '「${resolved.address}」 주소를 지도 좌표로 변환하지 못했습니다.\n'
@@ -88,7 +85,9 @@ class RegisteredBusinessWorkplaceLoader {
     CorporateMemberProfile profile,
   ) async {
     final headOffice = profile.businessHeadOfficeAddress?.trim();
-    if (headOffice != null && headOffice.isNotEmpty) {
+    if (headOffice != null &&
+        headOffice.isNotEmpty &&
+        !QcDemoAddresses.isLegacyDemo(headOffice)) {
       return _ResolvedAddress(
         address: headOffice,
         sourceLabel: '내정보 사업자 소재지',
@@ -98,7 +97,9 @@ class RegisteredBusinessWorkplaceLoader {
     final repo = await ComplianceRepository.create();
     final record = await repo.findByBrn(profile.companyKey);
     final saved = record?.registeredBusinessAddress?.trim();
-    if (saved != null && saved.isNotEmpty) {
+    if (saved != null &&
+        saved.isNotEmpty &&
+        !QcDemoAddresses.isLegacyDemo(saved)) {
       return _ResolvedAddress(
         address: saved,
         sourceLabel: '등록증 사업장 소재지',
@@ -113,7 +114,9 @@ class RegisteredBusinessWorkplaceLoader {
         expectedCompanyName: profile.companyName,
       );
       final fromOcr = ocr.businessAddress?.trim();
-      if (fromOcr != null && fromOcr.isNotEmpty) {
+      if (fromOcr != null &&
+          fromOcr.isNotEmpty &&
+          !QcDemoAddresses.isLegacyDemo(fromOcr)) {
         await repo.saveBusinessRecord(
           record.copyWith(registeredBusinessAddress: fromOcr),
         );
@@ -126,42 +129,6 @@ class RegisteredBusinessWorkplaceLoader {
 
     return null;
   }
-
-  Future<WorkplaceAddress?> _toWorkplace(String rawAddress) async {
-    final trimmed = rawAddress.trim();
-    if (trimmed.isEmpty) return null;
-
-    final search = await _search(trimmed);
-    if (search.addresses.isNotEmpty) {
-      final exact = search.addresses.firstWhere(
-        (item) => _normalized(item.roadAddress) == _normalized(trimmed),
-        orElse: () => search.addresses.first,
-      );
-      if (exact.coordinate != null) return exact;
-      if (exact.roadAddress.isNotEmpty) {
-        final coord = await AddressGeocoder.geocode(exact.roadAddress);
-        if (coord != null) {
-          return WorkplaceAddress(
-            roadAddress: exact.roadAddress,
-            jibunAddress: exact.jibunAddress,
-            dongName: exact.dongName,
-            coordinate: coord,
-          );
-        }
-      }
-      return exact;
-    }
-
-    final coordinate = await AddressGeocoder.geocode(trimmed);
-    if (coordinate == null) return null;
-    return WorkplaceAddress(
-      roadAddress: trimmed,
-      coordinate: coordinate,
-    );
-  }
-
-  String _normalized(String value) =>
-      value.replaceAll(RegExp(r'\s+'), '').toLowerCase();
 }
 
 class _ResolvedAddress {

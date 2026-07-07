@@ -1,4 +1,6 @@
 import 'package:map/core/compliance/services/business_certificate_address_extractor.dart';
+import 'package:map/core/config/dev_experience_flags.dart';
+import 'package:map/core/dev/qc_demo_addresses.dart';
 
 /// 사업자등록증 OCR 결과 (MVP mock)
 class BusinessCertificateOcrResult {
@@ -51,7 +53,9 @@ class MockBusinessCertificateOcrService implements BusinessCertificateOcrService
       industryName: isOutsourcingDemo ? '인력공급 및 아웃소싱' : '물류·창고업',
       confidence: 0.94,
       entityTypeHint: brn.startsWith('1') ? 'corporation' : 'soleProprietor',
-      businessAddress: '경기도 화성시 동탄대로 123',
+      businessAddress: DevExperienceFlags.enabled
+          ? QcDemoAddresses.legacyHwaseongDongtan
+          : null,
     );
   }
 }

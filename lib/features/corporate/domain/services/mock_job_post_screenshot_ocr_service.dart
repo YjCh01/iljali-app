@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:map/core/dev/qc_demo_addresses.dart';
 import 'package:map/features/corporate/domain/entities/external_job_post_platform.dart';
 
 /// 공고 캡처 OCR (MVP mock — 실서비스 시 CLOVA OCR·서버 프록시)
@@ -22,7 +23,7 @@ class MockJobPostScreenshotOcrService {
 물류센터 피킹 보조
 시급 : 12,000원
 09:00 ~ 18:00 (주5일)
-경기도 화성시 동탄대로 123
+${QcDemoAddresses.legacyHwaseongDongtan}
 입출고·포장 보조
 ''',
       ExternalJobPostPlatform.karrot => '''
@@ -37,7 +38,7 @@ class MockJobPostScreenshotOcrService {
 현장 보조 알바 모집
 시급 12,000원
 09:00-18:00
-경기도 화성시 동탄대로 123
+${QcDemoAddresses.legacyHwaseongDongtan}
 단순 보조 업무
 ''',
     };

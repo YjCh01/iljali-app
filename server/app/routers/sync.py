@@ -8,6 +8,8 @@ from app.routers.hiring import _row_to_dict as app_to_dict
 from app.routers.job_board import _row_to_dict as post_to_dict
 from app.services.entitlement_service import normalize_brn
 from app.services.ghost_pin_service import list_ghost_pins
+from app.services.ghost_route_service import list_ghost_routes
+from app.services.admin_announcement_service import list_announcements
 from app.services.push_wallet_service import get_or_create_wallet, wallet_to_response
 from app.services.sanction_service import (
     map_entitlements_for_company,
@@ -23,6 +25,7 @@ def sync_bootstrap(
     seeker_email: str | None = Query(default=None),
     member_email: str | None = Query(default=None),
     company_key: str | None = Query(default=None),
+    member_type: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     posts = db.query(JobPostRow).order_by(JobPostRow.created_at.desc()).all()
@@ -65,10 +68,14 @@ def sync_bootstrap(
         wallet = wallet_to_response(brn, wallet_row)
 
     ghost_list = list_ghost_pins(db)
+    ghost_route_list = list_ghost_routes(db)
+    announcement_list = list_announcements(db, member_type=member_type)
     return {
         "posts": post_items,
         "post_entitlements": entitlements,
         "ghost_pins": ghost_list,
+        "ghost_routes": ghost_route_list,
+        "admin_announcements": announcement_list,
         "applications": applications,
         "member_status": member,
         "wallet": wallet,
@@ -76,6 +83,8 @@ def sync_bootstrap(
             "posts": len(post_items),
             "applications": len(applications),
             "ghost_pins": len(ghost_list),
+            "ghost_routes": len(ghost_route_list),
+            "admin_announcements": len(announcement_list),
         },
     }
 

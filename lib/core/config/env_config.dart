@@ -122,4 +122,37 @@ abstract final class EnvConfig {
 
   static bool get isSentryConfigured =>
       sentryDsn.isNotEmpty && !sentryDsn.startsWith('YOUR_');
+
+  /// Firebase Web Push (FCM)
+  static const String firebaseApiKey = String.fromEnvironment(
+    'FIREBASE_API_KEY',
+    defaultValue: '',
+  );
+
+  static const String firebaseAppId = String.fromEnvironment(
+    'FIREBASE_APP_ID',
+    defaultValue: '',
+  );
+
+  static const String firebaseMessagingSenderId = String.fromEnvironment(
+    'FIREBASE_MESSAGING_SENDER_ID',
+    defaultValue: '',
+  );
+
+  static const String firebaseProjectId = String.fromEnvironment(
+    'FIREBASE_PROJECT_ID',
+    defaultValue: '',
+  );
+
+  static const String firebaseVapidKey = String.fromEnvironment(
+    'FIREBASE_VAPID_KEY',
+    defaultValue: '',
+  );
+
+  static bool get isFirebaseConfigured =>
+      firebaseApiKey.isNotEmpty &&
+      firebaseAppId.isNotEmpty &&
+      firebaseMessagingSenderId.isNotEmpty &&
+      firebaseProjectId.isNotEmpty &&
+      firebaseVapidKey.isNotEmpty;
 }

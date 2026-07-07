@@ -5,6 +5,7 @@ import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/commute/domain/utils/commute_route_polyline.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 import 'package:map/core/geo/map_viewport_bounds.dart';
 import 'package:map/features/job_seeker/domain/utils/job_map_cluster_engine.dart';
@@ -121,8 +122,8 @@ class JobSeekerMockMapState extends State<JobSeekerMockMap> {
               ) +
                   _panOffset;
               return Positioned(
-                left: offset.dx - 26,
-                top: offset.dy - 26,
+                left: offset.dx - TeardropMapPinArt.jobWidth / 2,
+                top: offset.dy - TeardropMapPinArt.jobHeight,
                 child: GestureDetector(
                   onTap: () {
                     if (cluster.isSingle) {
@@ -200,7 +201,8 @@ class JobSeekerMockMapState extends State<JobSeekerMockMap> {
             ),
             MapCurrentLocationButton(
               onMockLocate: _focusMockOnUserLocation,
-              bottom: MapFloatingInsets.searchAreaButtonBottom(context) + 56,
+              bottom: MapFloatingInsets.searchAreaButtonBottom(context) +
+                  MapFloatingInsets.myLocationAboveSearchButton,
             ),
           ],
         );
@@ -224,34 +226,12 @@ class _ClusterBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseSize = tier.markerSize;
-    final size = count > 1 ? baseSize + 8 : baseSize;
-    final label = count > 1 ? '$count' : tier.shapeGlyph;
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: count > 1 ? tier.pinLightColor : tier.pinColor,
-        border: Border.all(color: tier.pinBorderColor, width: tier.borderWidth),
-        boxShadow: [
-          BoxShadow(
-            color: tier.pinColor.withValues(alpha: 0.35),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: count > 1 ? 15 : size * 0.38,
-          height: 1,
-        ),
-      ),
+    return JobTeardropPinWidget(
+      bodyColor: count > 1 ? tier.pinLightColor : tier.pinColor,
+      style: tier == JobMapPinDisplayTier.packageActive
+          ? MapPinStyle.notification
+          : MapPinStyle.workplace,
+      scale: count > 1 ? 0.95 : 0.88,
     );
   }
 }

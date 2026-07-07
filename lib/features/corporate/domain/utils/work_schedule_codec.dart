@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:map/features/corporate/domain/entities/work_schedule_negotiable.dart';
 import 'package:map/features/corporate/domain/entities/work_schedule_spec.dart';
 
 /// 근무 일정 ↔ 공고 `workSchedule` 문자열 변환
@@ -40,8 +41,19 @@ abstract final class WorkScheduleCodec {
     return null;
   }
 
-  static String encode(WorkScheduleSpec spec, {bool workPeriodNegotiable = false}) {
-    if (!spec.isCompleteFor(workPeriodNegotiable: workPeriodNegotiable)) {
+  static String encode(
+    WorkScheduleSpec spec, {
+    bool workPeriodNegotiable = false,
+    bool workScheduleNegotiable = false,
+  }) {
+    if (workScheduleNegotiable &&
+        !spec.isCompleteFor(workPeriodNegotiable: workPeriodNegotiable)) {
+      return WorkScheduleNegotiable.label;
+    }
+    if (!spec.isCompleteFor(
+      workPeriodNegotiable: workPeriodNegotiable,
+      workScheduleNegotiable: workScheduleNegotiable,
+    )) {
       return '';
     }
     final dayTime = '${_padTime(spec.dayStart)}~${_padTime(spec.dayEnd)}';
@@ -71,14 +83,17 @@ abstract final class WorkScheduleCodec {
               .map((e) => e.value)
               .join('');
           final count = spec.weekdays.length;
+          final timePart = spec.hasVariedWeekdayHours
+              ? _encodeWeekdayHours(spec)
+              : dayTime;
           if (spec.firstStartDateOnly) {
             final startPart =
                 spec.startDate != null ? '${_fmtDate(spec.startDate!)} · ' : '';
-            return '${prefix}주${count}일($days) · $startPart$dayTime';
+            return '${prefix}주${count}일($days) · $startPart$timePart';
           }
           final start = _fmtDate(spec.startDate!);
           final end = _fmtDate(spec.endDate!);
-          return '주${count}일($days) · $start~$end · $dayTime';
+          return '주${count}일($days) · $start~$end · $timePart';
         }(),
       WorkScheduleMode.rotatingShift => () {
           final cycle = spec.rotatingCycle;
@@ -107,12 +122,15 @@ abstract final class WorkScheduleCodec {
               '시작=${startSlot.shortLabel}';
         }(),
       WorkScheduleMode.customDates => () {
+          final timePart = spec.hasVariedWeekdayHours
+              ? _encodeWeekdayHours(spec, allWeekdays: true)
+              : dayTime;
           if (spec.firstStartDateOnly) {
             final startPart =
                 spec.startDate != null ? '${_fmtDate(spec.startDate!)} · ' : '';
             final sorted = spec.customExcludedDates.toList()
               ..sort((a, b) => a.compareTo(b));
-            final base = '${prefix}맞춤 · $startPart$dayTime';
+            final base = '${prefix}맞춤 · $startPart$timePart';
             if (sorted.isEmpty) return base;
             final excluded = sorted.map(_fmtDate).join(',');
             return '$base · 제외=$excluded';
@@ -122,12 +140,49 @@ abstract final class WorkScheduleCodec {
           final sorted = spec.customExcludedDates.toList()
             ..sort((a, b) => a.compareTo(b));
           final base =
-              '맞춤 · $start~$end · $dayTime · 근무${spec.countWorkDays()}일';
+              '맞춤 · $start~$end · $timePart · 근무${spec.countWorkDays()}일';
           if (sorted.isEmpty) return base;
           final excluded = sorted.map(_fmtDate).join(',');
           return '$base · 제외=$excluded';
         }(),
     };
+  }
+
+  static String _encodeWeekdayHours(
+    WorkScheduleSpec spec, {
+    bool allWeekdays = false,
+  }) {
+    final indices = allWeekdays
+        ? List<int>.generate(7, (i) => i)
+        : (spec.weekdays.toList()..sort());
+    final parts = <String>[];
+    for (final index in indices) {
+      final label = WorkScheduleSpec.weekdayLabels[index];
+      final hours = spec.hoursForWeekday(index);
+      parts.add(
+        '$label@${_padTime(hours.start)}~${_padTime(hours.end)}',
+      );
+    }
+    return '요일=${parts.join(',')}';
+  }
+
+  static Map<int, DailyDayHours> _parseWeekdayHours(String text) {
+    final weekdayHours = <int, DailyDayHours>{};
+    final section = RegExp(r'요일=([^·]+)').firstMatch(text);
+    final source = section?.group(1) ?? text;
+    final pattern = RegExp(
+      r'([월화수목금토일])@(\d{1,2}:\d{2})~(\d{1,2}:\d{2})',
+    );
+    for (final match in pattern.allMatches(source)) {
+      final label = match.group(1)!;
+      final index = WorkScheduleSpec.weekdayLabels.indexOf(label);
+      if (index < 0) continue;
+      weekdayHours[index] = DailyDayHours(
+        start: _parseTimeParts(match.group(2)!),
+        end: _parseTimeParts(match.group(3)!),
+      );
+    }
+    return weekdayHours;
   }
 
   static String displayLabel(String raw) {
@@ -181,9 +236,15 @@ abstract final class WorkScheduleCodec {
       final times = _timePattern.firstMatch(text);
       var dayStart = const TimeOfDay(hour: 9, minute: 0);
       var dayEnd = const TimeOfDay(hour: 18, minute: 0);
-      if (times != null) {
+      if (times != null && !text.contains('@')) {
         dayStart = _parseTime(times);
         dayEnd = _parseTimeEnd(times);
+      }
+      final weekdayHours = _parseWeekdayHours(text);
+      if (weekdayHours.isNotEmpty) {
+        final first = weekdayHours.values.first;
+        dayStart = first.start;
+        dayEnd = first.end;
       }
 
       return WorkScheduleSpec(
@@ -197,6 +258,7 @@ abstract final class WorkScheduleCodec {
               )
             : null,
         weekdays: weekdays,
+        weekdayHoursByIndex: weekdayHours,
         dayStart: dayStart,
         dayEnd: dayEnd,
       );
@@ -224,9 +286,15 @@ abstract final class WorkScheduleCodec {
     final times = _timePattern.firstMatch(text);
     var dayStart = const TimeOfDay(hour: 9, minute: 0);
     var dayEnd = const TimeOfDay(hour: 18, minute: 0);
-    if (times != null) {
+    if (times != null && !text.contains('@')) {
       dayStart = _parseTime(times);
       dayEnd = _parseTimeEnd(times);
+    }
+    final weekdayHours = _parseWeekdayHours(text);
+    if (weekdayHours.isNotEmpty) {
+      final first = weekdayHours.values.first;
+      dayStart = first.start;
+      dayEnd = first.end;
     }
 
     return WorkScheduleSpec(
@@ -234,6 +302,7 @@ abstract final class WorkScheduleCodec {
       startDate: start,
       endDate: end,
       weekdays: weekdays,
+      weekdayHoursByIndex: weekdayHours,
       dayStart: dayStart,
       dayEnd: dayEnd,
     );
@@ -489,9 +558,15 @@ abstract final class WorkScheduleCodec {
       final times = _timePattern.firstMatch(text);
       var dayStart = const TimeOfDay(hour: 9, minute: 0);
       var dayEnd = const TimeOfDay(hour: 18, minute: 0);
-      if (times != null) {
+      if (times != null && !text.contains('@')) {
         dayStart = _parseTime(times);
         dayEnd = _parseTimeEnd(times);
+      }
+      final weekdayHours = _parseWeekdayHours(text);
+      if (weekdayHours.isNotEmpty) {
+        final first = weekdayHours.values.first;
+        dayStart = first.start;
+        dayEnd = first.end;
       }
 
       final excluded = <DateTime>{};
@@ -514,6 +589,7 @@ abstract final class WorkScheduleCodec {
         firstStartDateOnly: true,
         startDate: start,
         customExcludedDates: excluded,
+        weekdayHoursByIndex: weekdayHours,
         dayStart: dayStart,
         dayEnd: dayEnd,
       );
@@ -529,9 +605,15 @@ abstract final class WorkScheduleCodec {
     final times = _timePattern.firstMatch(text);
     var dayStart = const TimeOfDay(hour: 9, minute: 0);
     var dayEnd = const TimeOfDay(hour: 18, minute: 0);
-    if (times != null) {
+    if (times != null && !text.contains('@')) {
       dayStart = _parseTime(times);
       dayEnd = _parseTimeEnd(times);
+    }
+    final weekdayHours = _parseWeekdayHours(text);
+    if (weekdayHours.isNotEmpty) {
+      final first = weekdayHours.values.first;
+      dayStart = first.start;
+      dayEnd = first.end;
     }
 
     final excluded = <DateTime>{};
@@ -553,6 +635,7 @@ abstract final class WorkScheduleCodec {
         startDate: start,
         endDate: end,
         customExcludedDates: excluded,
+        weekdayHoursByIndex: weekdayHours,
         dayStart: dayStart,
         dayEnd: dayEnd,
       );
@@ -588,6 +671,7 @@ abstract final class WorkScheduleCodec {
       startDate: start,
       endDate: end,
       customExcludedDates: excluded,
+      weekdayHoursByIndex: weekdayHours,
       dayStart: dayStart,
       dayEnd: dayEnd,
     );

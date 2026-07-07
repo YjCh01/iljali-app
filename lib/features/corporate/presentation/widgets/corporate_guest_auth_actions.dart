@@ -100,6 +100,18 @@ class _TopBarActions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         TextButton(
+          onPressed: () =>
+              Navigator.of(context).pushNamed(AppRoutes.publicPricing),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textSecondary,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          ),
+          child: const Text(
+            '요금',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+        ),
+        TextButton(
           onPressed: onLogin,
           style: TextButton.styleFrom(
             foregroundColor: AppColors.primary,

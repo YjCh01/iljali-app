@@ -9,7 +9,6 @@ import 'package:map/features/job_seeker/domain/entities/job_bookmark.dart';
 import 'package:map/features/job_seeker/domain/entities/job_bookmark_folder.dart';
 import 'package:map/features/job_seeker/domain/entities/viewed_job_entry.dart';
 import 'package:map/features/job_seeker/domain/utils/job_bookmark_retention_policy.dart';
-import 'package:map/core/widgets/korean_calendar.dart';
 import 'package:map/core/widgets/adaptive_sheet.dart';
 import 'package:map/features/job_seeker/domain/utils/job_bookmark_sort.dart';
 import 'package:map/features/job_seeker/domain/utils/job_map_pin_factory.dart';
@@ -224,13 +223,9 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
         pin: pin,
         vaultRepo: _repo,
         onClose: () => Navigator.of(context).pop(),
-        onApply: () async {
-          final applied = await showJobApplyDialog(
-            context,
-            pin,
-            onApplied: widget.onApplied,
-          );
-          if (applied && context.mounted) Navigator.of(context).pop();
+        onApply: () {
+          widget.onApplied?.call();
+          if (context.mounted) Navigator.of(context).pop();
         },
         onVaultChanged: _reload,
         onApplicationStateChanged: _reload,
@@ -255,13 +250,9 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
         pin: pin,
         vaultRepo: _repo,
         onClose: () => Navigator.of(context).pop(),
-        onApply: () async {
-          final applied = await showJobApplyDialog(
-            context,
-            pin,
-            onApplied: widget.onApplied,
-          );
-          if (applied && context.mounted) Navigator.of(context).pop();
+        onApply: () {
+          widget.onApplied?.call();
+          if (context.mounted) Navigator.of(context).pop();
         },
         onVaultChanged: _reload,
         onApplicationStateChanged: _reload,
@@ -443,26 +434,6 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
     } else if (action == 'delete') {
       await _deleteFolder(folder);
     }
-  }
-
-  Future<void> _showCalendarStub(String title) async {
-    final now = DateTime.now();
-    final picked = await showKoreanDatePickerSheet(
-      context,
-      initialDate: now,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
-      title: '「$title」일정 기록',
-    );
-    if (!mounted || picked == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '「$title」${picked.year}.${picked.month}.${picked.day} 일정을 기록했습니다.',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   @override
@@ -769,11 +740,6 @@ class _IndividualVaultTabState extends State<IndividualVaultTab>
                           icon: const Icon(Icons.compare_arrows, size: 16),
                           label: const Text('비교'),
                         ),
-                      TextButton.icon(
-                        onPressed: () => _showCalendarStub(item.title),
-                        icon: const Icon(Icons.event_outlined, size: 16),
-                        label: const Text('캘린더'),
-                      ),
                       TextButton.icon(
                         onPressed: () => _removeBookmark(item),
                         icon: const Icon(Icons.delete_outline, size: 16),

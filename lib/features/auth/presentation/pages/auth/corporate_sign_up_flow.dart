@@ -1,10 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/widgets/push_wallet_bonus_feedback.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/core/session/member_type.dart';
+import 'package:map/features/auth/domain/entities/social_provider.dart';
+import 'package:map/features/auth/domain/services/social_auth_service.dart';
 import 'package:map/features/auth/data/repositories/corporate_auth_repository.dart';
+import 'package:map/features/auth/domain/services/phone_verification_service.dart';
 import 'package:map/features/auth/domain/usecases/validate_sign_up_form_usecase.dart';
 import 'package:map/features/auth/presentation/widgets/auth_form_card.dart';
 import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart';
@@ -45,11 +50,13 @@ class CorporateSignUpFlow extends StatefulWidget {
 
 class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   final _validateSignUp = const ValidateSignUpFormUseCase();
+  final _phoneVerification = PhoneVerificationService();
   _CorporateSignUpStep _step = _CorporateSignUpStep.account;
   bool _usedSocialSignUp = false;
 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _phoneCodeController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _passwordConfirmController = TextEditingController();
@@ -63,6 +70,9 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   bool _obscurePassword = true;
   bool _obscurePasswordConfirm = true;
   bool _submitting = false;
+  bool _sendingPhoneCode = false;
+  String? _phoneVerifiedToken;
+  String? _phoneCodeError;
 
   String? _nameError;
   String? _phoneError;
@@ -90,6 +100,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _phoneCodeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _passwordConfirmController.dispose();
@@ -114,26 +125,97 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
       );
   }
 
+  void _onSocialSignUpTap(String provider) {
+    final mapped = switch (provider.toLowerCase()) {
+      'kakao' => SocialProvider.kakao,
+      'naver' => SocialProvider.naver,
+      'google' => SocialProvider.google,
+      _ => null,
+    };
+    if (mapped == null) {
+      _snack('$provider 로그인은 준비 중입니다.');
+      return;
+    }
+    try {
+      SocialAuthService().startLogin(
+        provider: mapped,
+        memberType: MemberType.corporate,
+        action: 'signup',
+      );
+    } on Object {
+      if (kDebugMode) {
+        _mockSocialSignUp(provider);
+        return;
+      }
+      _snack('$provider 로그인을 시작할 수 없습니다.');
+    }
+  }
+
   void _mockSocialSignUp(String provider) {
     setState(() {
       _usedSocialSignUp = true;
       _nameController.text = '김담당';
       _phoneController.text = '01055556666';
       _emailController.text = '$provider.demo@iljari.co.kr';
-      _passwordController.clear();
-      _passwordConfirmController.clear();
-      _step = _CorporateSignUpStep.company;
+      _passwordController.text = 'SocialTemp1!';
+      _passwordConfirmController.text = 'SocialTemp1!';
+      _step = _CorporateSignUpStep.account;
     });
-    _snack('$provider 로 가입 정보를 불러왔습니다. (MVP mock)');
+    _snack('$provider 로 가입 정보를 불러왔습니다.');
   }
 
-  void _continueFromAccount() {
+  Future<void> _sendPhoneCode() async {
+    final phone = _phoneController.text.trim();
+    if (phone.length < 10) {
+      _snack('휴대폰 번호를 확인해 주세요.');
+      return;
+    }
+    setState(() {
+      _sendingPhoneCode = true;
+      _phoneCodeError = null;
+      _phoneVerifiedToken = null;
+    });
+    try {
+      final devCode = await _phoneVerification.sendCode(phone);
+      if (!mounted) return;
+      _snack('인증번호가 발송되었습니다.${devCode != '******' ? ' (개발: $devCode)' : ''}');
+    } on Object {
+      _snack('인증번호 발송에 실패했습니다.');
+    } finally {
+      if (mounted) setState(() => _sendingPhoneCode = false);
+    }
+  }
+
+  Future<bool> _ensurePhoneVerified() async {
+    if (_phoneVerifiedToken != null) return true;
+    final code = _phoneCodeController.text.trim();
+    if (code.length != 6) {
+      setState(() => _phoneCodeError = '인증번호 6자리를 입력해 주세요.');
+      _snack('휴대폰 문자 인증을 완료해 주세요.');
+      return false;
+    }
+    final result = await _phoneVerification.verifyAsync(
+      _phoneController.text,
+      code,
+      purpose: PhoneVerificationPurpose.signup,
+    );
+    if (!result.verified || result.phoneVerifiedToken == null) {
+      setState(() => _phoneCodeError = '인증번호가 올바르지 않습니다.');
+      _snack('인증번호를 다시 확인해 주세요.');
+      return false;
+    }
+    _phoneVerifiedToken = result.phoneVerifiedToken;
+    return true;
+  }
+
+  Future<void> _continueFromAccount() async {
     if (_usedSocialSignUp) {
       if (_nameController.text.trim().isEmpty ||
           _emailController.text.trim().isEmpty) {
         _snack('소셜 가입 정보를 확인해 주세요.');
         return;
       }
+      if (!await _ensurePhoneVerified()) return;
       setState(() => _step = _CorporateSignUpStep.company);
       return;
     }
@@ -157,6 +239,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
       if (message != null) _snack(message);
       return;
     }
+    if (!await _ensurePhoneVerified()) return;
     setState(() => _step = _CorporateSignUpStep.company);
   }
 
@@ -427,11 +510,17 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
     }
     setState(() => _submitting = true);
     try {
+      final token = _phoneVerifiedToken;
+      if (token == null || token.isEmpty) {
+        _snack('휴대폰 문자 인증이 필요합니다.');
+        return;
+      }
       await CorporateAuthRepository.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         displayName: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
+        phoneVerifiedToken: token,
         profile: profile,
       );
 
@@ -532,7 +621,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         ),
         const SizedBox(height: 8),
         Text(
-          '소셜 또는 아이디로 가입한 뒤 기업·담당자 정보를 등록합니다.',
+          '소셜 또는 아이디로 가입합니다. 모든 경로에서 휴대폰 문자 인증(6자리)이 필요합니다.',
           style: TextStyle(
             fontSize: 14,
             height: 1.4,
@@ -547,7 +636,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
                 label: '카카오',
                 color: const Color(0xFFFEE500),
                 textColor: Colors.black87,
-                onTap: () => _mockSocialSignUp('Kakao'),
+                onTap: () => _onSocialSignUpTap('Kakao'),
               ),
             ),
             const SizedBox(width: 8),
@@ -555,7 +644,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
               child: _SocialButton(
                 label: '네이버',
                 color: const Color(0xFF03C75A),
-                onTap: () => _mockSocialSignUp('Naver'),
+                onTap: () => _onSocialSignUpTap('Naver'),
               ),
             ),
             const SizedBox(width: 8),
@@ -564,7 +653,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
                 label: 'Google',
                 color: Colors.white,
                 textColor: AppColors.textPrimary,
-                onTap: () => _mockSocialSignUp('Google'),
+                onTap: () => _onSocialSignUpTap('Google'),
               ),
             ),
           ],
@@ -607,6 +696,29 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
           inputFormatters: [
             FilteringTextInputFormatter.digitsOnly,
             LengthLimitingTextInputFormatter(11),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: AuthTextField(
+                label: '인증번호',
+                hint: '6자리',
+                controller: _phoneCodeController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                errorText: _phoneCodeError,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 22),
+              child: OutlinedButton(
+                onPressed: _sendingPhoneCode ? null : _sendPhoneCode,
+                child: Text(_sendingPhoneCode ? '발송 중' : '인증번호'),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
