@@ -10,6 +10,7 @@ import 'package:map/features/corporate/domain/entities/corporate_member_profile.
 import 'package:map/features/corporate/domain/services/corporate_org_join_service.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.dart';
 import 'package:map/features/job_seeker/domain/services/seeker_profile_sync_service.dart';
+import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 앱 내 mock 인증 세션 (로컬 저장)
@@ -143,6 +144,8 @@ class AuthSession {
   Future<void> signOut() async {
     await PushNotificationBootstrap.clearOnSignOut();
     BusLocationTowerPilotService.invalidate();
+    MapViewportSessionStore.instance.forget(MapViewportSessionKeys.corporateHome);
+    MapViewportSessionStore.instance.forget(MapViewportSessionKeys.seekerHomeMap);
     _user = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyName);

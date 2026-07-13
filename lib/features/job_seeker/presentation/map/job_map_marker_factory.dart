@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 /// 채용 공고 → 클러스터 가능 마커 (근무지 / 알림 / 유령)
 abstract final class JobMapMarkerFactory {
-  static MapPinStyle _styleFor(JobMapPin pin) {
-    if (pin.isClosedGhost) return MapPinStyle.workplace;
-    return TeardropMapPinArt.styleForTier(pin.displayTier);
-  }
+  static MapPinStyle _styleFor(JobMapPin pin) => MapPinStyle.workplace;
 
   static Future<NClusterableMarker> create(
     JobMapPin pin, {
@@ -26,9 +24,10 @@ abstract final class JobMapMarkerFactory {
     final style = _styleFor(pin);
     final bodyColor = isSelected
         ? MapPinColors.selected
-        : pin.isClosedGhost
-            ? MapPinColors.ghost
-            : MapPinColors.active;
+        : switch (pin.displayTier) {
+            JobMapPinDisplayTier.packageActive => MapPinColors.freeGray,
+            _ => pin.displayTier.pinColor,
+          };
 
     final icon = await MapPinOverlayIconCache.pin(
       style: style,

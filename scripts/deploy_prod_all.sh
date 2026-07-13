@@ -67,6 +67,10 @@ echo ""
 echo "NCP SSH 비밀번호는 최초 1회만 묻습니다 (키 등록 시 생략)."
 echo ""
 
+if [[ -x ./scripts/preflight_deploy.sh ]]; then
+  ./scripts/preflight_deploy.sh || true
+fi
+
 iljari_ssh_init
 
 FAILED=0
@@ -217,8 +221,10 @@ if [[ "${FAILED}" == 0 ]]; then
 else
   echo "  ⚠️  일부 단계 실패 — 위 로그 확인"
   [[ "${DO_API}" == 1 ]] && echo "  (API·웹이 ✅면 서비스·카카오 로그인 테스트는 가능)"
-  echo "  Android Java 오류 → 도구_Java설치.command"
-  echo "  iOS CocoaPods/SSL 오류 → 도구_CocoaPods설치.command (CA 인증서 자동 설치)"
+  echo "  점검: ./scripts/preflight_deploy.sh"
+  echo "  Android Java → 도구_Java설치.command"
+  echo "  iOS CocoaPods/SSL → 도구_CocoaPods설치.command"
+  echo "  TestFlight 업로드 → ./scripts/setup_testflight.sh (API Key 또는 Apple ID)"
   echo "  SSL/nginx: 도구_사이트완료.command"
 fi
 echo "========================================"

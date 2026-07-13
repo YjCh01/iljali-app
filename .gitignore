@@ -50,6 +50,12 @@ app.*.map.json
 .env.*
 naver_map_client_id.txt
 web/naver_map_client_id.txt
+fastlane/.env
+fastlane/report.xml
+fastlane/test_output
+fastlane/*.p8
+fastlane/play-store-key.json
+/vendor/bundle/
 server/.venv/
 server/staging/certs/
 server/staging/web/

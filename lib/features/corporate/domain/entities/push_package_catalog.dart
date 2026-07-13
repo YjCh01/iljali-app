@@ -19,7 +19,7 @@ abstract final class PushPackageCatalog {
   static const packagePushRadiusM = 700;
   static const signupBonusPushes = 2;
   static const verificationBonusPushes = 5;
-  static const signupBonusValidDays = 90;
+  static const signupBonusValidDays = 30;
   static const baseLocationSlots = 1;
 
   /// 공고 적용 시점 D+0 → 노출 종료 D+1 23:59:59
@@ -76,7 +76,7 @@ abstract final class PushPackageCatalog {
 
   static const singlePackageLabel = jobPinProductName;
 
-  static const packageCreditValidDays = 365;
+  static const packageCreditValidDays = 180;
   static const shuttleOverlayAddonId = 'shuttle_route_overlay';
 
   static int pack10Price(int unitPriceKrw) =>

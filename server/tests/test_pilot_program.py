@@ -72,6 +72,7 @@ def setup_module():
                 )
             else:
                 row.phone = phone
+                row.display_name = name
         _refresh_today_rider_application(db)
         db.commit()
     finally:

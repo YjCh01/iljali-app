@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
-import 'package:map/features/corporate/domain/utils/shuttle_route_visibility.dart';
+import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 /// 지도 노출 — 무료/유료 시각 차별화 정책 (단일 기준)
@@ -9,10 +9,10 @@ abstract final class MapExposureVisualPolicy {
   /// 무료 공고 핀 — 회색
   static const freeJobPinColor = Color(0xFF757575);
 
-  /// 근무지(0번) — 무료·미결제 시 회색
+  /// 근무지(0번) — 항상 회색(또는 고시급 하늘). 알림핀 색과 분리
   static const freeWorkplacePinColor = Color(0xFF8A8A8A);
 
-  /// 근무지 — 유료 노출 중 보라
+  /// @Deprecated 근무지 유료 보라 칠하기 금지 — 알림핀이 별도 마커로 표시됨
   static const paidWorkplacePinColor = Color(0xFF5E35B1);
 
   /// 일자리 알림핀 기본 — 연보라

@@ -1,17 +1,12 @@
 import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/core/map/web/naver_map_web_layer.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
+import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 /// JobMapPin → NAVER Maps JS 웹 마커 스펙
 abstract final class JobMapWebMarkerFactory {
-  static MapPinMarkerKind _kindFor(JobMapPin pin) {
-    if (pin.isClosedGhost) return MapPinMarkerKind.workplace;
-    return switch (TeardropMapPinArt.styleForTier(pin.displayTier)) {
-      MapPinStyle.notification => MapPinMarkerKind.notification,
-      MapPinStyle.busStop => MapPinMarkerKind.busStop,
-      MapPinStyle.workplace => MapPinMarkerKind.workplace,
-    };
-  }
+  static MapPinMarkerKind _kindFor(JobMapPin pin) =>
+      MapPinMarkerKind.workplace;
 
   static NaverMapWebMarkerSpec fromPin(
     JobMapPin pin, {
@@ -21,9 +16,12 @@ abstract final class JobMapWebMarkerFactory {
     final kind = _kindFor(pin);
     final bodyColor = isSelected
         ? MapPinColors.selected
-        : pin.isClosedGhost
-            ? MapPinColors.ghost
-            : MapPinColors.active;
+        : switch (pin.displayTier) {
+            // 근무지 핀은 알림핀/유료 티어 색을 쓰지 않음
+            JobMapPinDisplayTier.packageActive => MapPinColors.freeGray,
+            _ => pin.displayTier.pinColor,
+          };
+
     var scale = 1.0;
     if (isSelected) {
       scale = 1.12;
@@ -47,6 +45,8 @@ abstract final class JobMapWebMarkerFactory {
       longitude: pin.longitude,
       colorHex: NaverMapWebColors.hex(bodyColor),
       borderColorHex: NaverMapWebColors.hex(bodyColor),
+      ringColorHex: null,
+      ringWidth: 0,
       label: '',
       isOwn: isOwn,
       isSelected: isSelected,

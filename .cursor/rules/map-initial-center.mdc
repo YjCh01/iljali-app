@@ -1,0 +1,32 @@
+---
+description: 지도 초기 중심 — 기업/개인/공고별 정책 (MapInitialCenterPolicy)
+globs: lib/**/*map*.dart, lib/core/map/**, lib/features/corporate/**, lib/features/commute/**, lib/features/job_seeker/**/map/**
+alwaysApply: false
+---
+
+# Map initial center (지도 초기 위치)
+
+**Single source of truth:** `lib/core/map/map_initial_center_policy.dart`
+
+| Context | Priority |
+|---------|----------|
+| **기업회원 기본** | ① 사업소재지 → ② 자사 공고 근무지 (본사 미등록 시) |
+| **개인회원 기본** | 회원정보 실주소 (`homeRoadAddress`) |
+| **기업 + 공고 행위** (수정·핀·노선·PUSH 등) | ① 해당 공고 **근무지** → ② 사업소재지 |
+
+기업 홈은 세션 뷰포트가 강남이거나 사업소재지와 다르면 **정책 중심으로 강제 이동**. 로그아웃아웃 시 `corporate_home` / `seeker_home` 캐시 삭제.
+
+## API
+
+- `MapInitialCenterPolicy.corporateBusinessSite()` — 기업 홈·노선 목록 등
+- `MapInitialCenterPolicy.seekerHome()` — 구직자 지도
+- `MapInitialCenterPolicy.corporateJobPostAction(post:, workplace:)` — 공고 맥락 지도
+
+## Do not
+
+- Hard-code `defaultPushMapCenter()` / `MapConstants.warehouseAreaCenter` as **initial** center for corporate/seeker maps
+- Restore saved map viewport when it is the **강남 fallback** but target workplace/business site differs
+
+## Gangnam fallback
+
+`37.5128, 127.0471` — only when geocoding and profile addresses all fail (last resort).

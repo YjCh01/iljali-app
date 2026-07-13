@@ -105,3 +105,40 @@ SalaryPaymentSchedule? salaryPaymentScheduleFromPost(CorporateJobPost post) {
   }
   return null;
 }
+
+/// 작성/수정 폼 공통 — 근무일정 협의 시 일용·단기 급여일도 협의.
+SalaryPaymentSchedule? buildSalaryPaymentSchedule({
+  required WorkerCategory workerCategory,
+  required bool workScheduleNegotiable,
+  required bool paymentDateNegotiable,
+  required String workScheduleRaw,
+  DateTime? paymentDate,
+  SalaryPaymentMonthOffset? paymentMonthOffset,
+  int? paymentDayOfMonth,
+}) {
+  final dateBased = workerCategory.usesAbsolutePaymentDate ||
+      workerCategory.usesCalendarPaymentDate;
+  if (dateBased && (workScheduleNegotiable || paymentDateNegotiable)) {
+    return const SalaryPaymentSchedule.negotiable();
+  }
+  if (workerCategory.usesAbsolutePaymentDate) {
+    final dates =
+        DailyWorkerPolicy.paymentDatesFromWorkSchedule(workScheduleRaw);
+    if (dates.isEmpty) return null;
+    return SalaryPaymentSchedule.dailyPerWorkDay(dates);
+  }
+  if (workerCategory.usesCalendarPaymentDate) {
+    if (paymentDate == null) return null;
+    return SalaryPaymentSchedule.absoluteDate(paymentDate);
+  }
+  if (workerCategory.usesMonthlyPaymentDate) {
+    if (paymentMonthOffset == null || paymentDayOfMonth == null) {
+      return null;
+    }
+    return SalaryPaymentSchedule.monthlyRule(
+      monthOffset: paymentMonthOffset,
+      dayOfMonth: paymentDayOfMonth,
+    );
+  }
+  return null;
+}

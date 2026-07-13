@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:map/core/address/address_geocoder.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
@@ -25,6 +24,7 @@ import 'package:map/features/corporate/presentation/widgets/corporate_service_ac
 import 'package:map/features/corporate/presentation/widgets/push_credit_visual_theme.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_route_color_picker.dart';
 import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
+import 'package:map/core/map/map_initial_center_policy.dart';
 import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
 
 /// PUSH 알림 거점 설정 — 반경(플랜별 거리) + 지정 포인트
@@ -80,7 +80,12 @@ class _PushNotificationBasePointPageState
       _radiusTier = active.radiusTier;
     } else if (widget.workplaceHint != null) {
       final hint = widget.workplaceHint!;
-      _center = hint.coordinate ?? defaultPushMapCenter();
+      _center = MapInitialCenterPolicy.syncPlaceholder(
+        coordinate: hint.coordinate,
+        businessSiteCoordinate: AuthSession.instance.currentUser
+            ?.corporateProfile
+            ?.businessHeadOfficeCoordinate,
+      );
       _addressLabel = hint.roadAddress;
       _radiusTier = PushRadiusTier.standardFree1km;
       _pointTier = DesignatedPointTier.onePoint;
@@ -94,8 +99,12 @@ class _PushNotificationBasePointPageState
         ),
       ];
     } else {
-      _center = defaultPushMapCenter();
-      _addressLabel = '강남·역삼 일대';
+      _center = MapInitialCenterPolicy.syncPlaceholder(
+        businessSiteCoordinate: AuthSession.instance.currentUser
+            ?.corporateProfile
+            ?.businessHeadOfficeCoordinate,
+      );
+      _addressLabel = '';
       _radiusTier = PushRadiusTier.standardFree1km;
       _pointTier = DesignatedPointTier.onePoint;
       _points = [
@@ -151,16 +160,12 @@ class _PushNotificationBasePointPageState
     final hint = widget.workplaceHint;
     final primary = _points[0];
     final address = _primaryWorkplaceAddress(hint: hint, primary: primary);
-    if (address.isEmpty) return;
+    if (address.isEmpty && hint == null) return;
 
-    GeoCoordinate? resolved;
-    final hintCoord = hint?.coordinate;
-    if (hintCoord != null && !isLikelyDefaultPushMapCenter(hintCoord)) {
-      resolved = hintCoord;
-    }
-
-    resolved ??= await AddressGeocoder.geocode(address);
-    if (resolved == null || !mounted) return;
+    final resolved = await MapInitialCenterPolicy.corporateJobPostAction(
+      workplace: hint,
+    );
+    if (!mounted || MapInitialCenterPolicy.isFallback(resolved)) return;
 
     if (!coordinatesDifferMeaningfully(primary.coordinate, resolved) &&
         primary.addressLabel.trim() == address) {

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps.admin_auth import require_admin_api_key
 from app.qc_models import QcMemberRow
+from app.services.admin_bulk_shuttle_import_service import bulk_import_shuttle_routes_from_excel
 from app.services.admin_bulk_url_import_service import bulk_import_job_urls, extract_urls
 from app.services.pilot_program_service import (
     bus_location_tower_admin_view,
@@ -45,6 +46,10 @@ from app.services.admin_announcement_service import (
     list_announcements,
 )
 from app.services.admin_grant_revoke_service import revoke_admin_grants
+from app.services.map_content_purge_service import (
+    delete_job_post_admin,
+    purge_map_content,
+)
 from app.services.qc_data_purge_service import purge_qc_data
 from app.models import Company
 from app.services.entitlement_service import get_or_create_company, normalize_brn
@@ -230,6 +235,16 @@ def ops_purge_qc_data(
     _: str = Depends(require_admin_api_key),
 ):
     return purge_qc_data(db, dry_run=dry_run)
+
+
+@router.post("/purge/map-content")
+def ops_purge_map_content(
+    dry_run: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    """유령핀·유령노선·공고·셔틀 노선 전체 삭제 (회원·지갑 유지)."""
+    return purge_map_content(db, dry_run=dry_run)
 
 
 @router.post("/wallet/revoke-admin-grants")
@@ -533,6 +548,34 @@ def ops_bulk_jobs(
     return bulk_import_jobs(db, body.posts)
 
 
+@router.post("/shuttle/routes/bulk-import")
+async def ops_bulk_import_shuttle_routes(
+    company_key: str = Form(...),
+    file: UploadFile = File(...),
+    replace_existing: bool = Form(default=True),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    filename = (file.filename or "").lower()
+    if not filename.endswith((".xlsx", ".xlsm")):
+        raise HTTPException(
+            status_code=400,
+            detail="엑셀 파일(.xlsx)만 업로드할 수 있습니다.",
+        )
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="파일이 비어 있습니다.")
+    try:
+        return bulk_import_shuttle_routes_from_excel(
+            db,
+            company_key=company_key,
+            file_bytes=payload,
+            replace_existing=replace_existing,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @router.post("/jobs/bulk-import-urls")
 async def ops_bulk_import_urls(
     body: BulkImportUrlsBody,
@@ -695,6 +738,18 @@ def ops_job_map_detail(
         return get_job_map_detail(db, post_id=post_id)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.delete("/jobs/{post_id}")
+def ops_delete_job(
+    post_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    deleted = delete_job_post_admin(db, post_id=post_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="job post not found")
+    return {"deleted": True, "id": post_id}
 
 
 @router.get("/applications")

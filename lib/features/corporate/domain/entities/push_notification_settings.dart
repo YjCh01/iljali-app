@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/domain/entities/job_post_payment_request_kind.dart';
 import 'package:map/features/corporate/domain/entities/exposure_activation_source.dart';
@@ -178,6 +180,62 @@ class PushNotificationBasePoint {
           : exposureActivationSource ?? this.exposureActivationSource,
       pinColorHex:
           clearPinColorHex ? null : pinColorHex ?? this.pinColorHex,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'latitude': coordinate.latitude,
+        'longitude': coordinate.longitude,
+        'addressLabel': addressLabel,
+        'radiusTier': radiusTier.name,
+        'isPrimary': isPrimary,
+        'isPremiumSlot': isPremiumSlot,
+        'isPaid': isPaid,
+        'exposureActivated': exposureActivated,
+        if (activationCoordinate != null) ...{
+          'activationLatitude': activationCoordinate!.latitude,
+          'activationLongitude': activationCoordinate!.longitude,
+        },
+        if (exposurePaidAt != null)
+          'exposurePaidAt': exposurePaidAt!.toIso8601String(),
+        if (exposureActivationSource != null)
+          'exposureActivationSource': exposureActivationSource!.storageValue,
+        if (pinColorHex != null) 'pinColorHex': pinColorHex,
+      };
+
+  factory PushNotificationBasePoint.fromJson(Map<String, dynamic> json) {
+    PushRadiusTier parseRadius(String? raw) {
+      if (raw == null || raw.isEmpty) return PushRadiusTier.standard1km;
+      try {
+        return PushRadiusTier.values.byName(raw);
+      } on ArgumentError {
+        return PushRadiusTier.standard1km;
+      }
+    }
+
+    final actLat = (json['activationLatitude'] as num?)?.toDouble();
+    final actLng = (json['activationLongitude'] as num?)?.toDouble();
+    return PushNotificationBasePoint(
+      id: json['id'] as String? ?? '',
+      coordinate: GeoCoordinate(
+        latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
+        longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
+      ),
+      addressLabel: json['addressLabel'] as String? ?? '',
+      radiusTier: parseRadius(json['radiusTier'] as String?),
+      isPrimary: json['isPrimary'] as bool? ?? true,
+      isPremiumSlot: json['isPremiumSlot'] as bool? ?? false,
+      isPaid: json['isPaid'] as bool? ?? false,
+      exposureActivated: json['exposureActivated'] as bool? ?? false,
+      activationCoordinate: actLat != null && actLng != null
+          ? GeoCoordinate(latitude: actLat, longitude: actLng)
+          : null,
+      exposurePaidAt: DateTime.tryParse(json['exposurePaidAt'] as String? ?? ''),
+      exposureActivationSource: ExposureActivationSourceX.tryParse(
+        json['exposureActivationSource'] as String?,
+      ),
+      pinColorHex: json['pinColorHex'] as String?,
     );
   }
 }
@@ -534,5 +592,63 @@ class JobPostNotificationSettings {
       spotPaymentCompleted:
           spotPaymentCompleted ?? this.spotPaymentCompleted,
     );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'basePoints': [for (final p in basePoints) p.toJson()],
+        'pushCountLimit': pushCountLimit,
+        'pushCountUsed': pushCountUsed,
+        'maxBasePointsAllowed': maxBasePointsAllowed,
+        'paymentCompleted': paymentCompleted,
+        'designatedPointTier': designatedPointTier.name,
+        'spotPaymentCompleted': spotPaymentCompleted,
+      };
+
+  String toJsonString() => jsonEncode(toJson());
+
+  factory JobPostNotificationSettings.fromJson(Map<String, dynamic> json) {
+    DesignatedPointTier parsePoint(String? raw) {
+      if (raw == null || raw.isEmpty) return DesignatedPointTier.onePoint;
+      try {
+        return DesignatedPointTier.values.byName(raw);
+      } on ArgumentError {
+        return DesignatedPointTier.onePoint;
+      }
+    }
+
+    final rawPoints = json['basePoints'];
+    final points = <PushNotificationBasePoint>[];
+    if (rawPoints is List) {
+      for (final item in rawPoints) {
+        if (item is Map) {
+          points.add(
+            PushNotificationBasePoint.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    }
+
+    return JobPostNotificationSettings(
+      basePoints: points,
+      pushCountLimit: json['pushCountLimit'] as int? ?? 999,
+      pushCountUsed: json['pushCountUsed'] as int? ?? 0,
+      maxBasePointsAllowed: json['maxBasePointsAllowed'] as int?,
+      paymentCompleted: json['paymentCompleted'] as bool? ?? false,
+      designatedPointTier: parsePoint(json['designatedPointTier'] as String?),
+      spotPaymentCompleted: json['spotPaymentCompleted'] as bool? ?? false,
+    );
+  }
+
+  static JobPostNotificationSettings? tryParseJsonString(String? raw) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '{}') return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      return JobPostNotificationSettings.fromJson(
+        Map<String, dynamic>.from(decoded),
+      );
+    } on Object {
+      return null;
+    }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/hiring/attendance_geofence_service.dart';
 import 'package:map/core/config/product_feature_flags.dart';
@@ -416,6 +417,8 @@ class _CorporateAttendanceTabState extends State<CorporateAttendanceTab> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
+            const _ShuttleAttendanceHubTile(),
+            const SizedBox(height: 14),
             if (_onDutyCount > 0) ...[
               EmployerAttendanceHeadcountBanner(
                 count: _onDutyCount,
@@ -555,6 +558,68 @@ class _CorporateAttendanceTabState extends State<CorporateAttendanceTab> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ShuttleAttendanceHubTile extends StatelessWidget {
+  const _ShuttleAttendanceHubTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.of(context).pushNamed(
+          AppRoutes.corporateShuttleAttendanceHub,
+        ),
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.searchBarBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.directions_bus_outlined,
+                color: AppColors.primary.withValues(alpha: 0.95),
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '통근버스 · 셔틀 근태',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '노선 · 지원자 승인 · 출퇴근 기록을 한곳에서',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textSecondary.withValues(alpha: 0.7),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

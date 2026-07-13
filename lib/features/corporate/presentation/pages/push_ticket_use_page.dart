@@ -9,6 +9,8 @@ import 'package:map/features/commute/domain/entities/commute_route.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_color_utils.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
+import 'package:map/core/map/map_initial_center_policy.dart';
+import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/push_dispatch_target.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
@@ -59,6 +61,7 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
   final _selectedJobPinIds = <String>{};
   final _selectedShuttleStopIds = <String>{};
   final _expandedRouteIds = <String>{};
+  GeoCoordinate? _policyMapCenter;
 
   List<PushNotificationBasePoint> get _points =>
       widget.args.notificationSettings?.basePoints ?? const [];
@@ -88,6 +91,15 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
     final routes = await repo.loadForCompany(profile.companyKey);
 
     final preferred = widget.args.shuttleRouteId?.trim();
+    CorporateJobPost? linkedPost;
+    final jobPostId = widget.args.jobPostId?.trim();
+    if (jobPostId != null && jobPostId.isNotEmpty) {
+      linkedPost =
+          await const CorporateJobPostLocalDataSourceImpl().findById(jobPostId);
+    }
+    final policyCenter = await MapInitialCenterPolicy.corporateJobPostAction(
+      post: linkedPost,
+    );
     final expanded = <String>{};
     if (preferred != null && preferred.isNotEmpty) {
       expanded.add(preferred);
@@ -99,6 +111,7 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
     setState(() {
       _pushCredits = wallet.pushTicketCredits;
       _routes = routes;
+      _policyMapCenter = policyCenter;
       _expandedRouteIds
         ..clear()
         ..addAll(expanded);
@@ -282,7 +295,7 @@ class _PushTicketUsePageState extends State<PushTicketUsePage> {
     }
     if (_points.length > 1) return _points[1].coordinate;
     if (_points.isNotEmpty) return _points.first.coordinate;
-    return defaultPushMapCenter();
+    return _policyMapCenter ?? MapInitialCenterPolicy.fallback();
   }
 
   List<CommuteRoute> get _routesWithStops => _routes

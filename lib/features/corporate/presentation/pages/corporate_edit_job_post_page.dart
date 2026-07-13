@@ -268,34 +268,15 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
     }
   }
 
-  SalaryPaymentSchedule? _buildPaymentSchedule() {
-    if (_paymentDateNegotiable &&
-        (_workerCategory.usesAbsolutePaymentDate ||
-            _workerCategory.usesCalendarPaymentDate)) {
-      return const SalaryPaymentSchedule.negotiable();
-    }
-    if (_workerCategory.usesAbsolutePaymentDate) {
-      final dates = DailyWorkerPolicy.paymentDatesFromWorkSchedule(
-        _scheduleController.text,
+  SalaryPaymentSchedule? _buildPaymentSchedule() => buildSalaryPaymentSchedule(
+        workerCategory: _workerCategory,
+        workScheduleNegotiable: _workScheduleNegotiable,
+        paymentDateNegotiable: _paymentDateNegotiable,
+        workScheduleRaw: _scheduleController.text,
+        paymentDate: _paymentDate,
+        paymentMonthOffset: _paymentMonthOffset,
+        paymentDayOfMonth: _paymentDayOfMonth,
       );
-      if (dates.isEmpty) return null;
-      return SalaryPaymentSchedule.dailyPerWorkDay(dates);
-    }
-    if (_workerCategory.usesCalendarPaymentDate) {
-      if (_paymentDate == null) return null;
-      return SalaryPaymentSchedule.absoluteDate(_paymentDate!);
-    }
-    if (_workerCategory.usesMonthlyPaymentDate) {
-      if (_paymentMonthOffset == null || _paymentDayOfMonth == null) {
-        return null;
-      }
-      return SalaryPaymentSchedule.monthlyRule(
-        monthOffset: _paymentMonthOffset!,
-        dayOfMonth: _paymentDayOfMonth!,
-      );
-    }
-    return null;
-  }
 
   Future<void> _onWorkerCategoryChanged(WorkerCategory category) async {
     if (!mounted) return;
@@ -587,12 +568,19 @@ class _CorporateEditJobPostPageState extends State<CorporateEditJobPostPage> {
           submitting: _submitting,
           onSubmit: _submit,
           onDailyScheduleCommitted: _syncDailyPaymentDateFromSchedule,
-          paymentDateNegotiable: _paymentDateNegotiable,
+          paymentDateNegotiable:
+              _paymentDateNegotiable || _workScheduleNegotiable,
           onPaymentDateNegotiableChanged: (value) =>
               setState(() => _paymentDateNegotiable = value),
           workScheduleNegotiable: _workScheduleNegotiable,
-          onWorkScheduleNegotiableChanged: (value) =>
-              setState(() => _workScheduleNegotiable = value),
+          onWorkScheduleNegotiableChanged: (value) => setState(() {
+            _workScheduleNegotiable = value;
+            if (value &&
+                (_workerCategory.usesAbsolutePaymentDate ||
+                    _workerCategory.usesCalendarPaymentDate)) {
+              _paymentDateNegotiable = true;
+            }
+          }),
           beforeSubmit: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

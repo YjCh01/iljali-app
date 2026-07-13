@@ -14,6 +14,8 @@ source scripts/server_dev.sh
 source scripts/naver_flutter_defines.sh
 # shellcheck source=scripts/ensure_java.sh
 source scripts/ensure_java.sh
+# shellcheck source=scripts/iljari_ios_env.sh
+source scripts/iljari_ios_env.sh
 
 STRICT_UPLOAD=0
 for arg in "$@"; do
@@ -115,19 +117,34 @@ fi
 UPLOAD_FAILED=0
 CAN_PLAY=0
 CAN_IOS=0
+IOS_UPLOAD_SKIP_REASON=""
 
 if [[ -f "${ILJARI_ROOT}/fastlane/play-store-key.json" ]]; then
   CAN_PLAY=1
 fi
-if [[ "$(uname)" == "Darwin" ]] && [[ -n "${FASTLANE_USER:-}" ]]; then
-  CAN_IOS=1
+
+if [[ "$(uname)" == "Darwin" ]]; then
+  iljari_ios_load_env
+  if [[ -n "${APPLE_TEAM_ID:-}" ]] && iljari_ios_has_upload_credentials; then
+    if [[ "$(iljari_ios_signing_identity_count)" != 0 ]]; then
+      CAN_IOS=1
+    else
+      IOS_UPLOAD_SKIP_REASON="서명 인증서 없음 — Xcode Signing & Capabilities"
+    fi
+  else
+    IOS_UPLOAD_SKIP_REASON="$(iljari_ios_upload_skip_reason)"
+  fi
 fi
 
 if [[ "${CAN_PLAY}" == 0 && "${CAN_IOS}" == 0 ]]; then
   echo ""
-  echo "ℹ️  스토어 자동 업로드 — credentials 미설정 (빌드만 완료)"
-  echo "   Play : fastlane/play-store-key.json + bundle exec fastlane android beta"
-  echo "   iOS  : FASTLANE_USER + bundle exec fastlane ios beta"
+  if [[ -n "${IOS_UPLOAD_SKIP_REASON}" ]]; then
+    echo "ℹ️  TestFlight 업로드 건너뜀 — ${IOS_UPLOAD_SKIP_REASON}"
+  else
+    echo "ℹ️  스토어 자동 업로드 — credentials 미설정 (빌드만 완료)"
+  fi
+  echo "   Play : fastlane/play-store-key.json"
+  echo "   iOS  : ./scripts/setup_testflight.sh → ./scripts/upload_testflight.sh"
   exit 0
 fi
 
@@ -155,10 +172,12 @@ fi
 
 if [[ "${CAN_IOS}" == 1 ]]; then
   echo "[Store] TestFlight..."
-  if (cd "${ILJARI_ROOT}" && bundle exec fastlane ios beta); then
+  if (cd "${ILJARI_ROOT}" && ./scripts/upload_testflight.sh); then
     echo "✅ TestFlight upload"
   else
-    echo "❌ TestFlight upload failed (서명·FASTLANE 설정 확인)"
+    echo "❌ TestFlight upload failed"
+    echo "     → ./scripts/preflight_deploy.sh"
+    echo "     → ./scripts/setup_testflight.sh (API Key 또는 Apple ID)"
     UPLOAD_FAILED=1
   fi
 fi

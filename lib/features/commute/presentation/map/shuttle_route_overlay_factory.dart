@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
@@ -40,8 +42,23 @@ abstract final class ShuttleRouteOverlayFactory {
       ),
     );
 
+    for (var i = 0; i < latLngs.length - 1; i++) {
+      // Place arrows along densified road segments (every ~Nth vertex pair),
+      // not only at stop midpoints (which ignored road bends).
+      if (!_shouldPlaceArrowAt(i, latLngs.length)) continue;
+      final from = latLngs[i];
+      final to = latLngs[i + 1];
+      final arrow = await _directionArrowMarker(
+        id: '${pathOverlayId}_${route.id}_arrow_$i',
+        from: from,
+        to: to,
+        color: color,
+      );
+      if (arrow != null) overlays.add(arrow);
+    }
+
     final busIcon = await MapPinOverlayIconCache.busStop(
-      bodyColor: MapPinColors.active,
+      bodyColor: MapPinColors.packagePurple,
     );
 
     for (final stop in route.stops) {
@@ -128,6 +145,92 @@ abstract final class ShuttleRouteOverlayFactory {
       }
     }
     return overlays;
+  }
+
+  /// Sparse arrows on densified polylines; one per segment when short.
+  static bool _shouldPlaceArrowAt(int segmentIndex, int pointCount) {
+    final segmentCount = pointCount - 1;
+    if (segmentCount <= 0) return false;
+    if (segmentCount <= 4) return true;
+    // Aim for ~3–5 arrows along the full path
+    final step = (segmentCount / 4).ceil().clamp(1, segmentCount);
+    return segmentIndex % step == 0;
+  }
+
+  static double _bearingDegrees(NLatLng a, NLatLng b) {
+    final lat1 = a.latitude * math.pi / 180;
+    final lat2 = b.latitude * math.pi / 180;
+    final dLng = (b.longitude - a.longitude) * math.pi / 180;
+    final y = math.sin(dLng) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+    final bearingRad = math.atan2(y, x);
+    return (bearingRad * 180 / math.pi + 360) % 360;
+  }
+
+  static Future<Uint8List> _renderArrowBytes(
+    double bearingDeg,
+    Color color,
+    double size,
+  ) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, size, size));
+    canvas.translate(size / 2, size / 2);
+    canvas.rotate(bearingDeg * math.pi / 180);
+    final path = Path()
+      ..moveTo(0, -size * 0.42)
+      ..lineTo(size * 0.32, size * 0.28)
+      ..lineTo(-size * 0.32, size * 0.28)
+      ..close();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size * 0.08
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true,
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
+  }
+
+  static Future<NMarker?> _directionArrowMarker({
+    required String id,
+    required NLatLng from,
+    required NLatLng to,
+    required Color color,
+  }) async {
+    if (from.latitude == to.latitude && from.longitude == to.longitude) {
+      return null;
+    }
+    final mid = NLatLng(
+      (from.latitude + to.latitude) / 2,
+      (from.longitude + to.longitude) / 2,
+    );
+    final bearing = _bearingDegrees(from, to);
+    const size = 20.0;
+    final bytes = await _renderArrowBytes(bearing, color, size);
+    final icon = await NOverlayImage.fromByteArray(
+      bytes,
+      cacheKey: 'shuttle_arrow_v4_${bearing.round()}_${color.toARGB32()}_$size',
+    );
+    return NMarker(
+      id: id,
+      position: mid,
+      icon: icon,
+      size: const Size(size, size),
+      isHideCollidedCaptions: true,
+    );
   }
 
   static List<List<NLatLng>> _dashBetween(NLatLng a, NLatLng b) {

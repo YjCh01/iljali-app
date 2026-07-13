@@ -47,18 +47,22 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
       };
 
   Color get pinColor => switch (this) {
-        JobMapPinDisplayTier.closedGhost => MapPinColors.ghost,
-        _ => MapPinColors.active,
+        JobMapPinDisplayTier.standard => MapPinColors.freeGray,
+        JobMapPinDisplayTier.premiumWage => MapPinColors.active,
+        JobMapPinDisplayTier.packageActive => MapPinColors.packagePurple,
+        JobMapPinDisplayTier.closedGhost => const Color(0xFFD1D5DB),
       };
 
   Color get pinLightColor => switch (this) {
         JobMapPinDisplayTier.closedGhost => const Color(0xFFE0E0E0),
-        _ => MapPinColors.active.withValues(alpha: 0.55),
+        _ => pinColor.withValues(alpha: 0.55),
       };
 
   Color get pinBorderColor => switch (this) {
+        JobMapPinDisplayTier.standard => MapPinColors.freeGray,
+        JobMapPinDisplayTier.premiumWage => MapPinColors.active,
+        JobMapPinDisplayTier.packageActive => MapPinColors.packagePurpleRing,
         JobMapPinDisplayTier.closedGhost => const Color(0xFFEEEEEE),
-        _ => MapPinColors.active,
       };
 
   double get markerSize => switch (this) {
@@ -82,23 +86,30 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
 }
 
 /// 공고·기업 정보로 지도 핀 등급 결정
+///
+/// 근무지 핀 색은 시급(회색/하늘)만 반영한다.
+/// 알림핀 보유·`packageActive` entitlement는 근무지 색에 섞지 않는다
+/// (알림핀은 [JobRecruitmentMapPin] + `pinColorHex`로 따로 그린다).
 abstract final class MapPinTierResolver {
   static JobMapPinDisplayTier resolve({required CorporateJobPost post}) {
-    final profileTier = post.mapPinDisplayTier ??
-        resolveFromProfile(registeredBy: post.registeredBy);
+    if (post.mapPinDisplayTier == JobMapPinDisplayTier.closedGhost) {
+      return JobMapPinDisplayTier.closedGhost;
+    }
     final wageTier = resolveWageTier(
       hourlyWage: post.hourlyWage,
       workSchedule: post.workSchedule,
     );
-    return JobMapPinDisplayTierX.maxOf(profileTier, wageTier);
+    if (post.mapPinDisplayTier == JobMapPinDisplayTier.premiumWage) {
+      return JobMapPinDisplayTier.premiumWage;
+    }
+    // packageActive 등 알림핀 티어는 근무지 색에 적용하지 않음
+    return wageTier;
   }
 
   static JobMapPinDisplayTier resolveFromProfile({
     CorporateMemberProfile? registeredBy,
   }) {
-    if (registeredBy != null && registeredBy.qualifiesForPackageMapPin) {
-      return JobMapPinDisplayTier.packageActive;
-    }
+    // 지갑·패키지 보유와 무관 — 근무지는 항상 기본(시급 규칙은 resolve에서 합산)
     return JobMapPinDisplayTier.standard;
   }
 
@@ -121,19 +132,15 @@ abstract final class MapPinTierResolver {
     String? hourlyWage,
     String workSchedule = '',
   }) {
-    final profileTier = resolveFromProfile(registeredBy: registeredBy);
     if (hourlyWage == null || hourlyWage.trim().isEmpty) {
-      return profileTier;
+      return resolveFromProfile(registeredBy: registeredBy);
     }
-    return JobMapPinDisplayTierX.maxOf(
-      profileTier,
-      resolveWageTier(hourlyWage: hourlyWage, workSchedule: workSchedule),
-    );
+    return resolveWageTier(hourlyWage: hourlyWage, workSchedule: workSchedule);
   }
 }
 
 extension CorporateMemberProfileMapPinX on CorporateMemberProfile {
-  /// 일자리 알림핀 보유 — 보라 핀 (100회 팩 할인만, 핀 색상 혜택 없음)
+  /// @Deprecated 근무지 색에 더 이상 사용하지 않음 — 알림핀은 별도 마커
   bool get qualifiesForPackageMapPin {
     final wallet = pushWallet;
     if (wallet == null) return false;

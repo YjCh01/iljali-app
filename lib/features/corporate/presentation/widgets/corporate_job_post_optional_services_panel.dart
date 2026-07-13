@@ -869,10 +869,10 @@ class _CorporateJobPostOptionalServicesPanelState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              '정류장 표시핀',
+              '통근버스 · 정류장 표시핀',
               style: TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
@@ -890,8 +890,9 @@ class _CorporateJobPostOptionalServicesPanelState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '운영 중인 통근버스의 정류장과 노선도를 지도 상에 직접 표시하여 '
-                '모집 효과를 높일 수 있습니다.',
+                '채용 다음 단계: 통근버스 노선과 정류장을 지도에 표시해 '
+                '구직자가 출근 경로를 바로 확인하게 합니다. '
+                '일자리 알림핀과 동일한 노출 단위로 관리합니다.',
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.45,
@@ -921,7 +922,7 @@ class _CorporateJobPostOptionalServicesPanelState
                 _ServiceOutlineButton(
                   onPressed: _openShuttlePinEditor,
                   icon: Icons.add_road_outlined,
-                  label: '정류장 표시핀 추가',
+                  label: '통근버스 노선 · 정류장 표시핀 연결',
                 ),
               const SizedBox(height: 8),
               _buildExposurePaymentActions(

@@ -51,6 +51,13 @@ class _SeekerMyResumePageState extends State<SeekerMyResumePage> {
         actions: [
           TextButton(
             onPressed: () async {
+              await Navigator.of(context).pushNamed(AppRoutes.seekerResumeImport);
+              if (mounted) setState(() {});
+            },
+            child: const Text('AI 불러오기'),
+          ),
+          TextButton(
+            onPressed: () async {
               await Navigator.of(context).pushNamed(AppRoutes.seekerResumeEdit);
               if (mounted) setState(() {});
             },

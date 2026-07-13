@@ -20,10 +20,13 @@ import 'package:map/features/commute/data/repositories/commute_route_repository.
 
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_shuttle_map_overlay.dart';
+import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 
 import 'package:map/features/corporate/domain/services/corporate_shuttle_density_loader.dart';
 
 import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
+
+import 'package:map/core/map/map_initial_center_policy.dart';
 
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 
@@ -41,6 +44,10 @@ import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase
 import 'package:map/features/job_seeker/domain/utils/job_map_viewport_filter.dart';
 
 import 'package:map/features/job_seeker/domain/utils/mock_map_viewport.dart';
+
+import 'package:map/features/job_seeker/presentation/map/job_recruitment_map_pin.dart';
+
+import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
 
 import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
 
@@ -113,6 +120,10 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
   List<JobMapPin> _displayPins = [];
 
+  List<JobRecruitmentMapPin> _recruitmentPins = const [];
+
+  List<PushRadiusMapPolyline> _recruitmentLinks = const [];
+
   List<CorporateShuttleMapOverlay> _shuttleOverlays = [];
 
   List<ClosedGhostRoute> _ghostRoutes = const [];
@@ -138,6 +149,8 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
   JobMapPin? _centerOnPin;
 
   String? _appliedFocusPostId;
+
+  GeoCoordinate? _corporateDefaultCenter;
 
 
 
@@ -258,9 +271,18 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
     );
 
     setState(() {
-      _centerOnPin = pin;
+      // 지도보기: 카메라만 중앙 이동. _centerOnPin 은 콜아웃용 탭 포커스에만 사용
+      _centerOnPin = null;
       _showAllPins = true;
       _activeViewport = null;
+      final nextCatalog = [..._catalogPins];
+      final existing = nextCatalog.indexWhere((p) => p.post.id == pin.post.id);
+      if (existing >= 0) {
+        nextCatalog[existing] = pin;
+      } else {
+        nextCatalog.add(pin);
+      }
+      _catalogPins = nextCatalog;
       if (!_ownPostIds.contains(id)) {
         _ownPosts = [..._ownPosts, post!];
         _ownPostIds = {..._ownPostIds, id};
@@ -271,6 +293,7 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
     await _focusMapWhenReady(
       latitude: coordinate.latitude,
       longitude: coordinate.longitude,
+      pinScreenY: 0.5,
     );
 
     if (!mounted) return;
@@ -286,13 +309,14 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
       );
     }
 
-    widget.onSelectedPinChanged?.call(pin);
+    // 콜아웃은 열지 않음 — 근무지/알림/정류장 핀 탭 시에만 onSelectedPinChanged
     widget.onFocusConsumed?.call();
   }
 
   Future<void> _focusMapWhenReady({
     required double latitude,
     required double longitude,
+    double pinScreenY = 0.5,
   }) async {
     for (var attempt = 0; attempt < 80; attempt++) {
       if (MapCameraHolder.instance.isReady) {
@@ -300,6 +324,7 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
           latitude: latitude,
           longitude: longitude,
           zoom: MapConstants.defaultZoom,
+          pinScreenY: pinScreenY,
         );
         return;
       }
@@ -374,6 +399,41 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
     _applyFocusPostId();
 
+    unawaited(_ensureCorporateDefaultViewport());
+
+  }
+
+  Future<void> _ensureCorporateDefaultViewport() async {
+    if (widget.focusPostId != null || widget.focusPost != null) return;
+
+    final center = await MapInitialCenterPolicy.corporateBusinessSite(
+      ownPosts: _ownPosts,
+    );
+    if (!mounted) return;
+
+    // 강남 캐시·이전 세션 뷰포트가 사업소재지/근무지를 덮지 못하게 강제 정렬
+    final saved = MapViewportSessionStore.instance
+        .peek(MapViewportSessionKeys.corporateHome);
+    final shouldForce = !MapInitialCenterPolicy.isFallback(center) &&
+        (saved == null ||
+            MapInitialCenterPolicy.isFallback(saved.center) ||
+            coordinatesDifferMeaningfully(saved.center, center));
+
+    MapViewportSessionStore.instance.rememberCoordinate(
+      MapViewportSessionKeys.corporateHome,
+      center: center,
+      zoom: MapConstants.defaultZoom,
+    );
+
+    setState(() => _corporateDefaultCenter = center);
+
+    if (MapInitialCenterPolicy.isFallback(center)) return;
+    if (!shouldForce && saved != null) return;
+
+    await _focusMapWhenReady(
+      latitude: center.latitude,
+      longitude: center.longitude,
+    );
   }
 
 
@@ -404,7 +464,53 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
 
     }
 
-    setState(() => _displayPins = pins);
+    final postsById = <String, CorporateJobPost>{};
+    for (final pin in pins) {
+      postsById[pin.post.id] = pin.post;
+    }
+    // 내 공고는 카탈로그보다 알림핀 설정이 더 최신일 수 있음
+    for (final post in _ownPosts) {
+      final existing = postsById[post.id];
+      final existingLen = existing?.notificationSettings?.basePoints.length ?? 0;
+      final nextLen = post.notificationSettings?.basePoints.length ?? 0;
+      if (existing == null || nextLen >= existingLen) {
+        postsById[post.id] = post;
+      }
+    }
+    if (widget.focusPost != null) {
+      final focus = widget.focusPost!;
+      final existing = postsById[focus.id];
+      final existingLen = existing?.notificationSettings?.basePoints.length ?? 0;
+      final nextLen = focus.notificationSettings?.basePoints.length ?? 0;
+      if (existing == null || nextLen >= existingLen) {
+        postsById[focus.id] = focus;
+      }
+    }
+
+    final recruitment = JobRecruitmentMapPinFactory.fromPosts(
+      postsById.values,
+      // 기업 지도: 설정한 알림핀은 잠금 여부와 무관하게 표시 (내 공고 확인용)
+      requireExposureLocked: false,
+    );
+    final links = <PushRadiusMapPolyline>[
+      for (final pin in recruitment)
+        ...RecruitmentPinLinkFactory.headquarterDashedLinks(
+          points: [
+            PushNotificationBasePoint(
+              id: 'wp_${pin.post.id}',
+              coordinate: pin.workplace,
+              addressLabel: '',
+            ),
+            pin.point,
+          ],
+        ),
+    ];
+
+    setState(() {
+      _displayPins = pins;
+      _recruitmentPins = recruitment;
+      _recruitmentLinks = links;
+    });
 
   }
 
@@ -531,11 +637,42 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
       );
 
   void _onPinTap(JobMapPin pin) {
-
-    setState(() => _centerOnPin = pin);
-
+    // 콜아웃을 먼저 연 뒤, 핀을 콜아웃 아래(중하단)로 맞춤
     widget.onSelectedPinChanged?.call(pin);
+    setState(() => _centerOnPin = pin);
+    unawaited(
+      _focusMapWhenReady(
+        latitude: pin.latitude,
+        longitude: pin.longitude,
+        pinScreenY: MapFloatingInsets.calloutPinScreenY,
+      ),
+    );
+  }
 
+  void _onRecruitmentPinTap(JobRecruitmentMapPin pin) {
+    JobMapPin? workplacePin;
+    for (final candidate in _displayPins) {
+      if (candidate.post.id == pin.post.id) {
+        workplacePin = candidate;
+        break;
+      }
+    }
+    workplacePin ??= JobMapPin(
+      post: pin.post,
+      latitude: pin.workplace.latitude,
+      longitude: pin.workplace.longitude,
+      companyName: pin.post.registeredBy?.companyName ?? pin.post.warehouseName,
+      displayTier: pin.post.effectiveMapPinTier,
+    );
+    widget.onSelectedPinChanged?.call(workplacePin);
+    // 알림핀 좌표 기준으로 카메라 이동 (콜아웃은 같은 공고)
+    unawaited(
+      _focusMapWhenReady(
+        latitude: pin.coordinate.latitude,
+        longitude: pin.coordinate.longitude,
+        pinScreenY: MapFloatingInsets.calloutPinScreenY,
+      ),
+    );
   }
 
 
@@ -587,10 +724,14 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
             ownPostIds: _ownPostIds,
             shuttleOverlays: _shuttleOverlays,
             ghostRoutes: _ghostRoutes,
+            recruitmentPins: _recruitmentPins,
+            recruitmentLinkPolylines: _recruitmentLinks,
             onPinTap: _onPinTap,
+            onRecruitmentPinTap: _onRecruitmentPinTap,
             onShuttleStopTap: _onShuttleStopTap,
             selectedPostId: widget.selectedPostId,
             centerOnPin: _centerOnPin,
+            defaultCenterOverride: _corporateDefaultCenter,
             onMapBackgroundTap: () => widget.onSelectedPinChanged?.call(null),
             onCameraIdle: _cameraPromptReady ? _markAreaSearchPending : null,
             onMapReady: _handleMapReady,
@@ -601,28 +742,14 @@ class _CorporateHomeMapBackgroundState extends State<CorporateHomeMapBackground>
             ),
           ),
 
-        if (!_loading && _areaSearchPending)
-
+        if (!_loading)
           Positioned(
-
-            left: 0,
-
-            right: 0,
-
+            left: 16,
             bottom: _areaSearchButtonBottom(context),
-
-            child: Center(
-
-              child: MapSearchAreaButton(
-
-                loading: _areaSearchLoading,
-
-                onPressed: _searchThisArea,
-
-              ),
-
+            child: MapSearchAreaButton(
+              loading: _areaSearchLoading,
+              onPressed: _searchThisArea,
             ),
-
           ),
 
         Positioned(

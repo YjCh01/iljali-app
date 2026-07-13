@@ -26,7 +26,6 @@ import 'package:map/features/job_seeker/data/datasources/closed_ghost_pin_local_
 import 'package:map/features/job_seeker/data/datasources/closed_ghost_route_local_data_source.dart';
 import 'package:map/features/job_seeker/domain/entities/closed_ghost_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/closed_ghost_route.dart';
-import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 /// 서버 QC DB → 로컬 in-memory·SharedPreferences 동기화
 abstract final class QcSyncBootstrap {
@@ -93,17 +92,18 @@ abstract final class QcSyncBootstrap {
 
       final entRaw = entitlements[id];
       final ent = entRaw is Map ? Map<String, dynamic>.from(entRaw) : null;
-      final pinActive = ent?['recruitment_pin_active'] == true;
       final shuttleActive = ent?['shuttle_exposure_active'] == true;
-      final tierRaw = ent?['map_pin_tier'] as String?;
       final postedAt = DateTime.tryParse(map['created_at'] as String? ?? '') ??
           DateTime.now();
       final companyKey = map['company_key'] as String? ?? '';
       final companyName = map['company_name'] as String? ?? '';
       final lat = (map['workplace_latitude'] as num?)?.toDouble();
       final lng = (map['workplace_longitude'] as num?)?.toDouble();
-      JobPostNotificationSettings? notificationSettings;
-      if (lat != null && lng != null) {
+      final parsedSettings = JobPostNotificationSettings.tryParseJsonString(
+        map['notification_settings_json'] as String?,
+      );
+      JobPostNotificationSettings? notificationSettings = parsedSettings;
+      if (notificationSettings == null && lat != null && lng != null) {
         notificationSettings = JobPostNotificationSettings(
           basePoints: [
             PushNotificationBasePoint(
@@ -141,10 +141,8 @@ abstract final class QcSyncBootstrap {
               ? _syncProfile(companyKey: companyKey, companyName: companyName)
               : null,
           recruiterEmail: (map['posted_by_email'] as String?)?.trim(),
-          mapPinDisplayTier: pinActive
-              ? (JobMapPinDisplayTierX.tryParseLegacy(tierRaw) ??
-                  JobMapPinDisplayTier.packageActive)
-              : null,
+          // 근무지 색은 시급만 — recruitment_pin_active로 보라 칠하지 않음
+          mapPinDisplayTier: null,
           hasShuttleRouteOverlay: shuttleActive,
         ),
       );

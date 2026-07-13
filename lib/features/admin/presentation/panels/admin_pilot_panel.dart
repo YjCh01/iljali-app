@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:map/core/admin/admin_api_errors.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/admin/domain/admin_ops_controller.dart';
+import 'package:map/features/admin/presentation/widgets/admin_shuttle_participants_card.dart';
 import 'package:map/features/admin/presentation/widgets/admin_web_scaffold.dart';
 
 class AdminPilotPanel extends StatefulWidget {
@@ -479,6 +480,8 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
                     ],
                   ),
           ),
+          const SizedBox(height: 16),
+          AdminShuttleParticipantsCard(controller: c),
         ],
       ),
     );

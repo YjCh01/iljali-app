@@ -681,6 +681,8 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
               ? ListView(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   children: [
+                    const _CorporateShuttleMainCta(),
+                    const SizedBox(height: 16),
                     const _EmptyJobPostsHint(),
                     const SizedBox(height: 20),
                     CorporateCreateJobPostEntryPanel(
@@ -693,6 +695,8 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
                   controller: _scrollController,
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               children: [
+                const _CorporateShuttleMainCta(),
+                const SizedBox(height: 16),
                 CorporateCreateJobPostEntryPanel(
                   onWrite: _openCreate,
                   onImport: _openImport,
@@ -758,6 +762,76 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
 }
 
 
+
+class _CorporateShuttleMainCta extends StatelessWidget {
+  const _CorporateShuttleMainCta();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () =>
+            Navigator.of(context).pushNamed(AppRoutes.corporateShuttleRoutes),
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.searchBarBorder),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.directions_bus_filled_rounded,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '통근버스 노선',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      '채용 다음 단계 · 노선·정류장·지도 표시를 관리합니다',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textSecondary.withValues(alpha: 0.7),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _EmptyJobPostsHint extends StatelessWidget {
   const _EmptyJobPostsHint();

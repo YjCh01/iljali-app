@@ -36,7 +36,7 @@ void main() {
       expect(tier, JobMapPinDisplayTier.standard);
     });
 
-    test('stored tier on post is respected and combined with wage tier', () {
+    test('stored packageActive on post does not paint workplace', () {
       final post = CorporateJobPost(
         id: 'p1',
         title: 't',
@@ -51,7 +51,7 @@ void main() {
       );
       expect(
         MapPinTierResolver.resolve(post: post),
-        JobMapPinDisplayTier.packageActive,
+        JobMapPinDisplayTier.standard,
       );
     });
 

@@ -431,6 +431,37 @@ class AdminOpsApiClient {
         {},
       );
 
+  Future<Map<String, dynamic>> getShuttleParticipants() async =>
+      _decode(await _client.get(
+        Uri.parse('$_baseUrl/v1/admin/ops/shuttle/participants'),
+        headers: _headers,
+      ));
+
+  Future<Map<String, dynamic>> bulkImportShuttleRoutes({
+    required String companyKey,
+    required List<int> fileBytes,
+    required String fileName,
+    bool replaceExisting = true,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/v1/admin/ops/shuttle/routes/bulk-import'),
+    );
+    request.headers['X-Admin-Api-Key'] = _apiKey;
+    request.fields['company_key'] = companyKey;
+    request.fields['replace_existing'] = replaceExisting.toString();
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
+      ),
+    );
+    final streamed = await _client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    return _decode(response);
+  }
+
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body,

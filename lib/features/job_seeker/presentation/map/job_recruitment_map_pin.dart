@@ -22,15 +22,28 @@ class JobRecruitmentMapPin {
 }
 
 abstract final class JobRecruitmentMapPinFactory {
-  static List<JobRecruitmentMapPin> fromPosts(Iterable<CorporateJobPost> posts) {
+  static List<JobRecruitmentMapPin> fromPosts(
+    Iterable<CorporateJobPost> posts, {
+    bool requireExposureLocked = true,
+    Set<String>? ownPostIdsAlwaysShowConfigured,
+  }) {
     final pins = <JobRecruitmentMapPin>[];
     for (final post in posts) {
-      pins.addAll(fromPost(post));
+      final own = ownPostIdsAlwaysShowConfigured?.contains(post.id) ?? false;
+      pins.addAll(
+        fromPost(
+          post,
+          requireExposureLocked: own ? false : requireExposureLocked,
+        ),
+      );
     }
     return pins;
   }
 
-  static List<JobRecruitmentMapPin> fromPost(CorporateJobPost post) {
+  static List<JobRecruitmentMapPin> fromPost(
+    CorporateJobPost post, {
+    bool requireExposureLocked = true,
+  }) {
     final settings = post.notificationSettings;
     if (settings == null || settings.basePoints.length < 2) {
       return const [];
@@ -40,7 +53,7 @@ abstract final class JobRecruitmentMapPinFactory {
     for (var i = 1; i < settings.basePoints.length; i++) {
       if (!PushWalletCreditPolicy.isRecruitmentZoneIndex(i)) continue;
       final point = settings.basePoints[i];
-      if (!point.isExposureLocked) continue;
+      if (requireExposureLocked && !point.isExposureLocked) continue;
       result.add(
         JobRecruitmentMapPin(
           post: post,

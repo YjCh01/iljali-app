@@ -61,14 +61,10 @@ class _CorporateCashChargePageState extends State<CorporateCashChargePage> {
           ),
         ),
       );
-    } on StateError catch (e) {
+    } on StateError catch (_) {
       if (!mounted) return;
-      final message = switch (e.message) {
-        'minimum_charge' => '최소 충전 금액은 10,000원입니다.',
-        _ => '충전에 실패했습니다. 다시 시도해 주세요.',
-      };
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
+        const SnackBar(content: Text('충전에 실패했습니다. 다시 시도해 주세요.')),
       );
     } finally {
       if (mounted) setState(() => _processing = false);

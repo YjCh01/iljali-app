@@ -35,9 +35,12 @@ class JobPostSyncService {
         'posted_by_name': user?.name ??
             post.registeredBy?.contactPersonName ??
             '',
+        'notification_settings_json':
+            post.notificationSettings?.toJsonString() ?? '{}',
       });
-    } on Object {
-      // 로컬 등록은 유지 — 서버 실패는 비차단
+    } on Object catch (e, st) {
+      // ignore: avoid_print
+      print('[JobPostSync] pushPost failed id=${post.id}: $e\n$st');
     }
   }
 
@@ -56,6 +59,8 @@ class JobPostSyncService {
         'workplace_latitude': _workplaceLatitude(post),
         'workplace_longitude': _workplaceLongitude(post),
         'status': post.status.name,
+        'notification_settings_json':
+            post.notificationSettings?.toJsonString() ?? '{}',
       });
     } on Object {
       // non-blocking

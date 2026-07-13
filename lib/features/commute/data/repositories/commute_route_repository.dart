@@ -105,18 +105,44 @@ class CommuteRouteRepository {
     await _writeLocalCache(companyKey, routes);
   }
 
-  Future<void> upsert(CommuteRoute route) async {
+  Future<CommuteRoute> upsert(CommuteRoute route) async {
+    var saved = route;
     if (_useRemote) {
-      await IljariApiClient().upsertCommuteRoute(route.toJson());
+      final json = await IljariApiClient().upsertCommuteRoute(route.toJson());
+      saved = CommuteRoute.fromJson(json);
     }
-    final all = await _loadLocalIncludingInactive(route.companyKey);
-    final index = all.indexWhere((r) => r.id == route.id);
+    final all = await _loadLocalIncludingInactive(saved.companyKey);
+    final index = all.indexWhere((r) => r.id == saved.id);
     if (index == -1) {
-      all.add(route);
+      all.add(saved);
     } else {
-      all[index] = route;
+      all[index] = saved;
     }
-    await _writeLocalCache(route.companyKey, all);
+    await _writeLocalCache(saved.companyKey, all);
+    return saved;
+  }
+
+  /// 서버에 저장된 정류장으로 도로 추종 polyline을 다시 계산
+  Future<CommuteRoute?> refreshGeometry(CommuteRoute route) async {
+    if (!_useRemote) return route;
+    try {
+      final json = await IljariApiClient().refreshCommuteRouteGeometry(
+        routeId: route.id,
+        companyKey: route.companyKey,
+      );
+      final saved = CommuteRoute.fromJson(json);
+      final all = await _loadLocalIncludingInactive(saved.companyKey);
+      final index = all.indexWhere((r) => r.id == saved.id);
+      if (index == -1) {
+        all.add(saved);
+      } else {
+        all[index] = saved;
+      }
+      await _writeLocalCache(saved.companyKey, all);
+      return saved;
+    } on Object {
+      return null;
+    }
   }
 
   Future<void> deactivate(String companyKey, String routeId) async {

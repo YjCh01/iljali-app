@@ -106,7 +106,7 @@ class _AdminOpsPageState extends State<AdminOpsPage> {
           ],
           const SizedBox(height: 16),
           _Section(
-            title: '푸시·거점 이용권',
+            title: '알림핀·PUSH 이용권',
             child: Column(
               children: [
                 _Field(label: '사업자번호(BRN)', controller: _companyKeyCtrl),

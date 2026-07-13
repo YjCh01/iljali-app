@@ -44,6 +44,33 @@ class _SeekerResumeEditHubPageState extends State<SeekerResumeEditHubPage> {
                   fontWeight: FontWeight.w900,
                 ),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final applied = await Navigator.of(context).pushNamed<bool>(
+                    AppRoutes.seekerResumeImport,
+                  );
+                  if (applied == true) _refresh();
+                },
+                icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                label: const Text('내 이력서 AI로 불러오기'),
+                style: OutlinedButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '알바몬·잡코리아 링크, PDF, 캡처로 학력·경력을 채울 수 있어요.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: AppColors.textSecondary.withValues(alpha: 0.9),
+                ),
+              ),
               const SizedBox(height: 16),
               ...ResumeItemKind.values.map(
                 (kind) => _SectionTile(

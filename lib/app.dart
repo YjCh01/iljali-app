@@ -16,6 +16,8 @@ import 'package:map/features/auth/presentation/pages/auth/reset_password_page.da
 import 'package:map/features/auth/presentation/pages/auth/signup_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/social_auth_complete_page.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/design/presentation/pages/premium_theme_preview_page.dart';
+import 'package:map/features/design/presentation/pages/pin_visual_verify_page.dart';
 import 'package:map/features/corporate/domain/entities/job_post_write_draft.dart';
 import 'package:map/features/corporate/presentation/navigation/corporate_job_post_flow_result.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_job_post_import_page.dart';
@@ -75,6 +77,7 @@ import 'package:map/features/job_seeker/presentation/pages/seeker_profile_onboar
 import 'package:map/features/job_seeker/presentation/pages/seeker_profile_onboarding_flow.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_home_address_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_my_credentials_page.dart';
+import 'package:map/features/job_seeker/presentation/pages/seeker_resume_import_page.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_resume_section_pages.dart';
 import 'package:map/features/job_seeker/presentation/pages/seeker_push_inbox_page.dart';
 import 'package:map/features/marketing/presentation/pages/public_pricing_page.dart';
@@ -82,6 +85,10 @@ import 'package:map/features/support/presentation/pages/customer_support_page.da
 import 'package:map/features/support/presentation/pages/legal_documents_page.dart';
 import 'package:map/features/listings/presentation/pages/create_listing_page.dart';
 import 'package:map/features/map_dashboard/presentation/pages/warehouse_search_page.dart';
+
+/// TEMP 핀 색/모양 검증 — `flutter run -t lib/main_pin_verify.dart` 로 재확인.
+/// 일반 앱 기동은 false 유지.
+bool kPinDesignPreview = false;
 
 class MapApp extends StatelessWidget {
   const MapApp({
@@ -93,6 +100,16 @@ class MapApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // TEMP: 지도 핀 색/모양 검증 화면
+    if (kPinDesignPreview) {
+      return MaterialApp(
+        title: AppStrings.appName,
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        home: const PinVisualVerifyPage(),
+      );
+    }
+
     return MaterialApp(
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
@@ -436,11 +453,13 @@ class MapApp extends StatelessWidget {
         CommuteRoute? existing;
         Set<String> lockedStopIds = const {};
         GeoCoordinate? initialWorkplaceCoordinate;
+        WorkplaceAddress? initialWorkplaceHint;
         final editArgs = settings.arguments;
         if (editArgs is ShuttleRouteEditArgs) {
           existing = editArgs.route;
           lockedStopIds = editArgs.lockedStopIds;
           initialWorkplaceCoordinate = editArgs.workplaceCoordinate;
+          initialWorkplaceHint = editArgs.workplaceHint;
         } else if (editArgs is CommuteRoute) {
           existing = editArgs;
         }
@@ -450,6 +469,7 @@ class MapApp extends StatelessWidget {
             existing: existing,
             lockedStopIds: lockedStopIds,
             initialWorkplaceCoordinate: initialWorkplaceCoordinate,
+            initialWorkplaceHint: initialWorkplaceHint,
           ),
         );
       case AppRoutes.corporateJobPinActivation:
@@ -570,6 +590,11 @@ class MapApp extends StatelessWidget {
           settings: settings,
           builder: (_) => const SeekerResumeEditHubPage(),
         );
+      case AppRoutes.seekerResumeImport:
+        return MaterialPageRoute<bool>(
+          settings: settings,
+          builder: (_) => const SeekerResumeImportPage(),
+        );
       case AppRoutes.seekerProfileOnboarding:
         final onboardingArgs =
             SeekerProfileOnboardingArgs.from(settings.arguments);
@@ -593,6 +618,17 @@ class MapApp extends StatelessWidget {
         return MaterialPageRoute<void>(
           settings: settings,
           builder: (_) => const PublicPricingPage(),
+        );
+      case AppRoutes.premiumThemePreview:
+        if (!premiumThemePreviewEnabled) {
+          return MaterialPageRoute<void>(
+            settings: settings,
+            builder: (_) => const MemberLoginGatewayPage(),
+          );
+        }
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const PremiumThemePreviewPage(),
         );
       case AppRoutes.customerSupport:
         return MaterialPageRoute<void>(

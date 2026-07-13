@@ -4,7 +4,7 @@ import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier.dart';
 
 void main() {
-  test('resolves packageActive for package-credit holders', () {
+  test('package credits do not change workplace pin tier', () {
     const profile = CorporateMemberProfile(
       companyName: '테스트',
       businessRegistrationNumber: '1112223334',
@@ -16,7 +16,7 @@ void main() {
 
     expect(
       MapPinTierResolver.resolveFromProfile(registeredBy: profile),
-      JobMapPinDisplayTier.packageActive,
+      JobMapPinDisplayTier.standard,
     );
   });
 

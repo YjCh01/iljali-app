@@ -4,6 +4,7 @@ import 'package:map/core/admin/admin_api_errors.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/features/admin/domain/admin_ops_controller.dart';
 import 'package:map/features/admin/presentation/widgets/admin_company_verification_card.dart';
+import 'package:map/features/admin/presentation/widgets/admin_shuttle_route_import_card.dart';
 import 'package:map/features/admin/presentation/widgets/admin_credit_stepper.dart';
 import 'package:map/features/admin/presentation/widgets/admin_sanction_card.dart';
 import 'package:map/features/admin/presentation/widgets/admin_web_scaffold.dart';
@@ -697,6 +698,13 @@ class _AdminMembersPanelState extends State<AdminMembersPanel> {
               companyKey: _selectedCompanyKey!,
               companyName: _selectedCompanyName,
               registeredOnServer: true,
+            ),
+            const SizedBox(height: 12),
+            AdminShuttleRouteImportCard(
+              key: ValueKey('shuttle-import-${_selectedCompanyKey!}'),
+              controller: c,
+              companyKey: _selectedCompanyKey!,
+              companyName: _selectedCompanyName,
             ),
             const SizedBox(height: 12),
           ],

@@ -106,6 +106,19 @@ class _LoginQcQuickPanelState extends State<LoginQcQuickPanel> {
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: _QuickLoginButton(
+            busy: false,
+            icon: Icons.palette_outlined,
+            title: 'Premium Theme MVP',
+            subtitle: '4화면 디자인 미리보기',
+            badge: 'DEV',
+            onTap: () => Navigator.of(context).pushNamed(
+              AppRoutes.premiumThemePreview,
+            ),
+          ),
+        ),
       ],
     );
   }

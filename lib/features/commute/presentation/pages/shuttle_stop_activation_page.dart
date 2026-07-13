@@ -15,6 +15,8 @@ import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart'
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/corporate_payment_preference.dart';
+import 'package:map/features/corporate/domain/entities/workplace_address.dart';
+import 'package:map/core/map/map_initial_center_policy.dart';
 import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
 import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_service_action_style.dart';
@@ -64,6 +66,7 @@ class _ShuttleStopActivationPageState extends State<ShuttleStopActivationPage> {
   bool _isRegistering = false;
   final Map<String, Set<String>> _selectedByRouteId = {};
   CorporateJobPost? _jobPost;
+  GeoCoordinate? _policyMapCenter;
   Timer? _exposureClock;
 
   bool get _exposureActive => _jobPost?.isShuttleExposureActive == true;
@@ -215,8 +218,14 @@ class _ShuttleStopActivationPageState extends State<ShuttleStopActivationPage> {
         if (resolved != post) {
           await dataSource.updateJobPost(resolved);
         }
+        final policyCenter =
+            await MapInitialCenterPolicy.corporateJobPostAction(
+          post: resolved,
+        );
+        if (!mounted) return;
         setState(() {
           _jobPost = resolved;
+          _policyMapCenter = policyCenter;
           _hydrateRegistrationFromPost(resolved);
         });
         _startExposureClock();
@@ -350,8 +359,8 @@ class _ShuttleStopActivationPageState extends State<ShuttleStopActivationPage> {
   }
 
   GeoCoordinate _mapCenter(CommuteRoute route) {
-    if (route.stops.isEmpty) return defaultPushMapCenter();
-    return route.stops.first.coordinate;
+    if (route.stops.isNotEmpty) return route.stops.first.coordinate;
+    return _policyMapCenter ?? MapInitialCenterPolicy.fallback();
   }
 
   Future<void> _registerToJobPost() async {
@@ -441,21 +450,25 @@ class _ShuttleStopActivationPageState extends State<ShuttleStopActivationPage> {
     }
   }
 
-  Future<GeoCoordinate?> _workplaceCoordinateForJob() async {
-    final jobPostId = widget.args?.jobPostId?.trim();
-    if (jobPostId == null || jobPostId.isEmpty) return null;
-    final post =
-        await const CorporateJobPostLocalDataSourceImpl().findById(jobPostId);
-    if (post == null) return null;
-    return JobPostWorkplaceResolver.resolveCoordinateAsync(post);
-  }
-
   Future<void> _createRoute() async {
-    final workplaceCoordinate = await _workplaceCoordinateForJob();
+    WorkplaceAddress? workplaceHint;
+    GeoCoordinate? workplaceCoordinate;
+    final jobPostId = widget.args?.jobPostId?.trim();
+    if (jobPostId != null && jobPostId.isNotEmpty) {
+      final post =
+          await const CorporateJobPostLocalDataSourceImpl().findById(jobPostId);
+      if (post != null) {
+        workplaceHint = JobPostWorkplaceResolver.resolve(post);
+        workplaceCoordinate =
+            await JobPostWorkplaceResolver.resolveCoordinateAsync(post);
+      }
+    }
+
     final created = await Navigator.of(context).pushNamed<CommuteRoute>(
       AppRoutes.corporateShuttleRouteEdit,
       arguments: ShuttleRouteEditArgs(
         workplaceCoordinate: workplaceCoordinate,
+        workplaceHint: workplaceHint,
       ),
     );
     if (created == null || !mounted) return;

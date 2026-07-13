@@ -19,6 +19,7 @@ from app.services.shuttle_commute_service import (
     list_preferences_for_seeker,
     list_routes_for_company,
     offer_route_share,
+    refresh_route_geometry,
     seeker_may_view_company_routes,
     upsert_commute_route,
     upsert_seeker_consent,
@@ -137,6 +138,27 @@ def shuttle_upsert_route(
         return upsert_commute_route(db, route=body)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/routes/{route_id}/refresh-geometry")
+def shuttle_refresh_route_geometry(
+    route_id: str,
+    company_key: str = Query(min_length=1, max_length=10),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """Re-densify road-following polylinePoints from current stops."""
+    payload = _resolve_bearer(authorization)
+    _assert_corporate_company(payload, company_key)
+    try:
+        row = refresh_route_geometry(
+            db, route_id=route_id, company_key=company_key
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if row is None:
+        raise HTTPException(status_code=404, detail="노선을 찾을 수 없습니다.")
+    return row
 
 
 @router.delete("/routes/{route_id}")

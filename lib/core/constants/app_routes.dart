@@ -63,6 +63,7 @@ abstract final class AppRoutes {
   static const String seekerMyDocuments = '/seeker/my-documents';
   static const String seekerMyResume = '/seeker/my-resume';
   static const String seekerResumeEdit = '/seeker/resume/edit';
+  static const String seekerResumeImport = '/seeker/resume/import';
   static const String seekerProfileOnboarding = '/seeker/profile/onboarding';
   static const String seekerMyCredentials = '/seeker/my-credentials';
   static const String seekerHomeAddress = '/seeker/home-address';
@@ -72,4 +73,6 @@ abstract final class AppRoutes {
   static const String paymentWebSuccess = '/payment-success';
   static const String paymentWebFail = '/payment-fail';
   static const String socialAuthComplete = '/auth/social-complete';
+  /// Debug only — Premium 테마 MVP 미리보기
+  static const String premiumThemePreview = '/dev/premium-theme-preview';
 }

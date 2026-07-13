@@ -1,5 +1,5 @@
-import 'package:map/core/address/address_geocoder.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/map/map_initial_center_policy.dart';
 import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
@@ -19,26 +19,19 @@ abstract final class JobPostWorkplaceResolver {
   static GeoCoordinate? storedCoordinate(CorporateJobPost post) =>
       _trustedCoordinate(post);
 
-  /// 지도·공고 소재지 — 저장 좌표 → 알림 설정 0번(근무지) → 지오코딩
+  /// 지도·공고 소재지 — 저장 좌표 → 알림 설정 0번(근무지) → 지오코딩 → 사업소재지
   static GeoCoordinate resolveMapWorkplaceCoordinate(CorporateJobPost post) {
-    return _trustedCoordinate(post) ?? defaultPushMapCenter();
+    return _trustedCoordinate(post) ??
+        MapInitialCenterPolicy.syncPlaceholder(
+          businessSiteCoordinate:
+              post.registeredBy?.businessHeadOfficeCoordinate,
+        );
   }
 
   static Future<GeoCoordinate> resolveMapWorkplaceCoordinateAsync(
     CorporateJobPost post,
-  ) async {
-    final trusted = _trustedCoordinate(post);
-    if (trusted != null) return trusted;
-
-    for (final query in geocodeQueryCandidates(post.warehouseName)) {
-      final geocoded = await AddressGeocoder.geocode(query);
-      if (geocoded != null && !isLikelyDefaultPushMapCenter(geocoded)) {
-        return geocoded;
-      }
-    }
-
-    return defaultPushMapCenter();
-  }
+  ) =>
+      MapInitialCenterPolicy.corporateJobPostAction(post: post);
 
   static List<String> geocodeQueryCandidates(String warehouseName) {
     final trimmed = warehouseName.trim();
@@ -91,24 +84,20 @@ abstract final class JobPostWorkplaceResolver {
     final stored = _trustedCoordinate(post, hint: hint);
     if (stored != null) return stored;
 
-    return defaultPushMapCenter();
+    return MapInitialCenterPolicy.syncPlaceholder(
+      coordinate: hint?.coordinate,
+      businessSiteCoordinate: post.registeredBy?.businessHeadOfficeCoordinate,
+    );
   }
 
   static Future<GeoCoordinate> resolveCoordinateAsync(
     CorporateJobPost post, {
     WorkplaceAddress? hint,
-  }) async {
-    final stored = _trustedCoordinate(post, hint: hint);
-    if (stored != null) return stored;
-
-    final road = post.warehouseName.trim();
-    if (road.isNotEmpty) {
-      final geocoded = await AddressGeocoder.geocode(road);
-      if (geocoded != null) return geocoded;
-    }
-
-    return defaultPushMapCenter();
-  }
+  }) =>
+      MapInitialCenterPolicy.corporateJobPostAction(
+        post: post,
+        workplace: hint,
+      );
 
   static WorkplaceAddress resolve(
     CorporateJobPost post, {

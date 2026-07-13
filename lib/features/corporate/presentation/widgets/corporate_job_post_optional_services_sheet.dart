@@ -6,6 +6,7 @@ import 'package:map/features/corporate/data/datasources/corporate_job_post_local
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
 import 'package:map/features/corporate/domain/entities/workplace_address.dart';
+import 'package:map/core/sync/job_post_sync_service.dart';
 import 'package:map/features/corporate/presentation/navigation/push_base_point_args.dart';
 import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_optional_services_panel.dart';
@@ -103,6 +104,7 @@ class _CorporateJobPostOptionalServicesSheetState
   Future<void> _persist() async {
     final updated = _buildPersistedPost();
     await _dataSource.updateJobPost(updated);
+    await JobPostSyncService().pushPostUpdate(updated);
     if (!mounted) return;
     setState(() => _post = updated);
     widget.onPostUpdated?.call(updated);

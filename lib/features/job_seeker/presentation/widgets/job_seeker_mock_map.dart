@@ -176,33 +176,31 @@ class JobSeekerMockMapState extends State<JobSeekerMockMap> {
                   ),
                 ),
               ),
+            if (widget.areaSearchPending)
+              Positioned(
+                left: 16,
+                bottom: MapFloatingInsets.searchAreaButtonBottom(context),
+                child: MapSearchAreaButton(
+                  loading: widget.areaSearchLoading,
+                  onPressed: widget.onSearchArea,
+                ),
+              ),
             Positioned(
               left: 0,
               right: 0,
               bottom: MapFloatingInsets.searchAreaButtonBottom(context),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  if (widget.areaSearchPending)
-                    MapSearchAreaButton(
-                      loading: widget.areaSearchLoading,
-                      onPressed: widget.onSearchArea,
-                    ),
-                  if (widget.areaSearchPending) const SizedBox(height: 16),
-                  MapZoomControlBar(
-                    zoom: _zoom,
-                    minZoom: _minZoom,
-                    maxZoom: _maxZoom,
-                    onZoomChanged: _setZoom,
-                  ),
-                ],
+              child: Center(
+                child: MapZoomControlBar(
+                  zoom: _zoom,
+                  minZoom: _minZoom,
+                  maxZoom: _maxZoom,
+                  onZoomChanged: _setZoom,
+                ),
               ),
             ),
             MapCurrentLocationButton(
               onMockLocate: _focusMockOnUserLocation,
-              bottom: MapFloatingInsets.searchAreaButtonBottom(context) +
-                  MapFloatingInsets.myLocationAboveSearchButton,
+              bottom: MapFloatingInsets.myLocationAboveSearchArea(context),
             ),
           ],
         );

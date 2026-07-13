@@ -304,6 +304,8 @@ class NaverMapWebMarkerSpec {
     required this.colorHex,
     required this.label,
     this.borderColorHex = '#FFFFFF',
+    this.ringColorHex,
+    this.ringWidth = 0,
     this.isSelected = false,
     this.isOwn = false,
     this.kind = MapPinMarkerKind.workplace,
@@ -316,6 +318,8 @@ class NaverMapWebMarkerSpec {
   final double longitude;
   final String colorHex;
   final String borderColorHex;
+  final String? ringColorHex;
+  final double ringWidth;
   final String label;
   final bool isSelected;
   final bool isOwn;
@@ -734,6 +738,8 @@ class _NaverMapWebWidgetState extends State<NaverMapWebWidget> {
         width: width,
         height: height,
         selected: spec.isSelected,
+        ringHex: spec.ringColorHex,
+        ringWidth: spec.ringWidth,
       );
 
       final icon = _markerHtmlIcon(maps, markerHtml, width, height);

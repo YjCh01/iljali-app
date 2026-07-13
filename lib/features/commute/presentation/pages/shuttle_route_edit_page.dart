@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
@@ -19,6 +20,9 @@ import 'package:map/features/commute/presentation/widgets/shuttle_stop_photo_act
 import 'package:map/features/commute/presentation/widgets/shuttle_stop_time_picker.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_route_stop_row_list.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart';
+import 'package:map/core/map/map_initial_center_policy.dart';
+import 'package:map/features/corporate/domain/entities/workplace_address.dart';
+import 'package:map/features/corporate/domain/services/registered_business_workplace_loader.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 
 /// 노선 수정 화면 진입 인자 — [lockedStopIds]가 있으면 해당 정류장은 보호하고 추가만 허용
@@ -27,11 +31,13 @@ class ShuttleRouteEditArgs {
     this.route,
     this.lockedStopIds = const {},
     this.workplaceCoordinate,
+    this.workplaceHint,
   });
 
   final CommuteRoute? route;
   final Set<String> lockedStopIds;
   final GeoCoordinate? workplaceCoordinate;
+  final WorkplaceAddress? workplaceHint;
 }
 
 /// 기업 — 셔틀 노선 등록·수정
@@ -41,11 +47,13 @@ class ShuttleRouteEditPage extends StatefulWidget {
     this.existing,
     this.lockedStopIds = const {},
     this.initialWorkplaceCoordinate,
+    this.initialWorkplaceHint,
   });
 
   final CommuteRoute? existing;
   final Set<String> lockedStopIds;
   final GeoCoordinate? initialWorkplaceCoordinate;
+  final WorkplaceAddress? initialWorkplaceHint;
 
   @override
   State<ShuttleRouteEditPage> createState() => _ShuttleRouteEditPageState();
@@ -107,6 +115,27 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
           ShuttleOperationGuideCopy.boardingWaitRecommendation;
     }
     _syncMapFromStops();
+    unawaited(_alignMapToWorkplaceIfNeeded());
+  }
+
+  Future<void> _alignMapToWorkplaceIfNeeded() async {
+    if (!MapInitialCenterPolicy.isFallback(_workplaceStop.coordinate) &&
+        !MapInitialCenterPolicy.isFallback(_mapCenter)) {
+      return;
+    }
+
+    final resolved = await MapInitialCenterPolicy.corporateJobPostAction(
+      workplace: widget.initialWorkplaceHint?.copyWith(
+        coordinate: widget.initialWorkplaceCoordinate ??
+            widget.initialWorkplaceHint?.coordinate,
+      ),
+    );
+    if (!mounted || MapInitialCenterPolicy.isFallback(resolved)) return;
+
+    setState(() {
+      _workplaceStop = _workplaceStop.copyWith(coordinate: resolved);
+      _syncMapFromStops();
+    });
   }
 
   @override
@@ -417,9 +446,9 @@ class _ShuttleRouteEditPageState extends State<ShuttleRouteEditPage> {
     }
 
     final repo = await CommuteRouteRepository.create();
-    await repo.upsert(route);
-    _savedRouteId = route.id;
-    return route.id;
+    final saved = await repo.upsert(route);
+    _savedRouteId = saved.id;
+    return saved.id;
   }
 
   Future<void> _save() async {
@@ -880,6 +909,7 @@ class ShuttleRouteListArgs {
     this.forStopDisplayPin = false,
     this.jobPostTitle,
     this.selectedRouteId,
+    this.workplaceHint,
   });
 
   /// true면 노선 선택 후 [CommuteRoute]를 pop 결과로 반환
@@ -888,17 +918,20 @@ class ShuttleRouteListArgs {
   final bool forStopDisplayPin;
   final String? jobPostTitle;
   final String? selectedRouteId;
+  final WorkplaceAddress? workplaceHint;
 
   factory ShuttleRouteListArgs.pickForJobPost({
     required String jobPostTitle,
     String? selectedRouteId,
     bool forStopDisplayPin = false,
+    WorkplaceAddress? workplaceHint,
   }) =>
       ShuttleRouteListArgs(
         pickForJobPost: true,
         forStopDisplayPin: forStopDisplayPin,
         jobPostTitle: jobPostTitle,
         selectedRouteId: selectedRouteId,
+        workplaceHint: workplaceHint,
       );
 }
 
@@ -915,6 +948,7 @@ class ShuttleRouteListPage extends StatefulWidget {
 class _ShuttleRouteListPageState extends State<ShuttleRouteListPage> {
   List<CommuteRoute> _routes = [];
   bool _loading = true;
+  WorkplaceAddress? _workplaceHint;
 
   bool get _pickMode => widget.args?.pickForJobPost ?? false;
 
@@ -923,7 +957,16 @@ class _ShuttleRouteListPageState extends State<ShuttleRouteListPage> {
   @override
   void initState() {
     super.initState();
+    _workplaceHint = widget.args?.workplaceHint;
     _load();
+    unawaited(_ensureWorkplaceHint());
+  }
+
+  Future<void> _ensureWorkplaceHint() async {
+    if (_workplaceHint != null) return;
+    final result = await RegisteredBusinessWorkplaceLoader().load();
+    if (!mounted || !result.isSuccess || result.workplace == null) return;
+    setState(() => _workplaceHint = result.workplace);
   }
 
   Future<void> _load() async {
@@ -941,6 +984,10 @@ class _ShuttleRouteListPageState extends State<ShuttleRouteListPage> {
   Future<void> _createRoute() async {
     final created = await Navigator.of(context).pushNamed<CommuteRoute>(
       AppRoutes.corporateShuttleRouteEdit,
+      arguments: ShuttleRouteEditArgs(
+        workplaceCoordinate: _workplaceHint?.coordinate,
+        workplaceHint: _workplaceHint,
+      ),
     );
     if (created == null || !mounted) return;
     if (_pickMode && widget.args?.forStopDisplayPin == true) {

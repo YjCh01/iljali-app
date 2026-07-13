@@ -23,6 +23,7 @@ class JobPostRow(Base):
     description_body_json: Mapped[str] = mapped_column(Text, default="{}")
     workplace_latitude: Mapped[float | None] = mapped_column(nullable=True)
     workplace_longitude: Mapped[float | None] = mapped_column(nullable=True)
+    notification_settings_json: Mapped[str] = mapped_column(Text, default="{}")
     status: Mapped[str] = mapped_column(String(32), default="recruiting")
     posted_by_email: Mapped[str] = mapped_column(String(200), default="", index=True)
     posted_by_name: Mapped[str] = mapped_column(String(100), default="")

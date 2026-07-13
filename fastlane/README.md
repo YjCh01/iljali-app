@@ -1,33 +1,77 @@
-# fastlane
+fastlane documentation
+----
 
-스토어 업로드 자동화 스켈레톤. 실제 업로드 전 Apple/Google 계정·키 설정 필요.
+# Installation
 
-## 사전 준비
+Make sure you have the latest version of the Xcode command line tools installed:
 
-| 플랫폼 | 필요 |
-|--------|------|
-| iOS | Apple Developer, App Store Connect API key 또는 Apple ID, Xcode 서명 |
-| Android | Play Console, service account JSON (`fastlane/play-store-key.json` — gitignore) |
-
-## 사용
-
-```bash
-./scripts/build_release.sh
-./scripts/store_preflight.sh
-
-# iOS TestFlight
-bundle exec fastlane ios beta
-
-# Play internal track
-bundle exec fastlane android beta
+```sh
+xcode-select --install
 ```
 
-## 환경 변수 (예시)
+For _fastlane_ installation instructions, see [Installing _fastlane_](https://docs.fastlane.tools/#installing-fastlane)
 
-```bash
-export FASTLANE_USER="your@apple.id"
-export FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD="..."
-export SUPPLY_JSON_KEY_PATH="fastlane/play-store-key.json"
+# Available Actions
+
+## iOS
+
+### ios prepare_signing
+
+```sh
+[bundle exec] fastlane ios prepare_signing
 ```
 
-`Appfile`의 `app_identifier` / `package_name`은 `kr.co.iljari.app`으로 맞춰 두었습니다.
+Xcode 자동 서명 — 팀 ID 적용
+
+### ios check_builds
+
+```sh
+[bundle exec] fastlane ios check_builds
+```
+
+App Store Connect 빌드 상태 (check_testflight.sh)
+
+### ios register_app
+
+```sh
+[bundle exec] fastlane ios register_app
+```
+
+App Store Connect 앱 등록 (최초 1회 — kr.co.iljari.app)
+
+### ios beta
+
+```sh
+[bundle exec] fastlane ios beta
+```
+
+TestFlight 업로드 (build/ios/ipa/*.ipa)
+
+### ios ship
+
+```sh
+[bundle exec] fastlane ios ship
+```
+
+서명 준비 + IPA 빌드 + TestFlight (upload_testflight.sh 에서 호출)
+
+----
+
+
+## Android
+
+### android beta
+
+```sh
+[bundle exec] fastlane android beta
+```
+
+Play Console internal testing
+
+----
+
+This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
+
+More information about _fastlane_ can be found on [fastlane.tools](https://fastlane.tools).
+
+The documentation of _fastlane_ can be found on [docs.fastlane.tools](https://docs.fastlane.tools).

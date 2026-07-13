@@ -69,6 +69,7 @@ from app.routers import (
     job_media,
     metrics,
     pilot,
+    resume_import,
     shuttle,
     notifications,
     ocr,
@@ -133,6 +134,7 @@ app.include_router(push_wallet.router)
 app.include_router(notifications.router)
 app.include_router(job_board.router)
 app.include_router(job_import.router)
+app.include_router(resume_import.router)
 app.include_router(pilot.router)
 app.include_router(shuttle.router)
 app.include_router(job_media.router)

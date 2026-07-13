@@ -55,6 +55,7 @@ _JOB_POST_COLUMNS_SQLITE = {
     "description_body_json": "ALTER TABLE job_posts ADD COLUMN description_body_json TEXT DEFAULT '{}'",
     "workplace_latitude": "ALTER TABLE job_posts ADD COLUMN workplace_latitude REAL",
     "workplace_longitude": "ALTER TABLE job_posts ADD COLUMN workplace_longitude REAL",
+    "notification_settings_json": "ALTER TABLE job_posts ADD COLUMN notification_settings_json TEXT DEFAULT '{}'",
 }
 
 _JOB_POST_COLUMNS_POSTGRES = {
@@ -66,6 +67,7 @@ _JOB_POST_COLUMNS_POSTGRES = {
     "description_body_json": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS description_body_json TEXT DEFAULT '{}'",
     "workplace_latitude": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_latitude DOUBLE PRECISION",
     "workplace_longitude": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_longitude DOUBLE PRECISION",
+    "notification_settings_json": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS notification_settings_json TEXT DEFAULT '{}'",
 }
 
 _JOB_APPLICATION_COLUMNS_SQLITE = {

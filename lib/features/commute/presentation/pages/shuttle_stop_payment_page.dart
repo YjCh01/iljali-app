@@ -17,6 +17,7 @@ import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/utils/shuttle_exposure_policy.dart';
 import 'package:map/features/corporate/domain/entities/corporate_payment_preference.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/core/map/map_initial_center_policy.dart';
 import 'package:map/core/widgets/map_form_split_layout.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 import 'package:map/features/corporate/presentation/widgets/select_all_toggle_bar.dart';
@@ -68,6 +69,7 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
   final Map<String, CommuteRoute> _routesById = {};
   final Set<String> _selectedStopIds = <String>{};
   CorporateJobPost? _jobPost;
+  GeoCoordinate? _policyMapCenter;
   bool _loading = true;
   bool _paying = false;
   bool _freeExposurePromo = false;
@@ -175,8 +177,12 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
     }
 
     if (!mounted) return;
+    final policyCenter =
+        await MapInitialCenterPolicy.corporateJobPostAction(post: reconciled);
+    if (!mounted) return;
     setState(() {
       _jobPost = reconciled;
+      _policyMapCenter = policyCenter;
       _rows
         ..clear()
         ..addAll(rows);
@@ -348,7 +354,9 @@ class _ShuttleStopPaymentPageState extends State<ShuttleStopPaymentPage> {
         .where((row) => _selectedStopIds.contains(row.stop.id))
         .toList(growable: false);
     if (selected.isEmpty) {
-      if (_rows.isEmpty) return defaultPushMapCenter();
+      if (_rows.isEmpty) {
+        return _policyMapCenter ?? MapInitialCenterPolicy.fallback();
+      }
       return _rows.first.stop.coordinate;
     }
     var lat = 0.0;

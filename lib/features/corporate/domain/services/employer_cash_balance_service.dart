@@ -28,10 +28,6 @@ class EmployerCashBalanceService {
     required int amountKrw,
     PaymentMethod method = PaymentMethod.card,
   }) async {
-    if (amountKrw < 10000) {
-      throw StateError('minimum_charge');
-    }
-
     final orderId = 'CASH-${DateTime.now().millisecondsSinceEpoch}';
     final request = PaymentRequest(
       orderId: orderId,

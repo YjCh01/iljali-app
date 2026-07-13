@@ -17,6 +17,7 @@ import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_callout
 import 'package:map/features/corporate/presentation/widgets/corporate_home_feature_highlights.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_home_map_background.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_stat_card.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_floating_insets.dart';
 
 /// 기업회원 홈 — 지도 전체 + 당근형 드래그 시트
 class CorporateHomeTab extends StatefulWidget {
@@ -84,6 +85,7 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
 
   void _onSelectedPinChanged(JobMapPin? pin) {
     setState(() => _calloutPin = pin);
+    // 핀 탭으로 콜아웃이 열릴 때만 시트를 내려 지도를 확보
     if (pin != null && _sheetController.isAttached) {
       _sheetController.animateTo(
         0.18,
@@ -117,13 +119,18 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
   void didUpdateWidget(CorporateHomeTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.focusPostId != null &&
-        widget.focusPostId != oldWidget.focusPostId &&
-        _sheetController.isAttached) {
-      _sheetController.animateTo(
-        0.18,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOutCubic,
-      );
+        widget.focusPostId != oldWidget.focusPostId) {
+      // 지도보기 진입: 콜아웃 없이 핀만 중앙 포커스
+      if (_calloutPin != null) {
+        setState(() => _calloutPin = null);
+      }
+      if (_sheetController.isAttached) {
+        _sheetController.animateTo(
+          0.18,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
     }
   }
 
@@ -261,25 +268,33 @@ class _CorporateHomeTabState extends State<CorporateHomeTab> {
           Positioned(
             left: 0,
             right: 0,
-            top: MediaQuery.sizeOf(context).height * 0.38,
+            // 핀(중하단) 위쪽에 팝업 — 근무지/알림핀을 가리지 않음
+            top: MapFloatingInsets.pinCalloutTop(context),
             child: Align(
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(
+                constraints: BoxConstraints(
                   maxWidth: JobMapPinCalloutCard.maxCompactWidth,
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.28,
                 ),
-                child: _calloutPin!.isClosedGhost
-                    ? ClosedGhostPinCalloutCard(
-                        pin: _calloutPin!,
-                        onClose: _closeCallout,
-                      )
-                    : JobMapPinCalloutCard(
-                        pin: _calloutPin!,
-                        compact: true,
-                        employerPreview: _isOwnPin(_calloutPin!),
-                        onClose: _closeCallout,
-                        onViewDetail: () => _openDetailPreview(_calloutPin!),
-                      ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: SingleChildScrollView(
+                    child: _calloutPin!.isClosedGhost
+                        ? ClosedGhostPinCalloutCard(
+                            pin: _calloutPin!,
+                            onClose: _closeCallout,
+                          )
+                        : JobMapPinCalloutCard(
+                            pin: _calloutPin!,
+                            compact: true,
+                            employerPreview: _isOwnPin(_calloutPin!),
+                            onClose: _closeCallout,
+                            onViewDetail: () =>
+                                _openDetailPreview(_calloutPin!),
+                          ),
+                  ),
+                ),
               ),
             ),
           ),

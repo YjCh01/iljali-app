@@ -11,6 +11,16 @@ abstract final class MapPinColors {
   static const active = Color(0xFF6BAED6);
   static const ghost = Color(0xFF9E9E9E);
   static const selected = Color(0xFFFF6F00);
+  static const freeGray = Color(0xFF9CA3AF); // 무료 근무지핀 전용 고정색
+  static const packagePurple = Color(0xFF8C7AE6); // 유료(패키지) 브랜드 연보라
+  static const packagePurpleRing = Color(0xFFC7BBF5); // 유료 핀 테두리용 연한 링
+
+  /// [base]를 밝게 한 링 색. 유료 근무지핀 테두리 등에 사용.
+  static Color ringTint(Color base, [double amount = 0.28]) {
+    final hsl = HSLColor.fromColor(base);
+    final lightness = (hsl.lightness + amount).clamp(0.0, 1.0);
+    return hsl.withLightness(lightness).toColor();
+  }
 }
 
 /// 참고 이미지 3종 — 정류장(사각) · 알림(링 물방울) · 근무지(링 물방울·두꺼운 링)
@@ -22,10 +32,10 @@ enum MapPinStyle {
 
 /// 지도 핀 렌더링 (Canvas + SVG)
 abstract final class TeardropMapPinArt {
-  static const pinWidth = 38.0;
-  static const pinHeight = 50.0;
-  static const busWidth = 34.0;
-  static const busHeight = 44.0;
+  static const pinWidth = 30.0;
+  static const pinHeight = 34.0;
+  static const busWidth = 27.0;
+  static const busHeight = 32.0;
 
   static const jobWidth = pinWidth;
   static const jobHeight = pinHeight;
@@ -35,7 +45,7 @@ abstract final class TeardropMapPinArt {
         _ => MapPinStyle.workplace,
       };
 
-  static double headRadius(Size size) => size.width * 0.44;
+  static double headRadius(Size size) => size.width * 0.48;
 
   static Offset tipPoint(Size size) => Offset(size.width / 2, size.height - 1);
 
@@ -46,27 +56,29 @@ abstract final class TeardropMapPinArt {
     required Color color,
     bool selected = false,
     Color selectedRingColor = MapPinColors.selected,
+    Color? ringColor,
+    double ringWidth = 0,
   }) {
     switch (style) {
       case MapPinStyle.busStop:
         _paintBusStop(canvas, size, color: color, selected: selected);
       case MapPinStyle.notification:
-        _paintRingTeardrop(
+        _paintFlagTeardrop(
           canvas,
           size,
           color: color,
-          holeRatio: 0.36,
           selected: selected,
           selectedRingColor: selectedRingColor,
         );
       case MapPinStyle.workplace:
-        _paintRingTeardrop(
+        _paintPlainTeardrop(
           canvas,
           size,
           color: color,
-          holeRatio: 0.24,
           selected: selected,
           selectedRingColor: selectedRingColor,
+          ringColor: ringColor,
+          ringWidth: ringWidth,
         );
     }
   }
@@ -106,13 +118,25 @@ abstract final class TeardropMapPinArt {
     required double width,
     required double height,
     bool selected = false,
+    String? ringHex,
+    double ringWidth = 0,
   }) {
     return switch (style) {
       MapPinStyle.busStop => _busStopHtml(bodyHex, width, height, selected),
-      MapPinStyle.notification =>
-        _ringTeardropHtml(bodyHex, width, height, 0.36, selected),
-      MapPinStyle.workplace =>
-        _ringTeardropHtml(bodyHex, width, height, 0.24, selected),
+      MapPinStyle.notification => _flagTeardropHtml(
+          bodyHex,
+          width,
+          height,
+          selected,
+        ),
+      MapPinStyle.workplace => _plainTeardropHtml(
+          bodyHex,
+          width,
+          height,
+          selected,
+          ringHex: ringHex,
+          ringWidth: ringWidth,
+        ),
     };
   }
 
@@ -124,6 +148,8 @@ abstract final class TeardropMapPinArt {
     required double height,
     MapPinStyle style = MapPinStyle.workplace,
     bool selected = false,
+    String? ringHex,
+    double ringWidth = 0,
   }) =>
       pinHtml(
         style: style,
@@ -131,6 +157,8 @@ abstract final class TeardropMapPinArt {
         width: width,
         height: height,
         selected: selected,
+        ringHex: ringHex ?? (borderHex != bodyHex ? borderHex : null),
+        ringWidth: ringWidth,
       );
 
   static String busStopPinHtml({
@@ -193,22 +221,41 @@ abstract final class TeardropMapPinArt {
     }
 
     canvas.drawPath(path, _gradientFill(path.getBounds(), color));
+
+    final bounds = path.getBounds();
+    final iconPainter = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: String.fromCharCode(Icons.directions_bus_rounded.codePoint),
+        style: TextStyle(
+          fontSize: bounds.width * 0.5,
+          fontFamily: Icons.directions_bus_rounded.fontFamily,
+          package: Icons.directions_bus_rounded.fontPackage,
+          color: Colors.white,
+        ),
+      )
+      ..layout();
+    final iconCenterY = 1.0 + w * 0.465; // 정사각형 몸통의 정확한 세로 중앙
+    iconPainter.paint(
+      canvas,
+      Offset(
+        cx - iconPainter.width / 2,
+        iconCenterY - iconPainter.height / 2,
+      ),
+    );
   }
 
   static Path _busStopPath(Size size) {
     final w = size.width;
-    final h = size.height;
     final cx = w / 2;
-    final sqW = w * 0.86;
-    final sqH = w * 0.74;
+    final sq = w * 0.93;
     final top = 1.0;
-    final left = cx - sqW / 2;
-    final right = cx + sqW / 2;
-    final bottom = top + sqH;
-    final r = w * 0.12;
-    final tipY = h - 1.0;
-    final tipHalf = w * 0.11;
-
+    final left = cx - sq / 2;
+    final right = cx + sq / 2;
+    final bottom = top + sq;
+    final r = w * 0.16;
+    final tailHeight = sq * 0.18;
+    final tipY = bottom + tailHeight;
+    final tipHalf = w * 0.16;
     final path = Path()
       ..moveTo(left + r, top)
       ..lineTo(right - r, top)
@@ -258,40 +305,100 @@ abstract final class TeardropMapPinArt {
     canvas.drawPath(ring, _gradientFill(ring.getBounds(), color));
   }
 
+  static void _paintPlainTeardrop(
+    Canvas canvas,
+    Size size, {
+    required Color color,
+    bool selected = false,
+    Color selectedRingColor = MapPinColors.selected,
+    Color? ringColor,
+    double ringWidth = 0,
+  }) {
+    final w = size.width;
+    final outer = _outerTeardropPath(size);
+    final tip = tipPoint(size);
+    _paintDropShadow(canvas, tip, w);
+    if (selected) {
+      canvas.drawPath(
+        outer,
+        Paint()
+          ..color = selectedRingColor.withValues(alpha: 0.28)
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
+    }
+    canvas.drawPath(outer, _gradientFill(outer.getBounds(), color));
+    if (ringColor != null && ringWidth > 0) {
+      canvas.drawPath(
+        outer,
+        Paint()
+          ..color = ringColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = ringWidth
+          ..isAntiAlias = true,
+      );
+    }
+  }
+
+  static void _paintFlagTeardrop(
+    Canvas canvas,
+    Size size, {
+    required Color color,
+    bool selected = false,
+    Color selectedRingColor = MapPinColors.selected,
+  }) {
+    final w = size.width;
+    final outer = _outerTeardropPath(size);
+    final tip = tipPoint(size);
+    final bounds = outer.getBounds();
+    _paintDropShadow(canvas, tip, w);
+    if (selected) {
+      canvas.drawPath(
+        outer,
+        Paint()
+          ..color = selectedRingColor.withValues(alpha: 0.28)
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
+    }
+    canvas.drawPath(outer, _gradientFill(outer.getBounds(), color));
+
+    final flagWidth = bounds.width * 0.32;
+    final flagHeight = bounds.height * 0.22;
+    final flagBaseX = bounds.right - bounds.width * 0.18;
+    final flagTopY = bounds.top + bounds.height * 0.06;
+    final flagPath = Path()
+      ..moveTo(flagBaseX, flagTopY)
+      ..lineTo(flagBaseX + flagWidth, flagTopY + flagHeight / 2)
+      ..lineTo(flagBaseX, flagTopY + flagHeight)
+      ..close();
+    canvas.drawPath(flagPath, Paint()..color = color..isAntiAlias = true);
+    canvas.drawPath(
+      flagPath,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..isAntiAlias = true,
+    );
+  }
+
   static Path _outerTeardropPath(Size size) {
     final w = size.width;
     final h = size.height;
     final cx = w / 2;
     final r = headRadius(size);
     final headCy = r + w * 0.03;
-    final tipY = h - 1;
-
-    final path = Path();
-    path.moveTo(cx, tipY);
-    path.cubicTo(
-      w * 0.88,
-      h * 0.60,
-      w * 0.88,
-      headCy + r * 0.12,
-      cx + r,
-      headCy,
-    );
-    path.arcTo(
-      Rect.fromCircle(center: Offset(cx, headCy), radius: r),
-      0,
-      -math.pi,
-      false,
-    );
-    path.cubicTo(
-      w * 0.12,
-      headCy + r * 0.12,
-      w * 0.12,
-      h * 0.60,
-      cx,
-      tipY,
-    );
-    path.close();
-    return path;
+    final tailWidth = r * 0.55;
+    final tailTopY = headCy + r * 0.55;
+    final circle = Path()
+      ..addOval(Rect.fromCircle(center: Offset(cx, headCy), radius: r));
+    final tail = Path()
+      ..moveTo(cx - tailWidth / 2, tailTopY)
+      ..lineTo(cx + tailWidth / 2, tailTopY)
+      ..lineTo(cx, h - 1)
+      ..close();
+    return Path.combine(PathOperation.union, circle, tail);
   }
 
   static Offset _holeCenter(Size size) {
@@ -326,10 +433,23 @@ abstract final class TeardropMapPinArt {
     final sid = 'bss_${bodyHex.hashCode}';
     final cx = width / 2;
     final tipY = height - 1;
+    final sq = width * 0.93;
+    final iconCy = 1.0 + width * 0.465;
+    final iconSize = sq * 0.42;
     final ring = selected
         ? '<path d="${_svgBusStopPath(width, height)}" fill="none" '
             'stroke="#FF6F0045" stroke-width="3"/>'
         : '';
+    // 간단 버스 아이콘 (흰 사각형 + 창문)
+    final busIcon =
+        '<g transform="translate($cx,$iconCy)" fill="#FFFFFF">'
+        '<rect x="${-iconSize * 0.45}" y="${-iconSize * 0.38}" '
+        'width="${iconSize * 0.9}" height="${iconSize * 0.7}" rx="${iconSize * 0.12}"/>'
+        '<rect x="${-iconSize * 0.32}" y="${-iconSize * 0.22}" '
+        'width="${iconSize * 0.22}" height="${iconSize * 0.22}" fill="$bodyHex" opacity="0.35"/>'
+        '<rect x="${iconSize * 0.05}" y="${-iconSize * 0.22}" '
+        'width="${iconSize * 0.22}" height="${iconSize * 0.22}" fill="$bodyHex" opacity="0.35"/>'
+        '</g>';
     return '<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height" '
         'viewBox="0 0 $width $height" style="display:block;overflow:visible">'
         '<defs>${_gradientDef(gid, bodyHex)}${_shadowDef(sid)}</defs>'
@@ -337,34 +457,98 @@ abstract final class TeardropMapPinArt {
         'ry="${width * 0.045}" fill="url(#$sid)"/>'
         '$ring'
         '<path d="${_svgBusStopPath(width, height)}" fill="url(#$gid)"/>'
+        '$busIcon'
         '</svg>';
   }
 
   static String _svgBusStopPath(double w, double h) {
     final cx = w / 2;
-    final sqW = w * 0.86;
-    final sqH = w * 0.74;
+    final sq = w * 0.93;
     final top = 1.0;
-    final left = cx - sqW / 2;
-    final right = cx + sqW / 2;
-    final bottom = top + sqH;
-    final r = w * 0.12;
-    final tipY = h - 1;
-    final tipHalf = w * 0.11;
+    final left = cx - sq / 2;
+    final right = cx + sq / 2;
+    final bottom = top + sq;
+    final r = w * 0.16;
+    final tipY = bottom + sq * 0.18;
+    final tipHalf = w * 0.16;
     return 'M ${left + r} $top '
         'L ${right - r} $top '
-        'Q $right $top $right ${top + r} '
+        'A $r $r 0 0 1 $right ${top + r} '
         'L $right ${bottom - r} '
-        'Q $right $bottom ${right - r} $bottom '
+        'A $r $r 0 0 1 ${right - r} $bottom '
         'L ${cx + tipHalf} $bottom '
         'L $cx $tipY '
         'L ${cx - tipHalf} $bottom '
         'L ${left + r} $bottom '
-        'Q $left $bottom $left ${bottom - r} '
+        'A $r $r 0 0 1 $left ${bottom - r} '
         'L $left ${top + r} '
-        'Q $left $top ${left + r} $top Z';
+        'A $r $r 0 0 1 ${left + r} $top Z';
   }
 
+  static String _plainTeardropHtml(
+    String bodyHex,
+    double width,
+    double height,
+    bool selected, {
+    String? ringHex,
+    double ringWidth = 0,
+  }) {
+    final gid = 'ptg_${bodyHex.hashCode}_${ringHex ?? 'x'}';
+    final sid = 'pts_${bodyHex.hashCode}';
+    final cx = width / 2;
+    final r = width * 0.48;
+    final headCy = r + width * 0.03;
+    final tailWidth = r * 0.55;
+    final tailTopY = headCy + r * 0.55;
+    final tipY = height - 1;
+    final selectedHalo = selected
+        ? '<circle cx="$cx" cy="$headCy" r="${r + 2}" fill="#FF6F0045"/>'
+        : '';
+    final ringStroke = (ringHex != null && ringWidth > 0)
+        ? '<circle cx="$cx" cy="$headCy" r="$r" fill="none" '
+            'stroke="$ringHex" stroke-width="$ringWidth"/>'
+            '<path d="M ${cx - tailWidth / 2} $tailTopY '
+            'L ${cx + tailWidth / 2} $tailTopY L $cx $tipY Z" '
+            'fill="none" stroke="$ringHex" stroke-width="$ringWidth" '
+            'stroke-linejoin="round"/>'
+        : '';
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height" '
+        'viewBox="0 0 $width $height" style="display:block;overflow:visible">'
+        '<defs>${_gradientDef(gid, bodyHex)}${_shadowDef(sid)}</defs>'
+        '<ellipse cx="$cx" cy="${tipY + width * 0.05}" rx="${width * 0.18}" '
+        'ry="${width * 0.045}" fill="url(#$sid)"/>'
+        '$selectedHalo'
+        '<circle cx="$cx" cy="$headCy" r="$r" fill="url(#$gid)"/>'
+        '<path d="M ${cx - tailWidth / 2} $tailTopY '
+        'L ${cx + tailWidth / 2} $tailTopY L $cx $tipY Z" fill="url(#$gid)"/>'
+        '$ringStroke'
+        '</svg>';
+  }
+
+  static String _flagTeardropHtml(
+    String bodyHex,
+    double width,
+    double height,
+    bool selected,
+  ) {
+    final base = _plainTeardropHtml(bodyHex, width, height, selected);
+    final cx = width / 2;
+    final r = width * 0.48;
+    final headCy = r + width * 0.03;
+    final flagWidth = width * 0.32;
+    final flagHeight = height * 0.18;
+    final flagBaseX = cx + r * 0.55;
+    final flagTopY = headCy - r * 0.55;
+    final flag =
+        '<path d="M $flagBaseX $flagTopY '
+        'L ${flagBaseX + flagWidth} ${flagTopY + flagHeight / 2} '
+        'L $flagBaseX ${flagTopY + flagHeight} Z" '
+        'fill="$bodyHex" stroke="#FFFFFF" stroke-width="1.5"/>';
+    // insert flag before closing </svg>
+    return base.replaceFirst('</svg>', '$flag</svg>');
+  }
+
+  /// legacy hole-ring SVG (unused by pinHtml; kept for any old callers)
   static String _ringTeardropHtml(
     String bodyHex,
     double width,
@@ -372,37 +556,23 @@ abstract final class TeardropMapPinArt {
     double holeRatio,
     bool selected,
   ) {
-    final gid = 'rtg_${bodyHex.hashCode}_$holeRatio';
-    final sid = 'rts_${bodyHex.hashCode}';
-    final outer = _svgOuterPath(width, height);
-    final hc = _holeCenter(Size(width, height));
-    final hr = width * holeRatio;
-    final cx = width / 2;
-    final tipY = height - 1;
-    final ring = selected
-        ? '<path d="$outer" fill="#FF6F0045" stroke="none"/>'
-        : '';
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height" '
-        'viewBox="0 0 $width $height" style="display:block;overflow:visible">'
-        '<defs>${_gradientDef(gid, bodyHex)}${_shadowDef(sid)}</defs>'
-        '<ellipse cx="$cx" cy="${tipY + width * 0.05}" rx="${width * 0.18}" '
-        'ry="${width * 0.045}" fill="url(#$sid)"/>'
-        '$ring'
-        '<path fill-rule="evenodd" clip-rule="evenodd" '
-        'd="$outer M ${hc.dx} ${hc.dy - hr} A $hr $hr 0 1 0 ${hc.dx} ${hc.dy + hr} '
-        'A $hr $hr 0 1 0 ${hc.dx} ${hc.dy - hr} Z" fill="url(#$gid)"/>'
-        '</svg>';
+    return _plainTeardropHtml(bodyHex, width, height, selected);
   }
 
   static String _svgOuterPath(double w, double h) {
     final cx = w / 2;
-    final r = w * 0.44;
+    final r = w * 0.48;
     final headCy = r + w * 0.03;
+    final tailWidth = r * 0.55;
+    final tailTopY = headCy + r * 0.55;
     final tipY = h - 1;
-    return 'M $cx $tipY '
-        'C ${w * 0.88} ${h * 0.60} ${w * 0.88} ${headCy + r * 0.12} ${cx + r} $headCy '
-        'A $r $r 0 0 0 ${cx - r} $headCy '
-        'C ${w * 0.12} ${headCy + r * 0.12} ${w * 0.12} ${h * 0.60} $cx $tipY Z';
+    // Approximate union as circle arc + triangle (for any leftover callers)
+    return 'M ${cx - r} $headCy '
+        'A $r $r 0 1 1 ${cx + r} $headCy '
+        'A $r $r 0 1 1 ${cx - r} $headCy '
+        'M ${cx - tailWidth / 2} $tailTopY '
+        'L ${cx + tailWidth / 2} $tailTopY '
+        'L $cx $tipY Z';
   }
 
   static String _shiftHex(String hex, double amount) {
@@ -430,12 +600,13 @@ abstract final class MapPinOverlayIconCache {
     required Color bodyColor,
     bool selected = false,
     double scale = 1,
+    Color? ringColor,
+    double ringWidth = 0,
   }) async {
     final key =
-        'pin_v4_${style.name}_${bodyColor.toARGB32()}_${selected}_$scale';
+        'pin_v6_${style.name}_${bodyColor.toARGB32()}_${selected}_${scale}_${ringColor?.toARGB32()}_$ringWidth';
     final cached = _cache[key];
     if (cached != null) return cached;
-
     final (width, height) = switch (style) {
       MapPinStyle.busStop => (
           TeardropMapPinArt.busWidth * scale,
@@ -446,7 +617,6 @@ abstract final class MapPinOverlayIconCache {
           TeardropMapPinArt.pinHeight * scale,
         ),
     };
-
     final bytes = await _render((canvas, size) {
       TeardropMapPinArt.paintPin(
         canvas,
@@ -454,9 +624,10 @@ abstract final class MapPinOverlayIconCache {
         style: style,
         color: bodyColor,
         selected: selected,
+        ringColor: ringColor,
+        ringWidth: ringWidth,
       );
     }, width, height);
-
     final image = await NOverlayImage.fromByteArray(bytes, cacheKey: key);
     _cache[key] = image;
     return image;
@@ -581,6 +752,8 @@ class JobTeardropPinWidget extends StatelessWidget {
     this.style = MapPinStyle.workplace,
     this.selected = false,
     this.scale = 1,
+    this.ringColor,
+    this.ringWidth = 0,
   });
 
   final Color bodyColor;
@@ -589,6 +762,8 @@ class JobTeardropPinWidget extends StatelessWidget {
   final MapPinStyle style;
   final bool selected;
   final double scale;
+  final Color? ringColor;
+  final double ringWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -602,6 +777,8 @@ class JobTeardropPinWidget extends StatelessWidget {
           style: style,
           color: bodyColor,
           selected: selected,
+          ringColor: ringColor,
+          ringWidth: ringWidth,
         ),
       ),
     );
@@ -642,11 +819,15 @@ class _MapPinPainter extends CustomPainter {
     required this.style,
     required this.color,
     this.selected = false,
+    this.ringColor,
+    this.ringWidth = 0,
   });
 
   final MapPinStyle style;
   final Color color;
   final bool selected;
+  final Color? ringColor;
+  final double ringWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -656,6 +837,8 @@ class _MapPinPainter extends CustomPainter {
       style: style,
       color: color,
       selected: selected,
+      ringColor: ringColor,
+      ringWidth: ringWidth,
     );
   }
 
@@ -663,5 +846,7 @@ class _MapPinPainter extends CustomPainter {
   bool shouldRepaint(covariant _MapPinPainter oldDelegate) =>
       oldDelegate.style != style ||
       oldDelegate.color != color ||
-      oldDelegate.selected != selected;
+      oldDelegate.selected != selected ||
+      oldDelegate.ringColor != ringColor ||
+      oldDelegate.ringWidth != ringWidth;
 }

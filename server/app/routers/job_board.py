@@ -26,6 +26,7 @@ class JobPostBody(BaseModel):
     description_body_json: str = "{}"
     workplace_latitude: float | None = None
     workplace_longitude: float | None = None
+    notification_settings_json: str = "{}"
     status: str = "recruiting"
     posted_by_email: str = ""
     posted_by_name: str = ""
@@ -42,6 +43,7 @@ class JobPostUpdate(BaseModel):
     description_body_json: str | None = None
     workplace_latitude: float | None = None
     workplace_longitude: float | None = None
+    notification_settings_json: str | None = None
     status: str | None = None
 
 
@@ -59,6 +61,7 @@ def _row_to_dict(row: JobPostRow) -> dict:
         "description_body_json": row.description_body_json or "{}",
         "workplace_latitude": row.workplace_latitude,
         "workplace_longitude": row.workplace_longitude,
+        "notification_settings_json": row.notification_settings_json or "{}",
         "status": row.status,
         "posted_by_email": row.posted_by_email,
         "posted_by_name": row.posted_by_name,
@@ -131,6 +134,7 @@ def create_post(
         description_body_json=body.description_body_json or "{}",
         workplace_latitude=body.workplace_latitude,
         workplace_longitude=body.workplace_longitude,
+        notification_settings_json=body.notification_settings_json or "{}",
         status=body.status,
         posted_by_email=body.posted_by_email.strip().lower(),
         posted_by_name=body.posted_by_name,

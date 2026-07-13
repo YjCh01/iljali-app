@@ -405,6 +405,46 @@ class IljariApiClient {
     });
   }
 
+  Future<Map<String, dynamic>> importResume({
+    String? url,
+    String? text,
+    String? platform,
+  }) async {
+    return _post('/v1/resume-import/parse', {
+      if (url != null) 'url': url,
+      if (text != null) 'text': text,
+      if (platform != null) 'platform': platform,
+    });
+  }
+
+  Future<Map<String, dynamic>> importResumeFile({
+    required List<int> fileBytes,
+    required String fileName,
+    String platform = 'unknown',
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/v1/resume-import/parse-file'),
+    );
+    final token = accessToken ?? AuthSession.instance.accessToken;
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    request.fields['platform'] = platform;
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
+      ),
+    );
+    final streamed = await _client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    _ensureOk(response);
+    if (response.body.isEmpty) return {};
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> fetchBusLocationTowerPilotStatus() async =>
       _get('/v1/pilot/bus-location-tower/me');
 
@@ -481,6 +521,18 @@ class IljariApiClient {
   ) async {
     final id = route['id'] as String? ?? '';
     return _put('/v1/shuttle/routes/$id', route);
+  }
+
+  Future<Map<String, dynamic>> refreshCommuteRouteGeometry({
+    required String routeId,
+    required String companyKey,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/v1/shuttle/routes/$routeId/refresh-geometry',
+    ).replace(queryParameters: {'company_key': companyKey});
+    final response = await _client.post(uri, headers: _headers);
+    _ensureOk(response);
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Future<void> deleteCommuteRoute({

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:map/features/corporate/domain/entities/exposure_activation_credi
 import 'package:map/features/corporate/domain/services/exposure_activation_service.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/domain/utils/exposure_slot_policy.dart';
+import 'package:map/core/map/map_initial_center_policy.dart';
 import 'package:map/features/corporate/domain/utils/job_post_workplace_resolver.dart';
 import 'package:map/features/corporate/domain/utils/push_wallet_credit_policy.dart';
 import 'package:map/features/corporate/presentation/widgets/exposure_zone_add_row.dart';
@@ -122,18 +124,37 @@ class _ExtraPushConfirmSheetState extends State<_ExtraPushConfirmSheet> {
       _points = [
         PushNotificationBasePoint(
           id: 'workplace',
-          coordinate: workplace.coordinate ?? defaultPushMapCenter(),
+          coordinate: MapInitialCenterPolicy.syncPlaceholder(
+            coordinate: workplace.coordinate,
+            businessSiteCoordinate:
+                widget.post.registeredBy?.businessHeadOfficeCoordinate,
+          ),
           addressLabel: workplace.roadAddress,
           radiusTier: PushRadiusTier.standardFree1km,
           isPrimary: true,
         ),
       ];
+      unawaited(_alignWorkplacePointFromPolicy());
     }
     _initialPoints = List.from(_points);
     _activeIndex = 0;
     _availableCredits = widget.availablePushCredits;
     _syncActiveFromPoint(_activeIndex);
     _refreshWallet();
+  }
+
+  Future<void> _alignWorkplacePointFromPolicy() async {
+    if (_points.isEmpty) return;
+    final resolved = await MapInitialCenterPolicy.corporateJobPostAction(
+      post: widget.post,
+    );
+    if (!mounted || MapInitialCenterPolicy.isFallback(resolved)) return;
+    setState(() {
+      _points[0] = _points[0].copyWith(coordinate: resolved);
+      if (_activeIndex == 0) {
+        _center = resolved;
+      }
+    });
   }
 
   bool get _isConfigureMode =>

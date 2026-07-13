@@ -3,9 +3,21 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.database import Base, engine
 from app.main import app
+from app.services import phone_verify_service as phone_svc
 
 client = TestClient(app)
 ADMIN_HEADERS = {"X-Admin-Api-Key": settings.admin_api_key}
+
+
+def _verify_phone(phone: str) -> str:
+    phone_svc._last_sent.clear()
+    client.post("/v1/auth/phone/send", json={"phone": phone})
+    res = client.post(
+        "/v1/auth/phone/verify",
+        json={"phone": phone, "code": "123456", "purpose": "signup"},
+    )
+    assert res.status_code == 200, res.text
+    return res.json()["phone_verified_token"]
 
 
 def setup_module():
@@ -99,6 +111,8 @@ def test_wallet_grant_three_pin_types():
 
 
 def test_corporate_signup_verification_admin_approve():
+    phone = "01098765432"
+    phone_token = _verify_phone(phone)
     signup = client.post(
         "/v1/auth/signup/corporate",
         json={
@@ -107,7 +121,8 @@ def test_corporate_signup_verification_admin_approve():
             "display_name": "라인헬스케어 담당",
             "company_key": "1234567890",
             "company_name": "라인헬스케어",
-            "phone": "01012345678",
+            "phone": phone,
+            "phone_verified_token": phone_token,
             "contact_person_name": "담당자",
             "handler_code": "main",
             "org_role": "recruiter",

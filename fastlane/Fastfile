@@ -1,16 +1,182 @@
 default_platform(:ios)
 
+def iljari_root
+  File.expand_path("..", __dir__)
+end
+
+def load_asc_api_key
+  key_id = ENV["ASC_KEY_ID"].to_s.strip
+  issuer_id = ENV["ASC_ISSUER_ID"].to_s.strip
+  key_path = ENV["ASC_KEY_PATH"].to_s.strip
+  return nil if key_id.empty? || issuer_id.empty? || key_path.empty?
+  UI.user_error!("ASC_KEY_PATH 파일 없음: #{key_path}") unless File.exist?(key_path)
+
+  app_store_connect_api_key(
+    key_id: key_id,
+    issuer_id: issuer_id,
+    key_filepath: key_path,
+    duration: 1200,
+    in_house: false
+  )
+end
+
+def ensure_team_id!
+  team_id = ENV["APPLE_TEAM_ID"].to_s.strip
+  if team_id.empty?
+    pbx = File.join(iljari_root, "ios/Runner.xcodeproj/project.pbxproj")
+    if File.exist?(pbx)
+      team_id = File.read(pbx)[/DEVELOPMENT_TEAM = ([A-Z0-9]{10});/, 1].to_s
+    end
+  end
+  UI.user_error!("APPLE_TEAM_ID 가 필요합니다. Xcode Team 또는 fastlane/.env 를 확인하세요.") if team_id.empty?
+  ENV["APPLE_TEAM_ID"] = team_id
+  team_id
+end
+
+def apply_upload_auth!(upload_params)
+  api_key = load_asc_api_key
+  if api_key
+    upload_params[:api_key] = api_key
+    return
+  end
+
+  user = ENV["FASTLANE_USER"].to_s.strip
+  asp = ENV["FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD"].to_s.strip
+  if user.empty? || asp.empty?
+    UI.user_error!(
+      "FASTLANE_USER + FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD 필요 — 도구_TestFlight비밀번호갱신.command"
+    )
+  end
+
+  # Spaceship(계정 로그인)용 FASTLANE_PASSWORD 에 앱전용비번을 넣으면
+  # "Invalid username and password" 가 납니다.
+  # 앱전용비번은 iTMSTransporter 업로드 전용 변수만 사용합니다.
+  ENV.delete("FASTLANE_PASSWORD")
+  ENV["FASTLANE_USER"] = user
+  ENV["FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD"] = asp
+
+  upload_params[:username] = user
+  # ASC 앱 숫자 ID — API 로그인 없이 IPA만 올릴 때 필요
+  upload_params[:apple_id] ||= ENV.fetch("PILOT_APPLE_ID", "6789877583")
+  upload_params[:skip_waiting_for_build_processing] = true
+end
+
+def app_not_found_help
+  <<~MSG
+
+    App Store Connect에 앱 'kr.co.iljari.app' 이 없습니다.
+
+    [한 번만] App Store Connect → 앱 → ＋ → 새로운 App
+      · iOS · 이름: 일자리 · Bundle ID: kr.co.iljari.app · SKU: iljari-app
+
+    또는: bundle exec fastlane ios register_app
+
+    등록 후 IPA만 다시 업로드:
+      ./scripts/upload_testflight.sh --upload-only
+  MSG
+end
+
 platform :ios do
-  desc "TestFlight 베타 업로드"
+  desc "Xcode 자동 서명 — 팀 ID 적용"
+  lane :prepare_signing do
+    team_id = ensure_team_id!
+    update_code_signing_settings(
+      use_automatic_signing: true,
+      team_id: team_id,
+      path: File.join(iljari_root, "ios/Runner.xcodeproj"),
+      targets: ["Runner"]
+    )
+    UI.success("서명 설정 적용: team=#{team_id} (Automatic Signing)")
+  end
+
+  desc "App Store Connect 빌드 상태 (check_testflight.sh)"
+  lane :check_builds do
+    user = ENV["FASTLANE_USER"].to_s.strip
+    asp = ENV["FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD"].to_s.strip
+    UI.user_error!("fastlane/.env Apple ID·앱전용비밀번호 필요") if user.empty? || asp.empty?
+    ENV["FASTLANE_PASSWORD"] = asp
+
+    api_key = load_asc_api_key
+    latest_params = { app_identifier: "kr.co.iljari.app" }
+    latest_params[:api_key] = api_key if api_key
+    latest_params[:username] = user unless api_key
+
+    build_num = latest_testflight_build_number(latest_params)
+    UI.success("TestFlight 최신 빌드 번호: #{build_num}")
+
+    builds = Spaceship::ConnectAPI::Build.all(app_id: "6789877583", limit: 5)
+    if builds.empty?
+      UI.important("⚠️  ASC API 기준 실제 Build 레코드 0개 — 업로드는 됐어도 Apple 처리/거절 가능")
+      UI.important("   · App Store Connect → 비즈니스 → 계약(Agreements) Action Required 확인")
+      UI.important("   · ashronze@gmail.com Apple 이메일(ITMS-xxxx) 확인")
+      UI.important("   · Transporter 앱으로 map.ipa 직접 업로드 시도")
+    else
+      builds.each do |b|
+        UI.message("  build processing=#{b.processing_state} uploaded=#{b.uploaded_date}")
+      end
+    end
+  rescue StandardError => e
+    if e.message.include?("Couldn") || e.message.include?("find") || e.message.include?("build")
+      UI.important("TestFlight 빌드 없음 또는 처리 중 — App Store Connect에서 iOS 빌드 탭 확인")
+      UI.important("없으면: ./scripts/upload_testflight.sh --upload-only")
+    else
+      UI.user_error!(e.message)
+    end
+  end
+
+  desc "App Store Connect 앱 등록 (최초 1회 — kr.co.iljari.app)"
+  lane :register_app do
+    team_id = ensure_team_id!
+    produce_params = {
+      app_identifier: "kr.co.iljari.app",
+      app_name: "일자리",
+      sku: "iljari-app",
+      language: "ko-KR",
+      team_id: team_id
+    }
+    api_key = load_asc_api_key
+    if api_key
+      produce_params[:api_key] = api_key
+    else
+      user = ENV["FASTLANE_USER"].to_s.strip
+      asp = ENV["FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD"].to_s.strip
+      UI.user_error!("setup_testflight.sh (2번) 으로 Apple ID·앱전용비밀번호 설정") if user.empty? || asp.empty?
+      produce_params[:username] = user
+      ENV["FASTLANE_PASSWORD"] = asp
+    end
+    produce(produce_params)
+    UI.success("App Store Connect 앱 등록 완료: kr.co.iljari.app")
+  end
+
+  desc "TestFlight 업로드 (build/ios/ipa/*.ipa)"
   lane :beta do
-    build_app(
-      workspace: "ios/Runner.xcworkspace",
-      scheme: "Runner",
-      export_method: "app-store"
-    )
-    upload_to_testflight(
-      skip_waiting_for_build_processing: true
-    )
+    ipa = Dir[File.join(iljari_root, "build/ios/ipa/*.ipa")].max_by { |f| File.mtime(f) }
+    UI.user_error!("IPA 없음 — ./scripts/upload_testflight.sh 를 먼저 실행하세요.") if ipa.nil?
+
+    upload_params = {
+      ipa: ipa,
+      app_identifier: "kr.co.iljari.app",
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+      notify_external_testers: false
+    }
+    apply_upload_auth!(upload_params)
+
+    begin
+      upload_to_testflight(upload_params)
+    rescue StandardError => e
+      if e.message.include?("Couldn't find app") || e.message.include?("could not find app")
+        UI.user_error!(e.message + app_not_found_help)
+      end
+      raise
+    end
+    UI.success("TestFlight 업로드 완료: #{File.basename(ipa)}")
+  end
+
+  desc "서명 준비 + IPA 빌드 + TestFlight (upload_testflight.sh 에서 호출)"
+  lane :ship do
+    prepare_signing
+    beta
   end
 end
 
@@ -19,7 +185,7 @@ platform :android do
   lane :beta do
     upload_to_play_store(
       track: "internal",
-      aab: "android/app/build/outputs/bundle/release/app-release.aab",
+      aab: File.join(iljari_root, "android/app/build/outputs/bundle/release/app-release.aab"),
       skip_upload_metadata: true,
       skip_upload_images: true,
       skip_upload_screenshots: true

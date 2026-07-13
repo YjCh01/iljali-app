@@ -452,9 +452,10 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
     }
 
     for (final pin in widget.recruitmentPins) {
+      final color = pin.point.resolvedPinColor;
       final icon = await MapPinOverlayIconCache.pin(
         style: MapPinStyle.notification,
-        bodyColor: MapPinColors.active,
+        bodyColor: color,
       );
       overlays.add(
         NMarker(
@@ -471,7 +472,7 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
           caption: NOverlayCaption(
             text: ExposurePointLabels.title(pin.index),
             color: Colors.white,
-            haloColor: MapPinColors.active.withValues(alpha: 0.85),
+            haloColor: color.withValues(alpha: 0.85),
             textSize: 11,
           ),
         )..setOnTapListener((_) {
@@ -634,22 +635,17 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
 
         ),
 
-        if (_areaSearchPending)
-          Positioned(
-            left: 0,
-            right: 0,
+        Positioned(
+            left: 16,
             bottom: _areaSearchButtonBottom(context),
-            child: Center(
-              child: MapSearchAreaButton(
-                loading: _areaSearchLoading,
-                onPressed: _searchThisArea,
-              ),
+            child: MapSearchAreaButton(
+              loading: _areaSearchLoading,
+              onPressed: _searchThisArea,
             ),
           ),
 
         MapCurrentLocationButton(
-          bottom: _areaSearchButtonBottom(context) +
-              MapFloatingInsets.myLocationAboveSearchButton,
+          bottom: MapFloatingInsets.myLocationAboveSearchArea(context),
         ),
 
       ],
@@ -707,7 +703,7 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
           id: 'recruitment_pin_${pin.post.id}_${pin.index}',
           latitude: pin.coordinate.latitude,
           longitude: pin.coordinate.longitude,
-          colorHex: NaverMapWebColors.hex(MapPinColors.active),
+          colorHex: NaverMapWebColors.hex(pin.point.resolvedPinColor),
           label: '',
           kind: MapPinMarkerKind.notification,
           size: TeardropMapPinArt.jobWidth,
@@ -775,22 +771,17 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
           },
         ),
 
-        if (_areaSearchPending)
-          Positioned(
-            left: 0,
-            right: 0,
+        Positioned(
+            left: 16,
             bottom: _areaSearchButtonBottom(context),
-            child: Center(
-              child: MapSearchAreaButton(
-                loading: _areaSearchLoading,
-                onPressed: _searchThisArea,
-              ),
+            child: MapSearchAreaButton(
+              loading: _areaSearchLoading,
+              onPressed: _searchThisArea,
             ),
           ),
 
         MapCurrentLocationButton(
-          bottom: _areaSearchButtonBottom(context) +
-              MapFloatingInsets.myLocationAboveSearchButton,
+          bottom: MapFloatingInsets.myLocationAboveSearchArea(context),
         ),
 
       ],

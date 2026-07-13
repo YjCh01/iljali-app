@@ -124,8 +124,7 @@ class _PushRadiusMapPickerState extends State<PushRadiusMapPicker> {
     final saved = _peekSavedViewport();
     _center = widget.center;
     final useSavedViewport = saved != null &&
-        (widget.centerEditable ||
-            !coordinatesDifferMeaningfully(saved.center, widget.center));
+        !coordinatesDifferMeaningfully(saved.center, widget.center);
     _viewCenter = useSavedViewport ? saved.center : widget.center;
     _mapZoom = useSavedViewport ? saved.zoom : widget.mapZoom;
     if (widget.enableMyLocation) {
@@ -1045,8 +1044,7 @@ class _PushRadiusNaverMapPickerState extends State<_PushRadiusNaverMapPicker> {
     final saved = _peekSavedViewport();
     if (saved == null) return false;
     final key = widget.viewportSessionKey;
-    if (!widget.centerEditable &&
-        coordinatesDifferMeaningfully(saved.center, widget.center)) {
+    if (coordinatesDifferMeaningfully(saved.center, widget.center)) {
       if (key != null) MapViewportSessionStore.instance.forget(key);
       return false;
     }
@@ -1407,8 +1405,7 @@ class _PushRadiusWebMapPickerState extends State<_PushRadiusWebMapPicker> {
   Widget build(BuildContext context) {
     final saved = _peekSavedViewport();
     final useSavedViewport = saved != null &&
-        (widget.centerEditable ||
-            !coordinatesDifferMeaningfully(saved.center, widget.center));
+        !coordinatesDifferMeaningfully(saved.center, widget.center);
     final initialLat =
         useSavedViewport ? saved.latitude : widget.center.latitude;
     final initialLng =

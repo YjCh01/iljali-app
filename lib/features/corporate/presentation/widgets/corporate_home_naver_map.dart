@@ -6,6 +6,8 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 import 'package:map/core/constants/map_constants.dart';
 
+import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/map/map_initial_center_policy.dart';
 import 'package:map/core/geo/map_user_location_service.dart';
 import 'package:map/core/map/web/job_map_web_marker_factory.dart';
 import 'package:map/core/map/web/shuttle_map_web_overlay_builder.dart';
@@ -25,12 +27,17 @@ import 'package:map/features/corporate/presentation/widgets/corporate_exposure_m
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 
 import 'package:map/features/job_seeker/presentation/map/job_map_marker_factory.dart';
+import 'package:map/features/job_seeker/presentation/map/job_recruitment_map_pin.dart';
+import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
+import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
+import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 
 import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
 import 'package:map/features/map_dashboard/data/datasources/map_viewport_session_store.dart';
 
 import 'package:map/features/map_dashboard/presentation/map/warehouse_cluster_options_factory.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_current_location_button.dart';
+import 'package:map/features/map_dashboard/presentation/widgets/map_floating_insets.dart';
 
 
 
@@ -50,11 +57,17 @@ class CorporateHomeNaverMap extends StatefulWidget {
 
     this.ghostRoutes = const [],
 
+    this.recruitmentPins = const [],
+
+    this.recruitmentLinkPolylines = const [],
+
     this.selectedPostId,
 
     this.centerOnPin,
 
     required this.onPinTap,
+
+    this.onRecruitmentPinTap,
 
     this.onShuttleStopTap,
 
@@ -70,6 +83,8 @@ class CorporateHomeNaverMap extends StatefulWidget {
 
     this.myLocationButtonBottom = 16,
 
+    this.defaultCenterOverride,
+
   });
 
 
@@ -82,11 +97,20 @@ class CorporateHomeNaverMap extends StatefulWidget {
 
   final List<ClosedGhostRoute> ghostRoutes;
 
+  final List<JobRecruitmentMapPin> recruitmentPins;
+
+  final List<PushRadiusMapPolyline> recruitmentLinkPolylines;
+
   final String? selectedPostId;
 
   final JobMapPin? centerOnPin;
 
+  /// [MapInitialCenterPolicy.corporateBusinessSite] — 강남 데모 대신
+  final GeoCoordinate? defaultCenterOverride;
+
   final ValueChanged<JobMapPin> onPinTap;
+
+  final ValueChanged<JobRecruitmentMapPin>? onRecruitmentPinTap;
 
   final ValueChanged<CorporateShuttleMapOverlay>? onShuttleStopTap;
 
@@ -150,6 +174,17 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
     }
 
+    final oldCenter = oldWidget.defaultCenterOverride;
+    final nextCenter = widget.defaultCenterOverride;
+    if (widget.centerOnPin == null &&
+        nextCenter != null &&
+        (oldCenter == null ||
+            (oldCenter.latitude - nextCenter.latitude).abs() > 0.0001 ||
+            (oldCenter.longitude - nextCenter.longitude).abs() > 0.0001) &&
+        !MapInitialCenterPolicy.isFallback(nextCenter)) {
+      unawaited(_moveCameraToPolicyCenter(nextCenter));
+    }
+
     if (widget.pins != oldWidget.pins ||
 
         widget.selectedPostId != oldWidget.selectedPostId ||
@@ -158,12 +193,36 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
         widget.shuttleOverlays != oldWidget.shuttleOverlays ||
 
-        widget.ghostRoutes != oldWidget.ghostRoutes) {
+        widget.ghostRoutes != oldWidget.ghostRoutes ||
+
+        widget.recruitmentPins != oldWidget.recruitmentPins ||
+
+        widget.recruitmentLinkPolylines != oldWidget.recruitmentLinkPolylines) {
 
       _syncOverlays();
 
     }
 
+  }
+
+  Future<void> _moveCameraToPolicyCenter(GeoCoordinate center) async {
+    final web = _webController;
+    if (web != null && web.isReady) {
+      await web.moveCamera(
+        latitude: center.latitude,
+        longitude: center.longitude,
+        zoom: MapConstants.defaultZoom,
+      );
+      return;
+    }
+    final controller = _controller;
+    if (controller == null) return;
+    final update = NCameraUpdate.withParams(
+      target: NLatLng(center.latitude, center.longitude),
+      zoom: MapConstants.defaultZoom,
+    );
+    update.setAnimation(animation: NCameraAnimation.none);
+    await controller.updateCamera(update);
   }
 
 
@@ -231,6 +290,16 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
         .peek(MapViewportSessionKeys.corporateHome);
 
     if (saved == null) return false;
+
+    if (widget.centerOnPin == null &&
+        widget.defaultCenterOverride != null &&
+        MapInitialCenterPolicy.isFallback(
+          GeoCoordinate(latitude: saved.latitude, longitude: saved.longitude),
+        )) {
+      MapViewportSessionStore.instance
+          .forget(MapViewportSessionKeys.corporateHome);
+      return false;
+    }
 
     final controller = _controller;
 
@@ -318,10 +387,14 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
         continue;
       }
       _pendingCenterPin = null;
+      final hasCallout = widget.selectedPostId != null;
       await MapCameraHolder.instance.focusPin(
         latitude: pin.latitude,
         longitude: pin.longitude,
         zoom: MapConstants.defaultZoom,
+        pinScreenY: hasCallout
+            ? MapFloatingInsets.calloutPinScreenY
+            : 0.5,
       );
       return;
     }
@@ -397,7 +470,46 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
       );
     }
 
+    for (final pin in widget.recruitmentPins) {
+      final color = pin.point.resolvedPinColor;
+      final icon = await MapPinOverlayIconCache.pin(
+        style: MapPinStyle.notification,
+        bodyColor: color,
+      );
+      overlays.add(
+        NMarker(
+          id: 'recruitment_pin_${pin.post.id}_${pin.index}',
+          position: NLatLng(
+            pin.coordinate.latitude,
+            pin.coordinate.longitude,
+          ),
+          icon: icon,
+          size: const Size(
+            TeardropMapPinArt.jobWidth,
+            TeardropMapPinArt.jobHeight,
+          ),
+        )..setOnTapListener((_) {
+            widget.onRecruitmentPinTap?.call(pin);
+          }),
+      );
+    }
 
+    for (var i = 0; i < widget.recruitmentLinkPolylines.length; i++) {
+      final line = widget.recruitmentLinkPolylines[i];
+      if (line.points.length < 2) continue;
+      overlays.add(
+        NPathOverlay(
+          id: 'recruitment_link_$i',
+          coords: [
+            for (final p in line.points) NLatLng(p.latitude, p.longitude),
+          ],
+          width: 3,
+          color: line.color,
+          outlineColor: Colors.white,
+          outlineWidth: 1,
+        ),
+      );
+    }
 
     if (overlays.isNotEmpty) {
 
@@ -449,19 +561,31 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
     final focus = widget.centerOnPin;
 
+    final policyDefault = widget.defaultCenterOverride;
+
+    // 정책 중심(사업소재지/근무지) > 세션 캐시 > 강남 fallback
+    // 세션이 강남이면 정책이 있을 때 무시
+    final useSaved = saved != null &&
+        (policyDefault == null ||
+            !MapInitialCenterPolicy.isFallback(
+              GeoCoordinate(
+                latitude: saved.latitude,
+                longitude: saved.longitude,
+              ),
+            ));
+
     final initialLat = focus?.latitude ??
-
-        saved?.latitude ??
-
+        (useSaved ? saved.latitude : null) ??
+        policyDefault?.latitude ??
         MapConstants.warehouseAreaCenter.latitude;
 
     final initialLng = focus?.longitude ??
-
-        saved?.longitude ??
-
+        (useSaved ? saved.longitude : null) ??
+        policyDefault?.longitude ??
         MapConstants.warehouseAreaCenter.longitude;
 
-    final initialZoom = saved?.zoom ?? MapConstants.warehouseAreaZoom;
+    final initialZoom =
+        (useSaved ? saved.zoom : null) ?? MapConstants.warehouseAreaZoom;
 
 
 
@@ -477,6 +601,36 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
       );
       final ghostOverlays =
           GhostRouteWebOverlayBuilder.fromRoutes(widget.ghostRoutes);
+
+      final recruitmentMarkers = <NaverMapWebMarkerSpec>[
+        for (final pin in widget.recruitmentPins)
+          NaverMapWebMarkerSpec(
+            id: 'recruitment_pin_${pin.post.id}_${pin.index}',
+            latitude: pin.coordinate.latitude,
+            longitude: pin.coordinate.longitude,
+            colorHex: NaverMapWebColors.hex(pin.point.resolvedPinColor),
+            label: '',
+            kind: MapPinMarkerKind.notification,
+            size: TeardropMapPinArt.jobWidth,
+            height: TeardropMapPinArt.jobHeight,
+          ),
+      ];
+
+      final recruitmentPolylines = <NaverMapWebPolylineSpec>[
+        for (var i = 0; i < widget.recruitmentLinkPolylines.length; i++)
+          if (widget.recruitmentLinkPolylines[i].points.length >= 2)
+            NaverMapWebPolylineSpec(
+              id: 'recruitment_link_$i',
+              points: [
+                for (final p in widget.recruitmentLinkPolylines[i].points)
+                  (latitude: p.latitude, longitude: p.longitude),
+              ],
+              colorHex: NaverMapWebColors.hex(
+                widget.recruitmentLinkPolylines[i].color,
+              ),
+              strokeWeight: 3,
+            ),
+      ];
 
       return Stack(
 
@@ -498,10 +652,12 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
               ...jobMarkers,
               ...shuttleOverlays.markers,
               ...ghostOverlays.markers,
+              ...recruitmentMarkers,
             ],
             polylines: [
               ...shuttleOverlays.polylines,
               ...ghostOverlays.polylines,
+              ...recruitmentPolylines,
             ],
 
             onMapReady: _handleWebMapReady,
@@ -534,6 +690,15 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
                 }
 
+              }
+
+              if (id.startsWith('recruitment_pin_')) {
+                for (final pin in widget.recruitmentPins) {
+                  if (id == 'recruitment_pin_${pin.post.id}_${pin.index}') {
+                    widget.onRecruitmentPinTap?.call(pin);
+                    return;
+                  }
+                }
               }
 
               if (widget.onShuttleStopTap != null &&
@@ -581,11 +746,7 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
 
     final safeAreaPadding = MediaQuery.paddingOf(context);
 
-    final initialTarget = saved == null
-
-        ? MapConstants.warehouseAreaCenter
-
-        : NLatLng(initialLat, initialLng);
+    final initialTarget = NLatLng(initialLat, initialLng);
 
 
 

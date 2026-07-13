@@ -116,4 +116,32 @@ void main() {
       expect(negotiable.paymentScheduleDisplayLabel, '협의');
     });
   });
+
+  group('buildSalaryPaymentSchedule', () {
+    test('workScheduleNegotiable makes daily payment negotiable', () {
+      final schedule = buildSalaryPaymentSchedule(
+        workerCategory: WorkerCategory.daily,
+        workScheduleNegotiable: true,
+        paymentDateNegotiable: false,
+        workScheduleRaw: '',
+      );
+      expect(schedule, isA<SalaryPaymentNegotiable>());
+      expect(schedule!.isComplete, isTrue);
+    });
+
+    test('daily without schedule remains incomplete', () {
+      final schedule = buildSalaryPaymentSchedule(
+        workerCategory: WorkerCategory.daily,
+        workScheduleNegotiable: false,
+        paymentDateNegotiable: false,
+        workScheduleRaw: '',
+      );
+      expect(schedule, isNull);
+    });
+
+    test('negotiable schedule isComplete', () {
+      expect(const SalaryPaymentSchedule.negotiable().isComplete, isTrue);
+      expect(const SalaryPaymentSchedule.negotiable().displayLabel, '협의');
+    });
+  });
 }

@@ -8,6 +8,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.job_sync_models import JobApplicationRow
+from app.services.route_geometry_service import apply_road_geometry_to_route
 from app.shuttle_models import (
     CommuteRouteRow,
     SeekerShuttlePreferenceRow,
@@ -123,15 +124,25 @@ def get_route_by_id(db: Session, *, route_id: str) -> dict | None:
     return _route_row_to_dict(row)
 
 
-def upsert_commute_route(db: Session, *, route: dict) -> dict:
+def upsert_commute_route(
+    db: Session,
+    *,
+    route: dict,
+    densify_geometry: bool = True,
+) -> dict:
     route_id = str(route.get("id", "")).strip()
     company_key = _normalize_company_key(str(route.get("companyKey", "")))
     if not route_id or not company_key:
         raise ValueError("노선 id와 companyKey가 필요합니다.")
+    enriched = (
+        apply_road_geometry_to_route(route)
+        if densify_geometry
+        else dict(route)
+    )
     now = datetime.utcnow()
     row = db.get(CommuteRouteRow, route_id)
-    active = bool(route.get("active", True))
-    payload = json.dumps(route, ensure_ascii=False)
+    active = bool(enriched.get("active", True))
+    payload = json.dumps(enriched, ensure_ascii=False)
     if row is None:
         row = CommuteRouteRow(
             id=route_id,
@@ -150,6 +161,19 @@ def upsert_commute_route(db: Session, *, route: dict) -> dict:
     db.commit()
     db.refresh(row)
     return _route_row_to_dict(row)
+
+
+def refresh_route_geometry(db: Session, *, route_id: str, company_key: str) -> dict | None:
+    """Recompute road-following polylinePoints for an existing route."""
+    row = db.get(CommuteRouteRow, route_id.strip())
+    if row is None:
+        return None
+    if _normalize_company_key(row.company_key) != _normalize_company_key(company_key):
+        raise ValueError("다른 회사의 노선은 수정할 수 없습니다.")
+    data = _parse_route_json(row.route_json)
+    data.setdefault("id", row.id)
+    data.setdefault("companyKey", row.company_key)
+    return upsert_commute_route(db, route=data, densify_geometry=True)
 
 
 def deactivate_commute_route(

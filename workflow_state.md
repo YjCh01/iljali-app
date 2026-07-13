@@ -2,18 +2,23 @@
 
 ## Current Task
 
-- **지원자 채팅 검증 제한 제거** — 완료
+- **통근버스 메인급 + 도로 추종 노선** — 완료 (재배포 후 기존 노선은 재저장/refresh-geometry)
 
 ## Backlog (priority order)
 
-1. [ ] **어드민 셔틀 참여자 UI** — `/shuttle/participants` 패널 카드
-2. [ ] **AdaptiveSheet (웹 우측 패널)** — 결제·알림핀·정류장 핵심만
-3. [ ] **QC DB 스냅샷** — export/import SQL for team-shared baseline
-4. [ ] **공고 full JSON sync** — CorporateJobPost 전체 필드 server payload
-5. [ ] **실 PG E2E** — Toss sandbox + webhook
-5. [ ] **급여지급일 서버/API** — monthly rule 필드 영속화
-6. [ ] **카카오 알림톡 실연동** — notifications stub → Bizmessage
-7. [ ] **근태 달력** — table_calendar / geofence MVP 이후
+1. [x] **통근버스 메인급 + 도로 추종** — IA 승격 + OSRM polylinePoints + visibility 보존
+1. [x] **알림핀 미표시·근무지색 오염** — 기업지도 렌더 + JSON 영속 + 근무지 packageActive 분리
+1. [x] **핀 색/모양** — 티어별 색 + workplace 고정 + 알림/정류장 보라
+2. [x] **핀 콜아웃이 핀을 덮음** — top 38% → 시트 위 bottom 앵커 + focus pivot
+3. [ ] **핀 TEMP 정리** — `PinVisualVerifyPage`/`main_pin_verify.dart` 유지 또는 삭제
+4. [ ] **LBS 신고** — 제출 완료 · 신고번호 대기 → 06 약관 반영
+5. [ ] **TestFlight Build 5** — 약관 assets 반영 IPA 재업로드
+6. [ ] **실서비스 배포** — API+웹 (맵·어드민·약관 웹) — 콜아웃·도로노선 포함 재배포 필요
+7. [ ] **AdaptiveSheet (웹 우측 패널)** — 결제·알림핀·정류장 핵심만
+8. [ ] **QC DB 스냅샷** — export/import SQL for team-shared baseline
+9. [ ] **공고 full JSON sync** — CorporateJobPost 전체 필드 server payload
+10. [ ] **실 PG E2E** — Toss sandbox + webhook
+11. [ ] **네이버 Directions 교체** — NCP Directions 키 확보 시 OSRM provider 교체
 
 ## Definition of Done
 
@@ -23,6 +28,47 @@
 - `workflow_state.md` updated
 
 ## Progress
+
+- [x] 공고 탭 CTA + 근태 허브 타일 + optional services 카피
+- [x] RouteGeometryService(OSRM) + upsert densify + refresh-geometry
+- [x] ShuttleRouteVisibility road polyline 보존
+- [x] 오버레이 화살표 densified 기준
+- [x] pytest 4 + flutter visibility 4
+
+## Completed (recent)
+
+- 2026-07-14 — 통근버스 메인급 IA + OSRM 도로 추종 polyline
+- 2026-07-13 — 핀 콜아웃이 핀을 덮던 UX: 하단 앵커 + 카메라 오프셋
+- 2026-07-13 — 지도보기 핀 catalog upsert + 현지도검색→새로고침 아이콘
+- 2026-07-12 — 근무일정 협의 시 급여지급일 검증 스킵
+- 2026-07-12 — 웹 핀 SVG 패리티 · 유료 링 tint · 화살표 20px
+
+## Blockers
+
+- TestFlight: Apple ID 비밀번호 불일치 (`ashronze@gmail.com`) — 재입력 필요
+- 도로 추종·콜아웃 수정은 **실서비스 재배포** 후 웹에서 확인
+
+## Verification
+
+- Tests: `test_route_geometry` 4 pass · `shuttle_route_visibility_test` 4 pass
+- Lint: changed Dart files 0 errors (pre-existing unused_element warnings only)
+
+## Definition of Done
+
+- `flutter analyze` — **0 errors** (new files)
+- `flutter test` — commute tests pass
+- Pricing/copy matches final push policy
+- `workflow_state.md` updated
+
+## Progress
+
+- [x] **TestFlight Build 4** — ITMS-90683 Info.plist privacy strings, 1.0.0(4) 업로드 OK
+- [x] **TestFlight 업로드 (Build 2)** — map.ipa 1.0.0(2), fastlane beta OK (Apple 거절 — plist 누락)
+- [x] **TestFlight 스크립트** — upload-only, 도구_TestFlight업로드만.command, env auth fix
+- [x] **출시 로드맵 재정리** — `docs/FOUNDER_RETURN_STATUS.md`
+- [x] **서버 pytest 71 pass** — conftest 스키마 복구, admin 기업가입 휴대폰인증, pilot display_name
+- [x] **map_exposure_visual_policy import** — shuttle_route_visibility 경로 수정
+- [x] **어드민 셔틀 참여자 UI** — `AdminShuttleParticipantsCard` + API client
 
 - [x] **지원자 채팅 검증 제한 제거** — 서버 `evaluate_contact`·클라이언트 entitlement·지원자/채팅 탭 제한 카드 제거, pytest 2 pass
 
@@ -146,11 +192,13 @@
 - 2026-06-08 — 공고 간결등록 MVP 데모 (데모 채우기·공고탭 바로가기·parser test)
 - 2026-06-08 — YOLO 서비스 준비도 배치 30항목 (UX·API·서버·CI·테스트)
 
+- 2026-07-11 — **YOLO 출시 점검** — `docs/FOUNDER_RETURN_STATUS.md`, pytest 71 pass, 어드민 셔틀 참여자 카드, map import fix
+
 ## Blockers
 
 - none
 
 ## Verification
 
-- Tests: `flutter test test/features/commute/shuttle_bus_timeline_position_test.dart` — 4 passed
-- Lint: `flutter analyze` on commute timeline files — 0 errors (info only)
+- Tests: `server pytest` — **71 passed**; `map_initial_center_policy_test` — 5 passed
+- Lint: `admin_shuttle_participants_card.dart` — 0 errors
