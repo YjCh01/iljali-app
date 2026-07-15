@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.job_sync_models import PaymentOrderRow
+from app.services.push_wallet_service import grant_credit_lot
 
 
 def toss_basic_auth_header() -> str:
@@ -57,10 +58,29 @@ def get_or_create_order(db: Session, body) -> PaymentOrderRow:
             method=body.method,
             status="pending",
             mock=not bool(settings.toss_secret_key),
+            credit_type=getattr(body, "credit_type", None),
+            credit_count=getattr(body, "credit_count", None),
+            credit_location_slots=getattr(body, "credit_location_slots", None),
         )
         db.add(row)
         db.flush()
     return row
+
+
+def grant_pending_credit_for_order(db: Session, row: PaymentOrderRow) -> None:
+    """confirmed 주문의 크레딧을 1회만 지갑에 지급 — 재시도·웹훅 중복 호출에도 안전."""
+    if row.credit_granted or not row.credit_type or not row.company_key:
+        return
+    grant_credit_lot(
+        db,
+        row.company_key,
+        row.credit_type,
+        row.credit_count or 0,
+        location_slots=row.credit_location_slots or 0,
+        source_order_id=row.order_id,
+    )
+    row.credit_granted = True
+    db.commit()
 
 
 async def confirm_toss_payment(
@@ -69,6 +89,9 @@ async def confirm_toss_payment(
     payment_key: str,
     order_id: str,
     amount_krw: int,
+    credit_type: str | None = None,
+    credit_count: int | None = None,
+    credit_location_slots: int | None = None,
 ) -> PaymentOrderRow:
     row = db.get(PaymentOrderRow, order_id)
     if row is None:
@@ -81,7 +104,14 @@ async def confirm_toss_payment(
         db.add(row)
         db.flush()
 
+    # `/charge`를 거치지 않은 게이트웨이 대비 — order에 아직 구매 의도가 없으면 채움.
+    if row.credit_type is None and credit_type is not None:
+        row.credit_type = credit_type
+        row.credit_count = credit_count
+        row.credit_location_slots = credit_location_slots
+
     if row.status == "confirmed":
+        grant_pending_credit_for_order(db, row)
         return row
 
     if not settings.toss_secret_key:
@@ -91,6 +121,7 @@ async def confirm_toss_payment(
         row.mock = True
         row.confirmed_at = datetime.utcnow()
         db.commit()
+        grant_pending_credit_for_order(db, row)
         return row
 
     async with httpx.AsyncClient(timeout=15.0) as client:
@@ -120,4 +151,5 @@ async def confirm_toss_payment(
     row.confirmed_at = datetime.utcnow()
     db.commit()
     db.refresh(row)
+    grant_pending_credit_for_order(db, row)
     return row

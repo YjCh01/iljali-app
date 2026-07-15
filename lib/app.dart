@@ -39,7 +39,6 @@ import 'package:map/features/corporate/presentation/pages/corporate_notification
 import 'package:map/features/corporate/presentation/pages/corporate_notification_payment_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_branch_management_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_roi_dashboard_page.dart';
-import 'package:map/features/corporate/presentation/pages/corporate_permanent_workers_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_talent_search_page.dart';
 import 'package:map/features/corporate/presentation/pages/chat_reply_macro_settings_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_my_info_page.dart';
@@ -538,17 +537,11 @@ class MapApp extends StatelessWidget {
           builder: (_) => const CorporateRoiDashboardPage(),
         );
       case AppRoutes.corporatePermanentWorkers:
-        if (!ProductFeatureFlags.isPermanentHireEnabled) {
-          return MaterialPageRoute<void>(
-            settings: settings,
-            builder: (_) => const Scaffold(
-              body: Center(child: Text('상시직 채용 기능은 준비 중입니다.')),
-            ),
-          );
-        }
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => const CorporatePermanentWorkersPage(),
+          builder: (_) => const Scaffold(
+            body: Center(child: Text('상시직 채용 기능은 준비 중입니다.')),
+          ),
         );
       case AppRoutes.corporateTalentSearch:
         return MaterialPageRoute<void>(

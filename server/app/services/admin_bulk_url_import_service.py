@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.services.admin_ops_service import bulk_import_jobs
 from app.services.entitlement_service import normalize_brn
-from app.services.job_post_scraper import ScrapeResult, fetch_job_post
+from app.services.job_post_scraper import (
+    ScrapeResult,
+    expand_listing_to_detail_urls,
+    fetch_job_post,
+    is_listing_or_search_url,
+)
 
 _KAKAO_ADDRESS_URL = "https://dapi.kakao.com/v2/local/search/address.json"
 _MAX_URLS = 30
@@ -85,18 +90,17 @@ def _scrape_to_job_dict(
         description = f"출처: {url}\n(상세 내용은 나중에 수정해 주세요.)"
 
     description_body_json = "{}"
-    if scraped.description_html or scraped.description_images:
-        description_body_json = json.dumps(
-            {
-                **({"html": scraped.description_html} if scraped.description_html else {}),
-                **(
-                    {"images": scraped.description_images}
-                    if scraped.description_images
-                    else {}
-                ),
-            },
-            ensure_ascii=False,
-        )
+    if scraped.description_html or scraped.description_images or scraped.source_url:
+        payload = {
+            **({"html": scraped.description_html} if scraped.description_html else {}),
+            **(
+                {"images": scraped.description_images}
+                if scraped.description_images
+                else {}
+            ),
+            **({"source_url": scraped.source_url} if scraped.source_url else {}),
+        }
+        description_body_json = json.dumps(payload, ensure_ascii=False)
 
     summary = title
     if scraped.error:
@@ -130,6 +134,88 @@ def _scrape_to_job_dict(
     return post
 
 
+async def resolve_import_urls(raw_urls: list[str], *, max_urls: int = _MAX_URLS) -> dict:
+    """상세 URL + 검색/목록 URL 확장을 합쳐 상세 링크 목록을 만든다."""
+    detail_urls: list[str] = []
+    seen: set[str] = set()
+    expansions: list[dict] = []
+
+    for url in raw_urls:
+        if len(detail_urls) >= max_urls:
+            break
+        if is_listing_or_search_url(url):
+            expanded = await expand_listing_to_detail_urls(
+                url, max_urls=max_urls - len(detail_urls)
+            )
+            expansions.append(
+                {
+                    "search_url": url,
+                    "expanded_count": len(expanded),
+                    "ok": len(expanded) > 0,
+                }
+            )
+            for detail in expanded:
+                if detail in seen:
+                    continue
+                seen.add(detail)
+                detail_urls.append(detail)
+                if len(detail_urls) >= max_urls:
+                    break
+        else:
+            if url in seen:
+                continue
+            seen.add(url)
+            detail_urls.append(url)
+
+    return {
+        "detail_urls": detail_urls,
+        "expansions": expansions,
+    }
+
+
+async def preview_job_urls(
+    *,
+    urls: list[str],
+) -> dict:
+    """검색/상세 URL을 해석·스크래핑만 하고 DB에는 쓰지 않는다."""
+    resolved = await resolve_import_urls(urls)
+    detail_urls: list[str] = resolved["detail_urls"]
+    if not detail_urls:
+        raise ValueError(
+            "불러올 공고 링크를 찾지 못했습니다. 상세 URL이거나 "
+            "검색 결과에서 공고 링크가 보이는 페이지인지 확인해 주세요."
+        )
+
+    items: list[dict] = []
+    for url in detail_urls:
+        scraped = await fetch_job_post(url)
+        title = (scraped.title or "").strip() or "제목 확인 필요"
+        workplace = (scraped.workplace or "").strip()
+        wage = (scraped.hourly_wage or "").strip()
+        ok = not scraped.error or bool(
+            scraped.title or scraped.raw_text or scraped.description_images
+        )
+        items.append(
+            {
+                "url": url,
+                "title": title[:200],
+                "workplace": workplace[:200],
+                "hourly_wage": wage[:64],
+                "ok": ok,
+                "error": scraped.error,
+                "confidence": scraped.confidence,
+                "image_count": len(scraped.description_images),
+            }
+        )
+
+    return {
+        "urls_submitted": len(urls),
+        "detail_urls_count": len(detail_urls),
+        "expansions": resolved["expansions"],
+        "items": items,
+    }
+
+
 async def bulk_import_job_urls(
     db: Session,
     *,
@@ -144,10 +230,18 @@ async def bulk_import_job_urls(
     if not brn:
         raise ValueError("company_key가 필요합니다.")
 
+    resolved = await resolve_import_urls(urls)
+    detail_urls: list[str] = resolved["detail_urls"]
+    if not detail_urls:
+        raise ValueError(
+            "등록할 공고 링크를 찾지 못했습니다. 상세 URL이거나 "
+            "검색 결과에서 공고 링크가 보이는 페이지인지 확인해 주세요."
+        )
+
     results: list[dict] = []
     posts: list[dict] = []
 
-    for url in urls:
+    for url in detail_urls:
         scraped = await fetch_job_post(url)
         warehouse = (scraped.workplace or "").strip() or "주소 확인 필요"
         coord = await _geocode(warehouse) if warehouse != "주소 확인 필요" else None
@@ -191,5 +285,7 @@ async def bulk_import_job_urls(
     return {
         **import_summary,
         "urls_submitted": len(urls),
+        "detail_urls_count": len(detail_urls),
+        "expansions": resolved["expansions"],
         "results": results,
     }

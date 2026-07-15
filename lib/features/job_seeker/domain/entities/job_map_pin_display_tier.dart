@@ -17,6 +17,9 @@ enum JobMapPinDisplayTier {
 
   /// 마감유령핀 — 만료·마감된 무료 공고 / 어드민 배치
   closedGhost,
+
+  /// 어드민 이벤트핑 — 퀴즈·투표·안내 (채용보다 낮은 우선순위)
+  event,
 }
 
 extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
@@ -44,6 +47,7 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
         JobMapPinDisplayTier.premiumWage => '고시급',
         JobMapPinDisplayTier.packageActive => '유료',
         JobMapPinDisplayTier.closedGhost => '마감유령',
+        JobMapPinDisplayTier.event => '이벤트',
       };
 
   Color get pinColor => switch (this) {
@@ -51,6 +55,7 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
         JobMapPinDisplayTier.premiumWage => MapPinColors.active,
         JobMapPinDisplayTier.packageActive => MapPinColors.packagePurple,
         JobMapPinDisplayTier.closedGhost => const Color(0xFFD1D5DB),
+        JobMapPinDisplayTier.event => const Color(0xFFFF6F00),
       };
 
   Color get pinLightColor => switch (this) {
@@ -63,6 +68,7 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
         JobMapPinDisplayTier.premiumWage => MapPinColors.active,
         JobMapPinDisplayTier.packageActive => MapPinColors.packagePurpleRing,
         JobMapPinDisplayTier.closedGhost => const Color(0xFFEEEEEE),
+        JobMapPinDisplayTier.event => const Color(0xFFFFE0B2),
       };
 
   double get markerSize => switch (this) {
@@ -70,6 +76,7 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
         JobMapPinDisplayTier.premiumWage => 38,
         JobMapPinDisplayTier.packageActive => 42,
         JobMapPinDisplayTier.closedGhost => 34,
+        JobMapPinDisplayTier.event => 40,
       };
 
   double get borderWidth => switch (this) {
@@ -77,10 +84,12 @@ extension JobMapPinDisplayTierX on JobMapPinDisplayTier {
         JobMapPinDisplayTier.premiumWage => 2,
         JobMapPinDisplayTier.packageActive => 2.5,
         JobMapPinDisplayTier.closedGhost => 2,
+        JobMapPinDisplayTier.event => 2.5,
       };
 
   String get shapeGlyph => switch (this) {
         JobMapPinDisplayTier.closedGhost => '×',
+        JobMapPinDisplayTier.event => '★',
         _ => '●',
       };
 }

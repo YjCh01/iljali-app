@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.job_sync_models import PaymentOrderRow
+from app.services.payment_service import grant_pending_credit_for_order
 
 router = APIRouter(prefix="/v1/payments", tags=["payments-webhook"])
 
@@ -53,9 +54,13 @@ async def toss_webhook(
             row.payment_key = payment_key or row.payment_key
             row.transaction_id = payment_key or row.transaction_id
             row.confirmed_at = datetime.utcnow()
+            db.commit()
+            grant_pending_credit_for_order(db, row)
         elif event_type in ("CANCELED", "canceled", "failed"):
             row.status = "failed"
-        db.commit()
+            db.commit()
+        else:
+            db.commit()
 
     return {
         "received": True,

@@ -62,14 +62,36 @@ class JobPostDescriptionBody {
   }
 
   factory JobPostDescriptionBody.fromMap(Map<String, dynamic> map) {
+    final html = map['html'] as String? ?? '';
+    var imageUrls = (map['images'] as List<dynamic>?)
+            ?.whereType<String>()
+            .toList() ??
+        const <String>[];
+    if (imageUrls.isEmpty && html.isNotEmpty) {
+      imageUrls = extractImageUrlsFromHtml(html);
+    }
     return JobPostDescriptionBody(
       text: map['text'] as String? ?? '',
-      html: map['html'] as String? ?? '',
-      imageUrls: (map['images'] as List<dynamic>?)
-              ?.whereType<String>()
-              .toList() ??
-          const [],
+      html: html,
+      imageUrls: imageUrls,
     );
+  }
+
+  /// HTML `<img src>` 추출 — images 필드 비어 있을 때 표시용
+  static List<String> extractImageUrlsFromHtml(String html) {
+    final re = RegExp(
+      r'''<img[^>]+src=["']([^"']+)["']''',
+      caseSensitive: false,
+    );
+    final out = <String>[];
+    final seen = <String>{};
+    for (final match in re.allMatches(html)) {
+      final src = match.group(1)?.trim() ?? '';
+      if (src.isEmpty || seen.contains(src)) continue;
+      seen.add(src);
+      out.add(src);
+    }
+    return out;
   }
 
   JobPostDescriptionBody copyWith({

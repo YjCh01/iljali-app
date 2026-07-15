@@ -35,6 +35,10 @@ _PLATFORM_ROOT_SELECTORS: dict[str, list[str]] = {
         ".view_contents",
         ".recruit_detail",
         "article.detail",
+        ".detail-view",
+        ".recruit-view",
+        "#JobDetail",
+        "[class*='detail']",
     ],
     "saramin": [".job_detail", ".wrap_jview", "article"],
     "albacheon": [".detail_view", ".view_area", "article"],
@@ -45,11 +49,17 @@ _GENERIC_ROOT_SELECTORS = ["main", "article", "#content", ".content", ".detail"]
 
 
 def should_try_image_extract(job_description: str, *, platform: str) -> bool:
-    """텍스트 본문이 거의 없으면 이미지 공고로 간주."""
+    """이미지 본문 추출을 시도할지.
+
+    알바몬은 og/사이드바 텍스트가 길어도 본문이 이미지인 경우가 많아
+    항상 시도한다. 그 외 플랫폼은 텍스트가 짧을 때만.
+    """
+    if platform == "albamon":
+        return True
     stripped = (job_description or "").strip()
     if len(stripped) >= 40:
         return False
-    if stripped and platform != "albamon":
+    if stripped:
         return len(stripped) < 20
     return True
 
@@ -170,12 +180,21 @@ def _is_decorative(url: str, img: Tag) -> bool:
 def _is_plausible_job_image(url: str, platform: str) -> bool:
     lower = url.lower()
     if platform == "albamon":
-        if "file.albamon.com" in lower or "albamon.com" in lower:
-            if re.search(r"\.(jpe?g|png|webp|gif)(\?|$)", lower):
-                return True
+        host = urlparse(url).netloc.lower()
+        # 확장자 없는 CDN (C-Photo-View?FN=…) 포함
+        if "file.albamon.com" in host or host.endswith("albamon.com") or host.endswith(
+            "albamon.kr"
+        ):
+            if any(skip in lower for skip in ("wordmark", "logo", ".svg", "icon")):
+                return False
+            return True
         return False
     host = urlparse(url).netloc.lower()
-    return bool(host) and re.search(r"\.(jpe?g|png|webp|gif)(\?|$)", lower)
+    return bool(host) and (
+        re.search(r"\.(jpe?g|png|webp|gif)(\?|$)", lower) is not None
+        or "photo-view" in lower
+        or "c-photo" in lower
+    )
 
 
 def _albamon_image_rank(url: str) -> int:
@@ -183,7 +202,18 @@ def _albamon_image_rank(url: str) -> int:
     score = 0
     if "file.albamon.com" in lower:
         score += 100
-    if any(k in lower for k in ("recruit", "giimg", "detail", "editor", "upload")):
+    if any(
+        k in lower
+        for k in (
+            "recruit",
+            "giimg",
+            "detail",
+            "editor",
+            "upload",
+            "c-photo-view",
+            "photo-view",
+        )
+    ):
         score += 40
     if re.search(r"\.(jpe?g|png|webp)$", lower.split("?")[0]):
         score += 10

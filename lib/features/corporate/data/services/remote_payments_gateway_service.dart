@@ -46,6 +46,10 @@ class RemotePaymentsGatewayService implements PaymentGatewayService {
           if (request.billingKey != null) 'billing_key': request.billingKey,
           if (request.savedPaymentMethodId != null)
             'saved_method_id': request.savedPaymentMethodId,
+          if (request.creditType != null) 'credit_type': request.creditType,
+          if (request.creditCount != null) 'credit_count': request.creditCount,
+          if (request.creditLocationSlots != null)
+            'credit_location_slots': request.creditLocationSlots,
         }),
       );
 
@@ -79,6 +83,9 @@ class RemotePaymentsGatewayService implements PaymentGatewayService {
     required String paymentKey,
     required String orderId,
     required int amountKrw,
+    String? creditType,
+    int? creditCount,
+    int? creditLocationSlots,
   }) async {
     if (_baseUrl.isEmpty) {
       return PaymentResult.ok('REMOTE-LOCAL-$orderId');
@@ -92,6 +99,10 @@ class RemotePaymentsGatewayService implements PaymentGatewayService {
           'payment_key': paymentKey,
           'order_id': orderId,
           'amount_krw': amountKrw,
+          if (creditType != null) 'credit_type': creditType,
+          if (creditCount != null) 'credit_count': creditCount,
+          if (creditLocationSlots != null)
+            'credit_location_slots': creditLocationSlots,
         }),
       );
 

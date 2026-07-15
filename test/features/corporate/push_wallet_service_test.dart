@@ -182,4 +182,109 @@ void main() {
     expect(wallet.lifetimePackagesPurchased,
         PushPackageCatalog.signupBonusPushes + 3);
   });
+
+  test('tryConsumeRecruitmentCredit decrements package credits locally',
+      () async {
+    const profile = CorporateMemberProfile(
+      companyName: '테스트',
+      businessRegistrationNumber: '4445556667',
+      department: '채용',
+      contactPersonName: '담당',
+      handlerCode: '1234',
+      pushWallet: EmployerPushWallet(),
+    );
+    await AuthSession.instance.signIn(
+      AuthUser(
+        name: '테스트',
+        email: 'consume1@example.com',
+        memberType: MemberType.corporate,
+        corporateProfile: profile,
+      ),
+    );
+    final service = PushWalletService(
+      repository: await PushWalletRepository.create(),
+      bonusLedger: await CompanyBonusLedgerRepository.create(),
+    );
+
+    final before = await service.loadWallet(profile);
+    expect(before.packageCredits, PushPackageCatalog.signupBonusPushes);
+
+    final result = await service.tryConsumeRecruitmentCredit(
+      AuthSession.instance.currentUser!.corporateProfile!,
+    );
+    expect(result.success, isTrue);
+
+    final after = await service.loadWallet(
+      AuthSession.instance.currentUser!.corporateProfile!,
+    );
+    expect(after.packageCredits, before.packageCredits - 1);
+    expect(after.locationSlotsFromPackages, after.packageCredits);
+  });
+
+  test('tryConsumeRecruitmentCredit fails when balance is zero', () async {
+    const profile = CorporateMemberProfile(
+      companyName: '테스트',
+      businessRegistrationNumber: '4445556668',
+      department: '채용',
+      contactPersonName: '담당',
+      handlerCode: '1234',
+      pushWallet: EmployerPushWallet(),
+    );
+    await AuthSession.instance.signIn(
+      AuthUser(
+        name: '테스트',
+        email: 'consume2@example.com',
+        memberType: MemberType.corporate,
+        corporateProfile: profile,
+      ),
+    );
+    final ledger = await CompanyBonusLedgerRepository.create();
+    await ledger.tryClaimSignupBonus(profile.companyKey);
+    final service = PushWalletService(
+      repository: await PushWalletRepository.create(),
+      bonusLedger: ledger,
+    );
+    await service.loadWallet(profile);
+
+    final result = await service.tryConsumeRecruitmentCredit(
+      AuthSession.instance.currentUser!.corporateProfile!,
+    );
+    expect(result.success, isFalse);
+    expect(result.message, isNotNull);
+  });
+
+  test('tryConsumePushTicket decrements push ticket credits locally',
+      () async {
+    const profile = CorporateMemberProfile(
+      companyName: '테스트',
+      businessRegistrationNumber: '4445556669',
+      department: '채용',
+      contactPersonName: '담당',
+      handlerCode: '1234',
+      pushWallet: EmployerPushWallet(),
+    );
+    await AuthSession.instance.signIn(
+      AuthUser(
+        name: '테스트',
+        email: 'consume3@example.com',
+        memberType: MemberType.corporate,
+        corporateProfile: profile,
+      ),
+    );
+    final service = PushWalletService(
+      repository: await PushWalletRepository.create(),
+      bonusLedger: await CompanyBonusLedgerRepository.create(),
+    );
+    await service.addPushTicketPurchase(profile, count: 2);
+
+    final result = await service.tryConsumePushTicket(
+      AuthSession.instance.currentUser!.corporateProfile!,
+    );
+    expect(result.success, isTrue);
+
+    final after = await service.loadWallet(
+      AuthSession.instance.currentUser!.corporateProfile!,
+    );
+    expect(after.pushTicketCredits, 1);
+  });
 }

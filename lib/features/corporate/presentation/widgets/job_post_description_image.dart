@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:map/core/config/env_config.dart';
 import 'package:map/core/constants/app_colors.dart';
 
 /// 공고 본문 이미지 — https URL · data URL(base64) 모두 표시
@@ -21,6 +22,15 @@ class JobPostDescriptionImage extends StatelessWidget {
   final BoxFit fit;
   final BorderRadius borderRadius;
 
+  static const _externalCdnHosts = [
+    'albamon.com',
+    'albamon.kr',
+    'saraminimage.co.kr',
+    'saramin.co.kr',
+    'alba.co.kr',
+    'incruit.com',
+  ];
+
   static Uint8List? decodeDataUrl(String url) {
     if (!url.startsWith('data:')) return null;
     final comma = url.indexOf(',');
@@ -32,9 +42,34 @@ class JobPostDescriptionImage extends StatelessWidget {
     }
   }
 
+  /// 외부 채용 CDN은 핫링크 403 → API 프록시 URL로 변환
+  static String resolveDisplayUrl(String raw) {
+    final url = raw.trim();
+    if (url.isEmpty || url.startsWith('data:')) return url;
+    if (url.contains('/media/job-posts/')) return url;
+    if (url.contains('/v1/job-media/proxy')) return url;
+
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return url;
+    }
+    final host = uri.host.toLowerCase();
+    final isExternal = _externalCdnHosts.any(
+      (suffix) => host == suffix || host.endsWith('.$suffix'),
+    );
+    if (!isExternal) return url;
+
+    final base = EnvConfig.complianceApiBaseUrl.replaceAll(RegExp(r'/$'), '');
+    if (base.isEmpty) return url;
+    return Uri.parse('$base/v1/job-media/proxy').replace(
+      queryParameters: {'url': url},
+    ).toString();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bytes = decodeDataUrl(url);
+    final displayUrl = resolveDisplayUrl(url);
+    final bytes = decodeDataUrl(displayUrl);
     final child = bytes != null
         ? Image.memory(
             bytes,
@@ -44,7 +79,7 @@ class JobPostDescriptionImage extends StatelessWidget {
             errorBuilder: (_, __, ___) => _errorPlaceholder(),
           )
         : Image.network(
-            url,
+            displayUrl,
             width: width,
             height: height,
             fit: fit,

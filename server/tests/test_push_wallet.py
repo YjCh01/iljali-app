@@ -24,10 +24,10 @@ def test_wallet_get_and_claim_bonus():
     claim = client.post(f"/v1/wallet/{key}/bonus/claim")
     assert claim.status_code == 200
     assert claim.json()["claimed"] is True
-    assert claim.json()["granted_pushes"] == 5
+    assert claim.json()["granted_pushes"] == 2
 
     wallet = client.get(f"/v1/wallet/{key}").json()
-    assert wallet["signup_bonus_remaining"] == 5
+    assert wallet["signup_bonus_remaining"] == 2
 
     again = client.post(f"/v1/wallet/{key}/bonus/claim")
     assert again.json()["claimed"] is False

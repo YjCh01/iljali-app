@@ -23,6 +23,11 @@ class ChargeRequest(BaseModel):
     buyer_name: str | None = None
     company_key: str | None = None
     web_checkout: bool = False
+    # 구매 의도 — confirm 시 자동 지급할 지갑 크레딧. 알림핀/PUSH 이용권 등
+    # 크레딧성 상품 결제에서만 채워짐.
+    credit_type: str | None = None
+    credit_count: int | None = None
+    credit_location_slots: int | None = None
 
 
 class ChargeResponse(BaseModel):
@@ -38,6 +43,11 @@ class ConfirmRequest(BaseModel):
     payment_key: str
     order_id: str
     amount_krw: int
+    # `/charge`를 거치지 않은 게이트웨이(클라이언트 키 직결 checkout)를 대비한 보강 —
+    # 이미 order에 credit_type이 있으면 무시되고 없을 때만 채워짐.
+    credit_type: str | None = None
+    credit_count: int | None = None
+    credit_location_slots: int | None = None
 
 
 @router.post("/charge", response_model=ChargeResponse)
@@ -79,6 +89,9 @@ async def confirm_payment(body: ConfirmRequest, db: Session = Depends(get_db)):
             payment_key=body.payment_key,
             order_id=body.order_id,
             amount_krw=body.amount_krw,
+            credit_type=body.credit_type,
+            credit_count=body.credit_count,
+            credit_location_slots=body.credit_location_slots,
         )
     except ValueError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc

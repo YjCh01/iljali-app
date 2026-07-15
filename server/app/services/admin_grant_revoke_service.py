@@ -213,4 +213,4 @@ def wallet_snapshot(db: Session, company_key: str) -> dict:
     brn = normalize_brn(company_key)
     wallet = get_or_create_wallet(db, brn)
     db.commit()
-    return wallet_to_response(brn, wallet).model_dump()
+    return wallet_to_response(brn, wallet, db).model_dump()

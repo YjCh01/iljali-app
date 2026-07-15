@@ -30,7 +30,6 @@ import 'package:map/features/corporate/domain/utils/corporate_job_post_scope.dar
 import 'package:map/features/corporate/presentation/pages/corporate_applicant_resume_page.dart';
 import 'package:map/features/corporate/presentation/widgets/chat/chat_reply_macro_picker_sheet.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_job_post_preview_sheet.dart';
-import 'package:map/features/corporate/presentation/widgets/register_permanent_hire_sheet.dart';
 import 'package:map/features/job_seeker/domain/utils/job_map_pin_factory.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_post_detail_sheet.dart';
 import 'package:map/features/hiring/presentation/widgets/chat/chat_attachment_picker_sheet.dart';
@@ -636,23 +635,6 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     );
   }
 
-  Future<void> _registerPermanentHire() async {
-    final app = _application;
-    if (app == null) return;
-
-    final record = await showRegisterPermanentHireSheet(context, app);
-    if (!mounted || record == null) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${record.seekerName}님 상시직 등록이 완료되었습니다.',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   bool get _showsWorkAgreementUi =>
       ProductFeatureFlags.isHiringCommissionEnabled;
 
@@ -722,13 +704,6 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
             TextButton(
               onPressed: null,
               child: const Text('합의 대기'),
-            ),
-          if (_isEmployer &&
-              app.isPermanentEmployment &&
-              ProductFeatureFlags.isPermanentHireEnabled)
-            TextButton(
-              onPressed: _registerPermanentHire,
-              child: const Text('상시직 합격'),
             ),
           ChatRoomLeaveMenu(
             useHamburgerIcon: true,

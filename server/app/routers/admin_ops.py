@@ -6,7 +6,12 @@ from app.database import get_db
 from app.deps.admin_auth import require_admin_api_key
 from app.qc_models import QcMemberRow
 from app.services.admin_bulk_shuttle_import_service import bulk_import_shuttle_routes_from_excel
-from app.services.admin_bulk_url_import_service import bulk_import_job_urls, extract_urls
+from app.services.admin_bulk_url_import_service import (
+    bulk_import_job_urls,
+    extract_urls,
+    preview_job_urls,
+)
+from app.services.job_post_image_remirror import remirror_job_post_images
 from app.services.pilot_program_service import (
     bus_location_tower_admin_view,
     search_bus_location_tower_candidates,
@@ -35,6 +40,11 @@ from app.services.ghost_pin_service import (
     create_ghost_pin,
     delete_ghost_pin,
     list_ghost_pins,
+)
+from app.services.event_pin_service import (
+    create_event_pin,
+    delete_event_pin,
+    list_event_pins,
 )
 from app.services.ghost_route_service import (
     create_ghost_route,
@@ -142,6 +152,17 @@ class GhostPinCreateBody(BaseModel):
     longitude: float
     label: str = ""
     source_post_id: str = ""
+
+
+class EventPinCreateBody(BaseModel):
+    latitude: float
+    longitude: float
+    title: str = ""
+    body: str = ""
+    kind: str = "info"
+    color_hex: str = "#FF6F00"
+    payload: dict = Field(default_factory=dict)
+    active: bool = True
 
 
 class GhostRouteStopBody(BaseModel):
@@ -286,7 +307,7 @@ def ops_wallet_get(
     brn = normalize_brn(company_key)
     wallet = get_or_create_wallet(db, brn)
     db.commit()
-    return wallet_to_response(brn, wallet)
+    return wallet_to_response(brn, wallet, db)
 
 
 @router.get("/companies/{company_key}/verification")
@@ -576,6 +597,21 @@ async def ops_bulk_import_shuttle_routes(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+@router.post("/jobs/preview-import-urls")
+async def ops_preview_import_urls(
+    body: BulkImportUrlsBody,
+    _: str = Depends(require_admin_api_key),
+):
+    """검색/상세 URL → 공고 목록 미리보기 (DB 등록 없음)."""
+    urls = body.urls or extract_urls(body.url_text)
+    if not urls:
+        raise HTTPException(status_code=400, detail="url 또는 url_text가 필요합니다.")
+    try:
+        return await preview_job_urls(urls=urls)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @router.post("/jobs/bulk-import-urls")
 async def ops_bulk_import_urls(
     body: BulkImportUrlsBody,
@@ -597,6 +633,25 @@ async def ops_bulk_import_urls(
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+class RemirrorImagesBody(BaseModel):
+    post_id: str | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+@router.post("/jobs/remirror-description-images")
+async def ops_remirror_description_images(
+    body: RemirrorImagesBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    """이미 등록된 공고의 알바몬 등 외부 본문 이미지를 /media/job-posts 로 복사."""
+    return await remirror_job_post_images(
+        db,
+        post_id=(body.post_id or "").strip() or None,
+        limit=body.limit,
+    )
 
 
 @router.get("/pilot/bus-location-tower")
@@ -817,6 +872,50 @@ def ops_delete_ghost_pin(
     deleted = delete_ghost_pin(db, pin_id=pin_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="ghost pin not found")
+    return {"deleted": True, "id": pin_id}
+
+
+@router.get("/event-pins")
+def ops_list_event_pins(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    pins = list_event_pins(db)
+    return {"event_pins": pins, "count": len(pins)}
+
+
+@router.post("/event-pins")
+def ops_create_event_pin(
+    body: EventPinCreateBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    try:
+        pin = create_event_pin(
+            db,
+            latitude=body.latitude,
+            longitude=body.longitude,
+            title=body.title,
+            body=body.body,
+            kind=body.kind,
+            color_hex=body.color_hex,
+            payload=body.payload,
+            active=body.active,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return {"event_pin": pin}
+
+
+@router.delete("/event-pins/{pin_id}")
+def ops_delete_event_pin(
+    pin_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    deleted = delete_event_pin(db, pin_id=pin_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="event pin not found")
     return {"deleted": True, "id": pin_id}
 
 

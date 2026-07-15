@@ -24,6 +24,7 @@ from app.services.ocr_business_cross_check import (
     detect_ocr_blocking_mismatch,
     detect_ocr_representative_mismatch,
 )
+from app.services.push_wallet_service import try_claim_verification_bonus
 
 router = APIRouter(prefix="/v1/compliance", tags=["compliance"])
 nts = NtsService()
@@ -101,6 +102,9 @@ async def verify_business(body: VerifyBusinessRequest, db: Session = Depends(get
             )
         )
         db.commit()
+
+    if status == "verified":
+        try_claim_verification_bonus(db, brn)
 
     return VerifyBusinessResponse(
         company_key=brn,

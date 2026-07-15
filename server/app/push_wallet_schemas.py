@@ -1,14 +1,18 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-SIGNUP_BONUS_GRANT = 5
+from app.push_wallet_models import CREDIT_TYPE_PACKAGE
+
+SIGNUP_BONUS_GRANT = 2
 
 
 class EmployerPushWalletResponse(BaseModel):
     company_key: str
     package_credits: int = 0
     push_ticket_credits: int = 0
+    exposure_push_bundle_credits: int = 0
     cash_balance_krw: int = 0
     signup_bonus_remaining: int = 0
     location_slots_from_packages: int = 0
@@ -31,6 +35,19 @@ class EmployerPushWalletUpsert(BaseModel):
 class AddPackageCreditsRequest(BaseModel):
     count: int = Field(ge=1, le=500)
     location_slots: int | None = Field(default=None, ge=0)
+    credit_type: Literal["package", "push_ticket", "exposure_bundle"] = (
+        CREDIT_TYPE_PACKAGE
+    )
+    # 관리자 수동 지급 등 주문이 없는 지급은 생략 가능. 구매 플로우에서는
+    # 결제 confirm이 이 값을 채워 넣어 재시도 시 중복 지급을 막는다.
+    order_id: str | None = None
+
+
+class ConsumeCreditRequest(BaseModel):
+    credit_type: Literal["package", "push_ticket", "exposure_bundle"] = (
+        CREDIT_TYPE_PACKAGE
+    )
+    count: int = Field(default=1, ge=1, le=500)
 
 
 class CompanyBonusLedgerResponse(BaseModel):

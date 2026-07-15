@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/core/map/web/naver_map_web_layer.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
@@ -16,11 +17,7 @@ abstract final class JobMapWebMarkerFactory {
     final kind = _kindFor(pin);
     final bodyColor = isSelected
         ? MapPinColors.selected
-        : switch (pin.displayTier) {
-            // 근무지 핀은 알림핀/유료 티어 색을 쓰지 않음
-            JobMapPinDisplayTier.packageActive => MapPinColors.freeGray,
-            _ => pin.displayTier.pinColor,
-          };
+        : _bodyColorFor(pin);
 
     var scale = 1.0;
     if (isSelected) {
@@ -72,5 +69,28 @@ abstract final class JobMapWebMarkerFactory {
           ),
         )
         .toList();
+  }
+
+  static Color _bodyColorFor(JobMapPin pin) {
+    if (pin.isEvent) {
+      final hex = pin.eventPin?.colorHex;
+      final parsed = _parseHex(hex);
+      if (parsed != null) return parsed;
+      return pin.displayTier.pinColor;
+    }
+    return switch (pin.displayTier) {
+      JobMapPinDisplayTier.packageActive => MapPinColors.freeGray,
+      _ => pin.displayTier.pinColor,
+    };
+  }
+
+  static Color? _parseHex(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    var value = hex.replaceFirst('#', '');
+    if (value.length == 6) value = 'FF$value';
+    if (value.length != 8) return null;
+    final parsed = int.tryParse(value, radix: 16);
+    if (parsed == null) return null;
+    return Color(parsed);
   }
 }

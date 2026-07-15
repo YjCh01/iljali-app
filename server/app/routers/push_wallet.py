@@ -6,14 +6,17 @@ from app.push_wallet_schemas import (
     AddPackageCreditsRequest,
     ClaimSignupBonusResponse,
     CompanyBonusLedgerResponse,
+    ConsumeCreditRequest,
     EmployerPushWalletResponse,
     EmployerPushWalletUpsert,
     SIGNUP_BONUS_GRANT,
 )
 from app.services.entitlement_service import normalize_brn
 from app.services.push_wallet_service import (
+    consume_credit,
     get_bonus_ledger,
     get_or_create_wallet,
+    grant_credit_lot,
     try_claim_signup_bonus,
     wallet_to_response,
 )
@@ -28,7 +31,7 @@ def get_wallet(company_key: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="사업자등록번호 10자리가 필요합니다.")
     wallet = get_or_create_wallet(db, brn)
     db.commit()
-    return wallet_to_response(brn, wallet)
+    return wallet_to_response(brn, wallet, db)
 
 
 @router.put("/{company_key}", response_model=EmployerPushWalletResponse)
@@ -55,7 +58,7 @@ def upsert_wallet(
         wallet.signup_bonus_expires_at = body.signup_bonus_expires_at
     db.commit()
     db.refresh(wallet)
-    return wallet_to_response(brn, wallet)
+    return wallet_to_response(brn, wallet, db)
 
 
 @router.post("/{company_key}/credits", response_model=EmployerPushWalletResponse)
@@ -64,14 +67,34 @@ def add_package_credits(
     body: AddPackageCreditsRequest,
     db: Session = Depends(get_db),
 ):
+    """관리자 수동 지급 등 구매 플로우 밖에서 크레딧을 넣을 때 사용. 실제 구매는
+    `/v1/payments/confirm`이 confirmed 전환 시 자동으로 크레딧을 지급하므로 이 경로를
+    타지 않는다."""
     brn = normalize_brn(company_key)
+    wallet = grant_credit_lot(
+        db,
+        brn,
+        body.credit_type,
+        body.count,
+        location_slots=body.location_slots or 0,
+        source_order_id=body.order_id,
+    )
+    return wallet_to_response(brn, wallet, db)
+
+
+@router.post("/{company_key}/consume", response_model=EmployerPushWalletResponse)
+def consume_wallet_credit(
+    company_key: str,
+    body: ConsumeCreditRequest,
+    db: Session = Depends(get_db),
+):
+    """알림핀·PUSH 이용권 등 실사용(소비) — 잔액 부족 시 402."""
+    brn = normalize_brn(company_key)
+    ok = consume_credit(db, brn, body.credit_type, body.count)
+    if not ok:
+        raise HTTPException(status_code=402, detail="크레딧 잔액이 부족합니다.")
     wallet = get_or_create_wallet(db, brn)
-    slots = body.location_slots if body.location_slots is not None else body.count
-    wallet.package_credits += body.count
-    wallet.location_slots_from_packages += slots
-    db.commit()
-    db.refresh(wallet)
-    return wallet_to_response(brn, wallet)
+    return wallet_to_response(brn, wallet, db)
 
 
 @router.get("/{company_key}/bonus", response_model=CompanyBonusLedgerResponse)

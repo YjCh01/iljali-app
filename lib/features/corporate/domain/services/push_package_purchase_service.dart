@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/config/env_config.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/corporate_member_profile.dart';
@@ -56,6 +55,10 @@ class PushPackagePurchaseService {
       amountKrw: totalKrw,
       method: method,
       companyKey: profile.companyKey,
+      creditType: offer.kind.serverCreditType,
+      creditCount: totalCredits,
+      creditLocationSlots:
+          offer.kind == RecruitmentProductKind.exposureOnly ? totalCredits : null,
     );
 
     final payment = await _paymentFlow.pay(context, request);
@@ -66,28 +69,18 @@ class PushPackagePurchaseService {
       );
     }
 
-    if (EnvConfig.isComplianceApiEnabled &&
-        offer.kind == RecruitmentProductKind.exposureOnly) {
-      try {
-        await IljariApiClient().addPackageCredits(
-          companyKey: profile.companyKey,
-          count: totalCredits,
-          locationSlots: totalCredits,
-        );
-      } on Object {
-        return PushPackagePurchaseResult(
-          success: false,
-          message: '결제는 완료됐지만 서버 지갑 충전에 실패했습니다. 고객센터로 문의해 주세요.',
-          transactionId: payment.transactionId ?? request.orderId,
-        );
-      }
+    // 결제 confirm 시점에 서버가 지갑 크레딧을 이미 지급했으므로(1v1 confirm이 유일한
+    // 지급 경로), 서버 연동 환경에서는 서버 값을 읽어와 로컬에 반영한다. 서버
+    // 미연동(QC/로컬 개발) 환경에서만 로컬 지갑을 직접 증가시킨다.
+    if (EnvConfig.isComplianceApiEnabled) {
+      await _walletService.refreshFromServer(profile);
+    } else {
+      await _walletService.addPurchase(
+        profile: profile,
+        offer: offer,
+        quantity: qty,
+      );
     }
-
-    await _walletService.addPurchase(
-      profile: profile,
-      offer: offer,
-      quantity: qty,
-    );
 
     final category = switch (offer.kind) {
       RecruitmentProductKind.pushOnly => PaymentProductCategory.pushTicket,

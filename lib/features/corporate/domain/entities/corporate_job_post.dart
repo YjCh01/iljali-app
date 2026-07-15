@@ -71,6 +71,7 @@ class CorporateJobPost {
     this.workCategoryId,
     this.workplaceLatitude,
     this.workplaceLongitude,
+    this.workplaceId,
     this.requiredResumeItems = const [],
     this.requiredCredentialIds = const [],
   });
@@ -88,6 +89,10 @@ class CorporateJobPost {
   /// 근무지 좌표 — 알림핀 미설정 공고·지도 중심용
   final double? workplaceLatitude;
   final double? workplaceLongitude;
+
+  /// 같은 물리적 근무지 식별자 — 서버 resolve-or-create로 부여. 좌표·근무지명으로
+  /// 매번 추측하지 않도록 함 (구버전 공고는 null일 수 있음).
+  final String? workplaceId;
 
   /// 지원 시 구직자에게 공개 요청할 이력서 항목
   final List<ResumeItemKind> requiredResumeItems;
@@ -196,6 +201,7 @@ class CorporateJobPost {
     String? workCategoryId,
     double? workplaceLatitude,
     double? workplaceLongitude,
+    String? workplaceId,
     List<ResumeItemKind>? requiredResumeItems,
     List<String>? requiredCredentialIds,
     CorporateJobPostStatus? status,
@@ -248,6 +254,7 @@ class CorporateJobPost {
       workCategoryId: workCategoryId ?? this.workCategoryId,
       workplaceLatitude: workplaceLatitude ?? this.workplaceLatitude,
       workplaceLongitude: workplaceLongitude ?? this.workplaceLongitude,
+      workplaceId: workplaceId ?? this.workplaceId,
       requiredResumeItems: requiredResumeItems ?? this.requiredResumeItems,
       requiredCredentialIds:
           requiredCredentialIds ?? this.requiredCredentialIds,

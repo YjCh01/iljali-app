@@ -24,8 +24,10 @@ import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/job_post_validity.dart';
 import 'package:map/features/job_seeker/data/datasources/closed_ghost_pin_local_data_source.dart';
 import 'package:map/features/job_seeker/data/datasources/closed_ghost_route_local_data_source.dart';
+import 'package:map/features/job_seeker/data/datasources/event_map_pin_local_data_source.dart';
 import 'package:map/features/job_seeker/domain/entities/closed_ghost_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/closed_ghost_route.dart';
+import 'package:map/features/job_seeker/domain/entities/event_map_pin.dart';
 
 /// 서버 QC DB → 로컬 in-memory·SharedPreferences 동기화
 abstract final class QcSyncBootstrap {
@@ -41,6 +43,7 @@ abstract final class QcSyncBootstrap {
       await _hydratePosts(bootstrap);
       await _hydrateGhostPins(bootstrap);
       await _hydrateGhostRoutes(bootstrap);
+      await _hydrateEventPins(bootstrap);
       await _hydrateAdminAnnouncements(bootstrap);
     } on Object {
       // offline — 로컬 캐시 유지
@@ -65,6 +68,7 @@ abstract final class QcSyncBootstrap {
     await _hydratePosts(bootstrap);
     await _hydrateGhostPins(bootstrap);
     await _hydrateGhostRoutes(bootstrap);
+    await _hydrateEventPins(bootstrap);
     await _hydrateAdminAnnouncements(bootstrap);
     await _mergeApplications(bootstrap);
     await _mergeWallet(bootstrap, user);
@@ -144,6 +148,7 @@ abstract final class QcSyncBootstrap {
           // 근무지 색은 시급만 — recruitment_pin_active로 보라 칠하지 않음
           mapPinDisplayTier: null,
           hasShuttleRouteOverlay: shuttleActive,
+          workplaceId: map['workplace_id'] as String?,
         ),
       );
     }
@@ -161,6 +166,18 @@ abstract final class QcSyncBootstrap {
       mapped.add(pin);
     }
     ClosedGhostPinLocalDataSourceImpl.replaceFromServer(mapped);
+  }
+
+  static Future<void> _hydrateEventPins(Map<String, dynamic> bootstrap) async {
+    final raw = bootstrap['event_pins'] as List<dynamic>? ?? [];
+    final mapped = <EventMapPin>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final pin = EventMapPin.fromJson(Map<String, dynamic>.from(item));
+      if (pin.id.isEmpty) continue;
+      mapped.add(pin);
+    }
+    EventMapPinLocalDataSourceImpl.replaceFromServer(mapped);
   }
 
   static Future<void> _hydrateGhostRoutes(

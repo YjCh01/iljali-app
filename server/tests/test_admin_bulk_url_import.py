@@ -128,3 +128,40 @@ def test_bulk_import_urls_requires_input():
         json={"url_text": "   "},
     )
     assert r.status_code == 400
+
+
+@patch(
+    "app.services.admin_bulk_url_import_service.fetch_job_post",
+    new_callable=AsyncMock,
+)
+def test_preview_import_urls_does_not_write_db(mock_fetch):
+    mock_fetch.return_value = ScrapeResult(
+        platform="albamon",
+        raw_text="시급 11000원",
+        title="[미리보기] 물류 보조",
+        hourly_wage="시급 11000",
+        work_schedule="",
+        workplace="경기 이천시",
+        job_description="미리보기만",
+        confidence=0.7,
+        source_url="https://www.albamon.com/job/preview-only",
+    )
+
+    before = client.get("/v1/sync/bootstrap")
+    before_titles = {p["title"] for p in before.json()["posts"]}
+
+    r = client.post(
+        "/v1/admin/ops/jobs/preview-import-urls",
+        headers=ADMIN_HEADERS,
+        json={"url_text": "https://www.albamon.com/job/preview-only"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["detail_urls_count"] == 1
+    assert body["items"][0]["title"] == "[미리보기] 물류 보조"
+    assert body["items"][0]["url"].endswith("preview-only")
+
+    after = client.get("/v1/sync/bootstrap")
+    after_titles = {p["title"] for p in after.json()["posts"]}
+    assert "[미리보기] 물류 보조" not in after_titles
+    assert after_titles == before_titles

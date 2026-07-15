@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_routes.dart';
-import 'package:map/core/hiring/permanent_commission_sync_service.dart';
 import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
@@ -43,7 +41,6 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
     super.initState();
     _rebuildTabs();
     if (CorporateShellAccess.isSignedInCorporate) {
-      _syncPermanentCommission();
       _clearPromoExposureIfNeeded();
     }
   }
@@ -60,17 +57,6 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   @override
   void dispose() {
     super.dispose();
-  }
-
-  Future<void> _syncPermanentCommission() async {
-    if (!ProductFeatureFlags.isPermanentHireEnabled) return;
-    final profile = AuthSession.instance.currentUser?.corporateProfile ??
-        await AuthSession.instance.ensureCorporateProfile();
-    if (profile == null) return;
-    await PermanentCommissionSyncService().pullForCompany(
-      companyKey: profile.companyKey,
-      companyName: profile.companyName,
-    );
   }
 
   void _rebuildTabs() {

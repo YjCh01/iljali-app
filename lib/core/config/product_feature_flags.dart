@@ -15,11 +15,6 @@ abstract final class ProductFeatureFlags {
     defaultValue: true,
   );
 
-  static const bool enablePermanentHire = bool.fromEnvironment(
-    'ENABLE_PERMANENT_HIRE',
-    defaultValue: false,
-  );
-
   /// 물류·식품 제조 제휴사 선택 위저드 (쿠팡·다이소 등)
   static const bool enablePremiumPartnerWizard = bool.fromEnvironment(
     'ENABLE_PREMIUM_PARTNER_WIZARD',
@@ -53,8 +48,6 @@ abstract final class ProductFeatureFlags {
   static bool get isWorkerGeneralEnabled => enableWorkerGeneral;
 
   static bool get isWorkerContractEnabled => enableWorkerContract;
-
-  static bool get isPermanentHireEnabled => enablePermanentHire;
 
   static bool get isPremiumPartnerWizardEnabled => enablePremiumPartnerWizard;
 
@@ -128,25 +121,6 @@ abstract final class ProductFeatureFlags {
             reEnableSteps:
                 '빌드/실행 시 --dart-define=ENABLE_WORKER_CONTRACT=true 추가. '
                 '계약직 선택 시 상시직 합격 플로우와 함께 검토.',
-          ),
-        if (!enablePermanentHire)
-          const DisabledFeature(
-            id: 'permanent_hire',
-            displayName: '상시직 채용',
-            description: '채팅 상시직 합격, 상시직 재직자 관리, 수수료 동기화, 건강보험 인증 연계',
-            flagKey: 'ENABLE_PERMANENT_HIRE',
-            affectedFiles: [
-              'lib/features/hiring/presentation/pages/application_chat_page.dart',
-              'lib/features/corporate/presentation/pages/corporate_home_shell_page.dart',
-              'lib/features/corporate/presentation/pages/corporate_permanent_workers_page.dart',
-              'lib/features/corporate/presentation/pages/corporate_welcome_onboarding_page.dart',
-              'lib/features/corporate/presentation/pages/tabs/corporate_home_tab.dart',
-              'lib/core/constants/app_strings.dart',
-              'lib/app.dart',
-            ],
-            reEnableSteps:
-                '빌드/실행 시 --dart-define=ENABLE_PERMANENT_HIRE=true 추가. '
-                '상시직 페이지·채팅 합격 버튼·홈 셸 commission sync 확인.',
           ),
         if (!enablePremiumPartnerWizard)
           const DisabledFeature(

@@ -1,5 +1,33 @@
 - **고객센터 이메일**: iljariapp@gmail.com (`BusinessDisclosure` · 약관 · 스토어 listing)
 
+## 2026-07-14 — 알바몬 본문=기업로고 오탐 수정
+
+- **확인**: 프로덕션 미러 이미지 전부 점검 → Dr.Job/GOOD MORNING/albatong 등 **전부 기업 로고**. 원인: 셸 HTML의 `C-Photo-View`/`detail-recruit-base__logo`를 본문으로 수집.
+- **정답 소스**: `POST https://bff-general.albamon.com/v1/recruit/view/detail` 의 `content` (iframe `/jobs/detail/content/{id}`).
+- **구현**: `albamon_bff_scraper` — BFF 수집, `.bLogo`·템플릿·C-Photo-View 제외, `source_url`을 description_body에 저장.
+- **재정비**: remirror가 `클릭하여 상세내용을 확인하세요` 로고 import를 비우고, source_url 있으면 BFF 재수집.
+- 기존 공고는 **API 배포 후 「이미지 본문 재정비」→ 알바몬 URL로 재등록** 필요.
+
+## 2026-07-14 — 이미지 공고 본문 깨짐 수정
+
+- **원인**: (1) 알바몬 `file.albamon.com` 핫링크 403 → `Image.network` 깨짐 (2) 사이드바/og 텍스트 ≥40자면 이미지 추출 스킵 (3) 확장자 없는 `C-Photo-View?FN=` URL 필터링
+- **서버**: scrape 시 이미지를 `/media/job-posts`로 미러 · `GET /v1/job-media/proxy` · `POST /v1/admin/ops/jobs/remirror-description-images`
+- **클라이언트**: `JobPostDescriptionImage.resolveDisplayUrl` 프록시 · images 있으면 HtmlWidget 중복 스킵 · html-only면 img src 추출
+- 테스트: extractor/mirror 7 · body/image 7
+- 기존 공고는 remirror 또는 재등록 후 표시
+
+## 2026-07-14 — 알바몬 가져오기: 미리보기 후 선택 등록
+
+- 일괄 자동 DB 등록 제거 → `preview-import-urls`로 목록만 로드
+- 어드민 UI: 체크박스 · 개별「등록」·「선택 N건 등록」
+
+## 2026-07-14 — 이벤트핑 + 알바몬 검색URL 일괄등록
+
+- **이벤트핑**: 서버 `event_pins` CRUD · sync bootstrap · 구직자 지도 렌더/콜아웃(퀴즈·투표·안내) · 어드민 공고 패널 `AdminEventPinsCard`
+- **알바몬**: 검색/목록 URL이면 상세 링크 확장 후 기존 bulk-import로 아라컴퍼니 공고 등록
+- 테스트: `test_event_pins_and_search_expand` 3 pass
+- 주의: 알바몬 HTML/ToS는 취약·법적 리스크 — 어드민 전용·레이트리밋
+
 ## 2026-07-14 — 통근버스 메인급 + 도로 추종 노선
 
 - **IA**: 공고 탭 상단「통근버스 노선」CTA · 근태 탭「통근버스 · 셔틀 근태」타일 · optional services 카피 승격

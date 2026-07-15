@@ -23,6 +23,8 @@ class JobPostRow(Base):
     description_body_json: Mapped[str] = mapped_column(Text, default="{}")
     workplace_latitude: Mapped[float | None] = mapped_column(nullable=True)
     workplace_longitude: Mapped[float | None] = mapped_column(nullable=True)
+    # 같은 물리적 근무지 식별 — 좌표/이름으로 매번 추측하지 않도록 resolve-or-create.
+    workplace_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     notification_settings_json: Mapped[str] = mapped_column(Text, default="{}")
     status: Mapped[str] = mapped_column(String(32), default="recruiting")
     posted_by_email: Mapped[str] = mapped_column(String(200), default="", index=True)
@@ -31,6 +33,19 @@ class JobPostRow(Base):
     map_impression_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class WorkplaceRow(Base):
+    """같은 회사 내 물리적 근무지 — 좌표(~5m)·근무지명으로 resolve-or-create."""
+
+    __tablename__ = "workplaces"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    company_key: Mapped[str] = mapped_column(String(10), default="", index=True)
+    warehouse_name: Mapped[str] = mapped_column(String(200), default="")
+    latitude: Mapped[float | None] = mapped_column(nullable=True)
+    longitude: Mapped[float | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class JobApplicationRow(Base):
@@ -80,3 +95,9 @@ class PaymentOrderRow(Base):
     mock: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 구매 의도 — confirmed 전환 시 이 정보로 지갑 크레딧을 자동 지급한다
+    # (알림핀/PUSH 이용권 등 상품 종류에 무관하게 결제 confirm 한 곳에서만 지급).
+    credit_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    credit_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    credit_location_slots: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    credit_granted: Mapped[bool] = mapped_column(Boolean, default=False)

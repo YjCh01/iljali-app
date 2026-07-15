@@ -55,6 +55,7 @@ _JOB_POST_COLUMNS_SQLITE = {
     "description_body_json": "ALTER TABLE job_posts ADD COLUMN description_body_json TEXT DEFAULT '{}'",
     "workplace_latitude": "ALTER TABLE job_posts ADD COLUMN workplace_latitude REAL",
     "workplace_longitude": "ALTER TABLE job_posts ADD COLUMN workplace_longitude REAL",
+    "workplace_id": "ALTER TABLE job_posts ADD COLUMN workplace_id VARCHAR(32)",
     "notification_settings_json": "ALTER TABLE job_posts ADD COLUMN notification_settings_json TEXT DEFAULT '{}'",
 }
 
@@ -67,6 +68,7 @@ _JOB_POST_COLUMNS_POSTGRES = {
     "description_body_json": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS description_body_json TEXT DEFAULT '{}'",
     "workplace_latitude": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_latitude DOUBLE PRECISION",
     "workplace_longitude": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_longitude DOUBLE PRECISION",
+    "workplace_id": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_id VARCHAR(32)",
     "notification_settings_json": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS notification_settings_json TEXT DEFAULT '{}'",
 }
 
@@ -135,6 +137,10 @@ _PUSH_WALLET_COLUMNS_SQLITE = {
     "push_ticket_credits": (
         "ALTER TABLE employer_push_wallets ADD COLUMN push_ticket_credits INTEGER DEFAULT 0"
     ),
+    "exposure_push_bundle_credits": (
+        "ALTER TABLE employer_push_wallets ADD COLUMN "
+        "exposure_push_bundle_credits INTEGER DEFAULT 0"
+    ),
 }
 
 _PUSH_WALLET_COLUMNS_POSTGRES = {
@@ -142,14 +148,111 @@ _PUSH_WALLET_COLUMNS_POSTGRES = {
         "ALTER TABLE employer_push_wallets ADD COLUMN IF NOT EXISTS "
         "push_ticket_credits INTEGER DEFAULT 0"
     ),
+    "exposure_push_bundle_credits": (
+        "ALTER TABLE employer_push_wallets ADD COLUMN IF NOT EXISTS "
+        "exposure_push_bundle_credits INTEGER DEFAULT 0"
+    ),
+}
+
+
+_PUSH_WALLET_CREDIT_LOT_COLUMNS_SQLITE = {
+    "remaining": "ALTER TABLE push_wallet_credit_lots ADD COLUMN remaining INTEGER",
+}
+
+_PUSH_WALLET_CREDIT_LOT_COLUMNS_POSTGRES = {
+    "remaining": (
+        "ALTER TABLE push_wallet_credit_lots ADD COLUMN IF NOT EXISTS "
+        "remaining INTEGER"
+    ),
 }
 
 
 def ensure_push_wallet_schema() -> None:
     if settings.database_url.startswith("sqlite"):
         _ensure_sqlite_columns("employer_push_wallets", _PUSH_WALLET_COLUMNS_SQLITE)
+        _ensure_sqlite_columns(
+            "company_bonus_ledger", _COMPANY_BONUS_LEDGER_COLUMNS_SQLITE
+        )
+        _ensure_sqlite_columns(
+            "push_wallet_credit_lots", _PUSH_WALLET_CREDIT_LOT_COLUMNS_SQLITE
+        )
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE push_wallet_credit_lots SET remaining = count "
+                    "WHERE remaining IS NULL"
+                )
+            )
     else:
         _ensure_postgres_columns(_PUSH_WALLET_COLUMNS_POSTGRES)
+        _ensure_postgres_columns(_COMPANY_BONUS_LEDGER_COLUMNS_POSTGRES)
+        _ensure_postgres_columns(_PUSH_WALLET_CREDIT_LOT_COLUMNS_POSTGRES)
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE push_wallet_credit_lots SET remaining = count "
+                    "WHERE remaining IS NULL"
+                )
+            )
+
+
+_COMPANY_BONUS_LEDGER_COLUMNS_SQLITE = {
+    "verification_bonus_claimed": (
+        "ALTER TABLE company_bonus_ledger ADD COLUMN "
+        "verification_bonus_claimed BOOLEAN DEFAULT 0"
+    ),
+    "verification_bonus_claimed_at": (
+        "ALTER TABLE company_bonus_ledger ADD COLUMN "
+        "verification_bonus_claimed_at DATETIME"
+    ),
+}
+
+_COMPANY_BONUS_LEDGER_COLUMNS_POSTGRES = {
+    "verification_bonus_claimed": (
+        "ALTER TABLE company_bonus_ledger ADD COLUMN IF NOT EXISTS "
+        "verification_bonus_claimed BOOLEAN DEFAULT FALSE"
+    ),
+    "verification_bonus_claimed_at": (
+        "ALTER TABLE company_bonus_ledger ADD COLUMN IF NOT EXISTS "
+        "verification_bonus_claimed_at TIMESTAMP"
+    ),
+}
+
+
+_PAYMENT_ORDER_COLUMNS_SQLITE = {
+    "credit_type": "ALTER TABLE payment_orders ADD COLUMN credit_type VARCHAR(32)",
+    "credit_count": "ALTER TABLE payment_orders ADD COLUMN credit_count INTEGER",
+    "credit_location_slots": (
+        "ALTER TABLE payment_orders ADD COLUMN credit_location_slots INTEGER"
+    ),
+    "credit_granted": (
+        "ALTER TABLE payment_orders ADD COLUMN credit_granted BOOLEAN DEFAULT 0"
+    ),
+}
+
+_PAYMENT_ORDER_COLUMNS_POSTGRES = {
+    "credit_type": (
+        "ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS credit_type VARCHAR(32)"
+    ),
+    "credit_count": (
+        "ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS credit_count INTEGER"
+    ),
+    "credit_location_slots": (
+        "ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS "
+        "credit_location_slots INTEGER"
+    ),
+    "credit_granted": (
+        "ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS "
+        "credit_granted BOOLEAN DEFAULT FALSE"
+    ),
+}
+
+
+def ensure_payment_order_schema() -> None:
+    if settings.database_url.startswith("sqlite"):
+        _ensure_sqlite_columns("payment_orders", _PAYMENT_ORDER_COLUMNS_SQLITE)
+    else:
+        _ensure_postgres_columns(_PAYMENT_ORDER_COLUMNS_POSTGRES)
 
 
 _ADMIN_ANNOUNCEMENT_COLUMNS_SQLITE = {

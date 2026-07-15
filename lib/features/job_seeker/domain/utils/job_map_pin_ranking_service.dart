@@ -32,11 +32,12 @@ abstract final class JobMapPinRankingService {
     JobMapPinRankingContext context = const JobMapPinRankingContext(),
     DateTime? now,
   }) {
-    final active = pins.where((pin) => !pin.isClosedGhost).toList();
+    final jobs = pins.where((pin) => !pin.isClosedGhost && !pin.isEvent).toList();
+    final events = pins.where((pin) => pin.isEvent).toList();
     final ghosts = pins.where((pin) => pin.isClosedGhost).toList();
-    if (active.length <= 1) return [...active, ...ghosts];
+    if (jobs.length <= 1) return [...jobs, ...events, ...ghosts];
     final clock = now ?? DateTime.now();
-    final scored = active
+    final scored = jobs
         .map(
           (pin) => (
             pin: pin,
@@ -49,7 +50,7 @@ abstract final class JobMapPinRankingService {
       if (byScore != 0) return byScore;
       return b.pin.post.postedAt.compareTo(a.pin.post.postedAt);
     });
-    return [...scored.map((e) => e.pin), ...ghosts];
+    return [...scored.map((e) => e.pin), ...events, ...ghosts];
   }
 
   static double compositeScore(
@@ -86,6 +87,7 @@ abstract final class JobMapPinRankingService {
       JobMapPinDisplayTier.packageActive => 1.0,
       JobMapPinDisplayTier.premiumWage => 0.45,
       JobMapPinDisplayTier.standard => 0.25,
+      JobMapPinDisplayTier.event => 0.15,
       JobMapPinDisplayTier.closedGhost => 0.0,
     };
   }

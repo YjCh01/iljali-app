@@ -9,10 +9,6 @@ void main() {
       expect(ProductFeatureFlags.isWorkerContractEnabled, isTrue);
     });
 
-    test('permanent hire is disabled', () {
-      expect(ProductFeatureFlags.isPermanentHireEnabled, isFalse);
-    });
-
     test('logistics-focused flows stay enabled', () {
       expect(ProductFeatureFlags.isPremiumPartnerWizardEnabled, isTrue);
       expect(ProductFeatureFlags.isEnterpriseOutsourcingEnabled, isTrue);
@@ -41,7 +37,7 @@ void main() {
     test('disabledFeatures contains expected ids', () {
       final ids =
           ProductFeatureFlags.disabledFeatures.map((f) => f.id).toList();
-      expect(ids, containsAll(['worker_general', 'permanent_hire']));
+      expect(ids, containsAll(['worker_general']));
       expect(ids, isNot(contains('worker_contract')));
     });
 

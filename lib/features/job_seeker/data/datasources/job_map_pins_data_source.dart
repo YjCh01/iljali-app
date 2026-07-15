@@ -4,8 +4,10 @@ import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/job_seeker/data/datasources/closed_ghost_pin_local_data_source.dart';
+import 'package:map/features/job_seeker/data/datasources/event_map_pin_local_data_source.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/factories/closed_ghost_job_map_pin_factory.dart';
+import 'package:map/features/job_seeker/domain/factories/event_job_map_pin_factory.dart';
 import 'package:map/features/job_seeker/domain/utils/closed_ghost_pin_suppression_policy.dart';
 import 'package:map/features/map_dashboard/data/datasources/warehouse_local_data_source.dart';
 import 'package:map/features/map_dashboard/domain/entities/warehouse.dart';
@@ -21,11 +23,13 @@ class JobMapPinsLocalDataSource implements JobMapPinsDataSource {
     this.jobPosts = const CorporateJobPostLocalDataSourceImpl(),
     this.warehouses = const WarehouseLocalDataSourceImpl(),
     this.ghostPins = const ClosedGhostPinLocalDataSourceImpl(),
+    this.eventPins = const EventMapPinLocalDataSourceImpl(),
   });
 
   final CorporateJobPostLocalDataSource jobPosts;
   final WarehouseLocalDataSource warehouses;
   final ClosedGhostPinLocalDataSource ghostPins;
+  final EventMapPinLocalDataSource eventPins;
 
   @override
   Future<List<JobMapPin>> fetchActiveJobPins({
@@ -53,13 +57,17 @@ class JobMapPinsLocalDataSource implements JobMapPinsDataSource {
       );
     }
 
-    if (!includeClosedGhosts) return activePins;
+    final events = await eventPins.fetchAll();
+    final eventMapPins =
+        events.map(EventJobMapPinFactory.fromEvent).toList(growable: false);
+
+    if (!includeClosedGhosts) return [...activePins, ...eventMapPins];
 
     final ghostMapPins = await _fetchClosedGhostPins(
       posts: posts,
       warehouseList: warehouseList,
     );
-    return [...activePins, ...ghostMapPins];
+    return [...activePins, ...eventMapPins, ...ghostMapPins];
   }
 
   Future<List<JobMapPin>> _fetchClosedGhostPins({

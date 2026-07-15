@@ -10,6 +10,7 @@ import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_ranking_context.dart';
 import 'package:map/features/job_seeker/presentation/pages/job_post_detail_page.dart';
 import 'package:map/features/job_seeker/presentation/widgets/closed_ghost_pin_callout_card.dart';
+import 'package:map/features/job_seeker/presentation/widgets/event_pin_callout_card.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_callout_card.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_map_cluster_list_sheet.dart';
 import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
@@ -104,7 +105,7 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   }
 
   Future<void> _selectPin(JobMapPin pin) async {
-    if (pin.isClosedGhost) {
+    if (pin.isClosedGhost || pin.isEvent) {
       setState(() {
         _clusterPins = null;
         _calloutPin = pin;
@@ -440,18 +441,23 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
                         onClose: _closeCluster,
                         onPinSelected: _selectPinFromCluster,
                       )
-                    : callout == null
+                        : callout == null
                         ? const SizedBox.shrink()
                         : callout.isClosedGhost
                             ? ClosedGhostPinCalloutCard(
                                 pin: callout,
                                 onClose: _closeSheet,
                               )
-                            : JobMapPinCalloutCard(
-                                pin: callout,
-                                onClose: _closeSheet,
-                                onViewDetail: () => _openDetail(callout),
-                              ),
+                            : callout.isEvent
+                                ? EventPinCalloutCard(
+                                    pin: callout,
+                                    onClose: _closeSheet,
+                                  )
+                                : JobMapPinCalloutCard(
+                                    pin: callout,
+                                    onClose: _closeSheet,
+                                    onViewDetail: () => _openDetail(callout),
+                                  ),
               ),
             ),
           ),

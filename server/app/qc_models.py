@@ -112,6 +112,25 @@ class ClosedGhostPinRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class EventPinRow(Base):
+    """어드민 이벤트핑 — 퀴즈·투표 등 구직자 참여 핀."""
+
+    __tablename__ = "event_pins"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    latitude: Mapped[float] = mapped_column()
+    longitude: Mapped[float] = mapped_column()
+    title: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    # info | quiz | vote
+    kind: Mapped[str] = mapped_column(String(16), default="info", index=True)
+    color_hex: Mapped[str] = mapped_column(String(16), default="#FF6F00")
+    # JSON: {"options":["A","B"], "correct_index":0} etc.
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class ClosedGhostRouteRow(Base):
     __tablename__ = "closed_ghost_routes"
 

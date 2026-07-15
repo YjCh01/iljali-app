@@ -24,10 +24,7 @@ abstract final class JobMapMarkerFactory {
     final style = _styleFor(pin);
     final bodyColor = isSelected
         ? MapPinColors.selected
-        : switch (pin.displayTier) {
-            JobMapPinDisplayTier.packageActive => MapPinColors.freeGray,
-            _ => pin.displayTier.pinColor,
-          };
+        : _bodyColorFor(pin);
 
     final icon = await MapPinOverlayIconCache.pin(
       style: style,
@@ -51,7 +48,11 @@ abstract final class JobMapMarkerFactory {
       id: pin.mapMarkerId,
       position: NLatLng(pin.latitude, pin.longitude),
       tags: {
-        'type': pin.isClosedGhost ? 'closed_ghost' : 'job_post',
+        'type': pin.isEvent
+            ? 'event'
+            : pin.isClosedGhost
+                ? 'closed_ghost'
+                : 'job_post',
         'pin_tier': pin.displayTier.name,
         if (isOwn) 'own': '1',
         if (isSelected) 'selected': '1',
@@ -67,6 +68,29 @@ abstract final class JobMapMarkerFactory {
     }
 
     return marker;
+  }
+
+  static Color _bodyColorFor(JobMapPin pin) {
+    if (pin.isEvent) {
+      final hex = pin.eventPin?.colorHex;
+      final parsed = _parseHex(hex);
+      if (parsed != null) return parsed;
+      return pin.displayTier.pinColor;
+    }
+    return switch (pin.displayTier) {
+      JobMapPinDisplayTier.packageActive => MapPinColors.freeGray,
+      _ => pin.displayTier.pinColor,
+    };
+  }
+
+  static Color? _parseHex(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    var value = hex.replaceFirst('#', '');
+    if (value.length == 6) value = 'FF$value';
+    if (value.length != 8) return null;
+    final parsed = int.tryParse(value, radix: 16);
+    if (parsed == null) return null;
+    return Color(parsed);
   }
 
   static Future<Set<NClusterableMarker>> createAll(

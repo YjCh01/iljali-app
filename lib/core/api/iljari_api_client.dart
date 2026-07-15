@@ -601,6 +601,18 @@ class IljariApiClient {
     });
   }
 
+  /// 크레딧 실사용(소비) — 잔액 부족 시 [IljariApiException] (402) 발생.
+  Future<Map<String, dynamic>> consumeWalletCredit({
+    required String companyKey,
+    required String creditType,
+    int count = 1,
+  }) async {
+    return _post('/v1/wallet/$companyKey/consume', {
+      'credit_type': creditType,
+      'count': count,
+    });
+  }
+
   Future<Map<String, dynamic>> syncBootstrap({
     String? seekerEmail,
     String? memberEmail,

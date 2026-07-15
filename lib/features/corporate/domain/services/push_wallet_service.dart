@@ -1,3 +1,5 @@
+import 'package:map/core/api/iljari_api_client.dart';
+import 'package:map/core/config/env_config.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/features/corporate/data/repositories/company_bonus_ledger_repository.dart';
@@ -175,32 +177,95 @@ class PushWalletService {
     return updated;
   }
 
+  /// 결제 confirm으로 서버 지갑에 크레딧이 지급된 뒤 — 서버 값을 로컬에 반영.
+  /// 서버 미연동(QC/로컬 개발) 환경에서는 로컬 지갑을 그대로 반환한다.
+  Future<EmployerPushWallet> refreshFromServer(
+    CorporateMemberProfile profile,
+  ) async {
+    final local = await loadWallet(profile);
+    if (!EnvConfig.isComplianceApiEnabled) return local;
+
+    try {
+      final json = await IljariApiClient().getWallet(profile.companyKey);
+      final merged = local.copyWith(
+        packageCredits: json['package_credits'] as int?,
+        pushTicketCredits: json['push_ticket_credits'] as int?,
+        exposurePushBundleCredits: json['exposure_push_bundle_credits'] as int?,
+        locationSlotsFromPackages: json['location_slots_from_packages'] as int?,
+        signupBonusRemaining: json['signup_bonus_remaining'] as int?,
+        cashBalanceKrw: json['cash_balance_krw'] as int?,
+      );
+      await _persist(profile, merged);
+      return merged;
+    } on Object {
+      return local;
+    }
+  }
+
   Future<PushConsumeResult> tryConsumePush(
     CorporateMemberProfile profile,
   ) async {
     return tryConsumeRecruitmentCredit(profile);
   }
 
-  /// 근무지·모집지역 PUSH — 일자리 알림핀 1회
-  Future<PushConsumeResult> tryConsumeRecruitmentCredit(
-    CorporateMemberProfile profile,
-  ) async {
-    final wallet = await loadWallet(profile);
-    if (wallet.packageCredits > 0) {
-      final nextCredits = wallet.packageCredits - 1;
-      final updated = wallet.copyWith(
-        packageCredits: nextCredits,
-        locationSlotsFromPackages: nextCredits,
-      );
-      await _persist(profile, updated);
-      return PushConsumeResult(
+  /// 서버 연동 시 서버 크레딧을 먼저 소비(잔액 검증 포함)하고 로컬은 서버 응답으로
+  /// 갱신 — 서버가 없거나(QC/로컬 개발) 실패하면 로컬 전용 소비로 폴백하지 않고
+  /// 그대로 실패 처리한다(오프라인에서 소비를 허용하면 서버와 잔액이 어긋날 수 있음).
+  Future<PushConsumeResult> _consumeCredit({
+    required CorporateMemberProfile profile,
+    required String serverCreditType,
+    required int Function(EmployerPushWallet) localBalance,
+    required Future<void> Function(EmployerPushWallet wallet) localDecrement,
+    required String insufficientMessage,
+  }) async {
+    if (EnvConfig.isComplianceApiEnabled) {
+      try {
+        await IljariApiClient().consumeWalletCredit(
+          companyKey: profile.companyKey,
+          creditType: serverCreditType,
+        );
+      } on Object {
+        return PushConsumeResult.fail(insufficientMessage);
+      }
+      await refreshFromServer(profile);
+      return const PushConsumeResult(
         success: true,
         source: PushConsumeSource.packageCredit,
         radiusMeters: PushPackageCatalog.packagePushRadiusM,
       );
     }
-    return const PushConsumeResult.fail(
-      '일자리 알림핀이 부족합니다. 구매하면 즉시 충전됩니다.',
+
+    final wallet = await loadWallet(profile);
+    if (localBalance(wallet) <= 0) {
+      return PushConsumeResult.fail(insufficientMessage);
+    }
+    await localDecrement(wallet);
+    return const PushConsumeResult(
+      success: true,
+      source: PushConsumeSource.packageCredit,
+      radiusMeters: PushPackageCatalog.packagePushRadiusM,
+    );
+  }
+
+  /// 근무지·모집지역 PUSH — 일자리 알림핀 1회
+  Future<PushConsumeResult> tryConsumeRecruitmentCredit(
+    CorporateMemberProfile profile,
+  ) {
+    return _consumeCredit(
+      profile: profile,
+      serverCreditType: 'package',
+      localBalance: (wallet) => wallet.packageCredits,
+      localDecrement: (wallet) async {
+        final nextCredits = wallet.packageCredits - 1;
+        await _persist(
+          profile,
+          wallet.copyWith(
+            packageCredits: nextCredits,
+            locationSlotsFromPackages: nextCredits,
+          ),
+        );
+      },
+      insufficientMessage: '일자리 알림핀이 부족합니다. 구매하면 즉시 충전됩니다.',
     );
   }
 
@@ -230,43 +295,36 @@ class PushWalletService {
   /// 노출+PUSH 번들 1회 — 알림핀/정류장 활성화와 해당 위치 PUSH 1회
   Future<PushConsumeResult> tryConsumeExposurePushBundle(
     CorporateMemberProfile profile,
-  ) async {
-    final wallet = await loadWallet(profile);
-    if (wallet.exposurePushBundleCredits > 0) {
-      final updated = wallet.copyWith(
-        exposurePushBundleCredits: wallet.exposurePushBundleCredits - 1,
-      );
-      await _persist(profile, updated);
-      return const PushConsumeResult(
-        success: true,
-        source: PushConsumeSource.packageCredit,
-        radiusMeters: PushPackageCatalog.packagePushRadiusM,
-      );
-    }
-    return PushConsumeResult.fail(
-      '노출+PUSH 이용권이 없습니다. '
-      '${PushPackageCatalog.krwSuffix(PushPackageCatalog.exposureWithPushUnitPriceKrw)} 상품을 구매해 주세요.',
+  ) {
+    return _consumeCredit(
+      profile: profile,
+      serverCreditType: 'exposure_bundle',
+      localBalance: (wallet) => wallet.exposurePushBundleCredits,
+      localDecrement: (wallet) => _persist(
+        profile,
+        wallet.copyWith(
+          exposurePushBundleCredits: wallet.exposurePushBundleCredits - 1,
+        ),
+      ),
+      insufficientMessage: '노출+PUSH 이용권이 없습니다. '
+          '${PushPackageCatalog.krwSuffix(PushPackageCatalog.exposureWithPushUnitPriceKrw)} 상품을 구매해 주세요.',
     );
   }
 
   /// PUSH 알림권 1회 소진 — 알림핀·정류장 1곳 · 1회 발송
   Future<PushConsumeResult> tryConsumePushTicket(
     CorporateMemberProfile profile,
-  ) async {
-    final wallet = await loadWallet(profile);
-    if (wallet.pushTicketCredits > 0) {
-      final updated = wallet.copyWith(
-        pushTicketCredits: wallet.pushTicketCredits - 1,
-      );
-      await _persist(profile, updated);
-      return const PushConsumeResult(
-        success: true,
-        source: PushConsumeSource.packageCredit,
-        radiusMeters: PushPackageCatalog.packagePushRadiusM,
-      );
-    }
-    return PushConsumeResult.fail(
-      'PUSH 알림권이 없습니다. ${PushTicketCatalog.unitPriceLabel} 결제 후 발송할 수 있습니다.',
+  ) {
+    return _consumeCredit(
+      profile: profile,
+      serverCreditType: 'push_ticket',
+      localBalance: (wallet) => wallet.pushTicketCredits,
+      localDecrement: (wallet) => _persist(
+        profile,
+        wallet.copyWith(pushTicketCredits: wallet.pushTicketCredits - 1),
+      ),
+      insufficientMessage:
+          'PUSH 알림권이 없습니다. ${PushTicketCatalog.unitPriceLabel} 결제 후 발송할 수 있습니다.',
     );
   }
 

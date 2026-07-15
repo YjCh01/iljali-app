@@ -48,9 +48,10 @@ class JobPostDescriptionBodyView extends StatelessWidget {
           _BodyImage(url: body.imageUrls[i]),
           if (i < body.imageUrls.length - 1) const SizedBox(height: 10),
         ],
-        if (body.html.trim().isNotEmpty) ...[
-          if (body.text.trim().isNotEmpty || body.imageUrls.isNotEmpty)
-            SizedBox(height: compact ? 10 : 14),
+        // images가 있으면 html 내 <img> 중복 렌더(HtmlWidget) 스킵 —
+        // 외부 CDN은 HtmlWidget이 프록시를 타지 않아 깨짐
+        if (body.html.trim().isNotEmpty && body.imageUrls.isEmpty) ...[
+          if (body.text.trim().isNotEmpty) SizedBox(height: compact ? 10 : 14),
           HtmlWidget(
             body.html.trim(),
             textStyle: TextStyle(

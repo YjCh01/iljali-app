@@ -136,6 +136,16 @@ class AdminOpsApiClient {
   ) async =>
       _post('/v1/admin/ops/jobs/bulk', {'posts': posts});
 
+  /// 알바몬 등 URL → 스크래핑 미리보기 (DB 미등록)
+  Future<Map<String, dynamic>> previewImportJobUrls({
+    String? urlText,
+    List<String>? urls,
+  }) async =>
+      _post('/v1/admin/ops/jobs/preview-import-urls', {
+        if (urlText != null && urlText.trim().isNotEmpty) 'url_text': urlText,
+        if (urls != null && urls.isNotEmpty) 'urls': urls,
+      });
+
   /// 알바몬 등 URL 목록 → 스크래핑 후 공고 일괄 등록
   Future<Map<String, dynamic>> bulkImportJobUrls({
     String? urlText,
@@ -154,6 +164,16 @@ class AdminOpsApiClient {
         'posted_by_email': postedByEmail,
         'posted_by_name': postedByName,
         'activate_job_pin': activateJobPin,
+      });
+
+  /// 기존 공고의 외부 CDN 본문 이미지를 /media/job-posts 로 재미러
+  Future<Map<String, dynamic>> remirrorJobDescriptionImages({
+    String? postId,
+    int limit = 50,
+  }) async =>
+      _post('/v1/admin/ops/jobs/remirror-description-images', {
+        if (postId != null && postId.trim().isNotEmpty) 'post_id': postId.trim(),
+        'limit': limit,
       });
 
   Future<Map<String, dynamic>> getBusLocationTowerPilot() async =>
@@ -259,6 +279,44 @@ class AdminOpsApiClient {
   Future<void> deleteGhostPin(String pinId) async {
     final response = await _client.delete(
       Uri.parse('$_baseUrl/v1/admin/ops/ghost-pins/$pinId'),
+      headers: _headers,
+    );
+    _decode(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listEventPins() async {
+    final body = _decode(await _client.get(
+      Uri.parse('$_baseUrl/v1/admin/ops/event-pins'),
+      headers: _headers,
+    ));
+    final list = body['event_pins'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> createEventPin({
+    required double latitude,
+    required double longitude,
+    String title = '',
+    String body = '',
+    String kind = 'info',
+    String colorHex = '#FF6F00',
+    Map<String, dynamic> payload = const {},
+    bool active = true,
+  }) async =>
+      _post('/v1/admin/ops/event-pins', {
+        'latitude': latitude,
+        'longitude': longitude,
+        'title': title,
+        'body': body,
+        'kind': kind,
+        'color_hex': colorHex,
+        'payload': payload,
+        'active': active,
+      });
+
+  Future<void> deleteEventPin(String pinId) async {
+    final response = await _client.delete(
+      Uri.parse('$_baseUrl/v1/admin/ops/event-pins/$pinId'),
       headers: _headers,
     );
     _decode(response);

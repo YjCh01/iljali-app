@@ -50,6 +50,9 @@ class TossPaymentsGatewayService implements PaymentGatewayService {
     required String paymentKey,
     required String orderId,
     required int amountKrw,
+    String? creditType,
+    int? creditCount,
+    int? creditLocationSlots,
   }) async {
     if (!EnvConfig.isComplianceApiEnabled) {
       return PaymentResult.ok('TOSS-LOCAL-$orderId');
@@ -63,6 +66,10 @@ class TossPaymentsGatewayService implements PaymentGatewayService {
         'payment_key': paymentKey,
         'order_id': orderId,
         'amount_krw': amountKrw,
+        if (creditType != null) 'credit_type': creditType,
+        if (creditCount != null) 'credit_count': creditCount,
+        if (creditLocationSlots != null)
+          'credit_location_slots': creditLocationSlots,
       }),
     );
 

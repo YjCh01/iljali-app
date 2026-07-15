@@ -13,10 +13,17 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import settings
+from app.services.albamon_bff_scraper import (
+    extract_albamon_recruit_no,
+    fetch_albamon_bff_detail,
+    fields_from_albamon_view,
+)
 from app.services.job_post_image_extractor import (
     extract_image_job_body,
+    images_to_html,
     should_try_image_extract,
 )
+from app.services.job_post_image_mirror import mirror_image_urls
 
 _USER_AGENT = (
     "Mozilla/5.0 (compatible; IljariJobImporter/1.0; +https://iljari.co.kr/bot)"
@@ -214,6 +221,12 @@ async def fetch_job_post(url: str, *, platform: str | None = None) -> ScrapeResu
     detected = platform or detect_platform(trimmed)
     _rate_limit_wait()
 
+    # 알바몬: 셸 HTML의 기업로고(C-Photo-View)가 아닌 BFF 모집요강 content 사용
+    if detected == "albamon":
+        bff = await _fetch_albamon_via_bff(trimmed)
+        if bff is not None:
+            return bff
+
     try:
         async with httpx.AsyncClient(
             timeout=settings.job_scrape_timeout_sec,
@@ -223,6 +236,56 @@ async def fetch_job_post(url: str, *, platform: str | None = None) -> ScrapeResu
             response = await client.get(trimmed)
             response.raise_for_status()
             html = response.text
+
+            soup = BeautifulSoup(html, "lxml")
+            raw_text = _visible_text(soup)
+            if len(raw_text) < 40:
+                raw_text = (
+                    f"{_meta_content(soup, 'og:title')}\n"
+                    f"{_meta_content(soup, 'og:description')}"
+                )
+
+            fields = _site_enrich(detected, soup, raw_text)
+
+            job_description = (fields.get("job_description") or "").strip()
+            description_html = ""
+            description_images: list[str] = []
+            # 알바몬 셸 HTML 이미지 추출은 로고 오탐이 많아 BFF 실패 시에만 시도하지 않음
+            if detected != "albamon" and should_try_image_extract(
+                job_description, platform=detected
+            ):
+                description_html, description_images = extract_image_job_body(
+                    soup,
+                    trimmed,
+                    platform=detected,
+                )
+                if description_images:
+                    description_images = await mirror_image_urls(
+                        description_images,
+                        referer=trimmed,
+                        client=client,
+                    )
+                    description_html = images_to_html(description_images)
+                    if not job_description:
+                        job_description = "이미지 공고"
+                    fields["confidence"] = min(
+                        float(fields.get("confidence", 0.5)) + 0.25,
+                        0.95,
+                    )
+
+            return ScrapeResult(
+                platform=detected,
+                raw_text=raw_text[:8000],
+                title=fields.get("title", ""),
+                hourly_wage=fields.get("hourly_wage"),
+                work_schedule=fields.get("work_schedule", ""),
+                workplace=fields.get("workplace"),
+                job_description=job_description,
+                description_html=description_html,
+                description_images=description_images,
+                confidence=float(fields.get("confidence", 0.5)),
+                source_url=trimmed,
+            )
     except httpx.HTTPError as exc:
         return ScrapeResult(
             platform=detected,
@@ -231,39 +294,155 @@ async def fetch_job_post(url: str, *, platform: str | None = None) -> ScrapeResu
             error=f"페이지를 가져오지 못했습니다: {exc}",
         )
 
-    soup = BeautifulSoup(html, "lxml")
-    raw_text = _visible_text(soup)
-    if len(raw_text) < 40:
-        raw_text = f"{_meta_content(soup, 'og:title')}\n{_meta_content(soup, 'og:description')}"
 
-    fields = _site_enrich(detected, soup, raw_text)
+async def _fetch_albamon_via_bff(url: str) -> ScrapeResult | None:
+    recruit_no = extract_albamon_recruit_no(url)
+    if not recruit_no:
+        return None
 
-    job_description = (fields.get("job_description") or "").strip()
-    description_html = ""
-    description_images: list[str] = []
-    if should_try_image_extract(job_description, platform=detected):
-        description_html, description_images = extract_image_job_body(
-            soup,
-            trimmed,
-            platform=detected,
-        )
-        if description_images and not job_description:
-            job_description = "이미지 공고"
-            fields["confidence"] = min(
-                float(fields.get("confidence", 0.5)) + 0.25,
-                0.95,
-            )
+    detail = await fetch_albamon_bff_detail(recruit_no, page_url=url)
+    if detail.get("error"):
+        return None
 
+    view = detail.get("view") or {}
+    fields = fields_from_albamon_view(view)
+    body_images: list[str] = list(detail.get("body_images") or [])
+    content_html = (detail.get("content_html") or "").strip()
+
+    # 회사 로고 URL은 본문에 절대 넣지 않음
+    company_logo = (detail.get("company_logo") or fields.get("company_logo") or "").strip()
+    if company_logo:
+        body_images = [u for u in body_images if u != company_logo]
+
+    if body_images:
+        body_images = await mirror_image_urls(body_images, referer=url)
+        description_html = images_to_html(body_images)
+        job_description = "이미지 공고"
+        confidence = 0.9
+    else:
+        # 텍스트 모집요강
+        from bs4 import BeautifulSoup as _BS
+
+        text = _BS(content_html, "lxml").get_text("\n", strip=True) if content_html else ""
+        description_html = content_html if content_html and "<" in content_html else ""
+        job_description = (text or fields.get("title") or "")[:4000]
+        body_images = []
+        confidence = 0.85 if job_description else 0.55
+
+    workplace = fields.get("workplace") or None
     return ScrapeResult(
-        platform=detected,
-        raw_text=raw_text[:8000],
-        title=fields.get("title", ""),
-        hourly_wage=fields.get("hourly_wage"),
-        work_schedule=fields.get("work_schedule", ""),
-        workplace=fields.get("workplace"),
+        platform="albamon",
+        raw_text=(job_description or fields.get("title") or "")[:8000],
+        title=fields.get("title") or "",
+        hourly_wage=fields.get("hourly_wage") or None,
+        work_schedule=fields.get("work_schedule") or "",
+        workplace=workplace,
         job_description=job_description,
         description_html=description_html,
-        description_images=description_images,
-        confidence=float(fields.get("confidence", 0.5)),
-        source_url=trimmed,
+        description_images=body_images,
+        confidence=confidence,
+        source_url=url,
     )
+
+
+_ALBAMON_DETAIL_PATTERNS = (
+    re.compile(r"/recruit/view/", re.I),
+    re.compile(r"/jobs?/Detail", re.I),
+    re.compile(r"/job-?detail", re.I),
+    re.compile(r"[?&]giNo=\d+", re.I),
+    re.compile(r"/albamon/view/", re.I),
+    re.compile(r"/TotalSearch/JobDetail", re.I),
+)
+
+
+def is_listing_or_search_url(url: str) -> bool:
+    """검색·목록 페이지인지 (상세 공고 URL이 아닌지)."""
+    lower = (url or "").lower()
+    if not lower.startswith(("http://", "https://")):
+        return False
+    if any(p.search(url) for p in _ALBAMON_DETAIL_PATTERNS):
+        return False
+    markers = (
+        "total-search",
+        "/search",
+        "keyword=",
+        "list?",
+        "/list/",
+        "areacd=",
+        "workareacd=",
+    )
+    return any(m in lower for m in markers)
+
+
+def _absolutize(base: str, href: str) -> str | None:
+    href = (href or "").strip()
+    if not href or href.startswith(("#", "javascript:", "mailto:")):
+        return None
+    if href.startswith("//"):
+        return f"https:{href}"
+    if href.startswith("http://") or href.startswith("https://"):
+        return href
+    parsed = urlparse(base)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    if href.startswith("/"):
+        return f"{origin}{href}"
+    path = parsed.path.rsplit("/", 1)[0]
+    return f"{origin}{path}/{href}"
+
+
+def _looks_like_job_detail(url: str) -> bool:
+    if any(p.search(url) for p in _ALBAMON_DETAIL_PATTERNS):
+        return True
+    lower = url.lower()
+    # Albamon often uses /jobs/Detail/GI_No or similar numeric paths
+    if "albamon" in lower and re.search(r"/\d{5,}", url):
+        return True
+    return False
+
+
+def extract_detail_urls_from_html(base_url: str, html: str, *, max_urls: int = 30) -> list[str]:
+    soup = BeautifulSoup(html, "lxml")
+    found: list[str] = []
+    seen: set[str] = set()
+    for tag in soup.find_all("a", href=True):
+        absolute = _absolutize(base_url, str(tag["href"]))
+        if absolute is None or absolute in seen:
+            continue
+        if not _looks_like_job_detail(absolute):
+            continue
+        seen.add(absolute)
+        found.append(absolute)
+        if len(found) >= max_urls:
+            break
+    return found
+
+
+async def expand_listing_to_detail_urls(
+    url: str,
+    *,
+    max_urls: int = 30,
+) -> list[str]:
+    """검색/목록 URL에서 상세 공고 링크를 추출합니다.
+
+    상세 URL이면 [url]만 반환. 실패 시 빈 목록.
+    """
+    trimmed = url.strip()
+    if not trimmed.startswith(("http://", "https://")):
+        return []
+    if not is_listing_or_search_url(trimmed):
+        return [trimmed]
+
+    _rate_limit_wait()
+    try:
+        async with httpx.AsyncClient(
+            timeout=settings.job_scrape_timeout_sec,
+            follow_redirects=True,
+            headers={"User-Agent": _USER_AGENT, "Accept-Language": "ko-KR,ko;q=0.9"},
+        ) as client:
+            response = await client.get(trimmed)
+            response.raise_for_status()
+            html = response.text
+    except httpx.HTTPError:
+        return []
+
+    return extract_detail_urls_from_html(trimmed, html, max_urls=max_urls)

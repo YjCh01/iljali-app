@@ -61,7 +61,7 @@ def grant_wallet_credits(
     )
     db.commit()
     db.refresh(wallet)
-    return wallet_to_response(brn, wallet)
+    return wallet_to_response(brn, wallet, db)
 
 
 def set_member_sanction(

@@ -9,6 +9,7 @@ from app.routers.job_board import _row_to_dict as post_to_dict
 from app.services.entitlement_service import normalize_brn
 from app.services.ghost_pin_service import list_ghost_pins
 from app.services.ghost_route_service import list_ghost_routes
+from app.services.event_pin_service import list_event_pins
 from app.services.admin_announcement_service import list_announcements
 from app.services.push_wallet_service import get_or_create_wallet, wallet_to_response
 from app.services.sanction_service import (
@@ -65,16 +66,18 @@ def sync_bootstrap(
         brn = normalize_brn(company_key)
         wallet_row = get_or_create_wallet(db, brn)
         db.commit()
-        wallet = wallet_to_response(brn, wallet_row)
+        wallet = wallet_to_response(brn, wallet_row, db)
 
     ghost_list = list_ghost_pins(db)
     ghost_route_list = list_ghost_routes(db)
+    event_list = list_event_pins(db, active_only=True)
     announcement_list = list_announcements(db, member_type=member_type)
     return {
         "posts": post_items,
         "post_entitlements": entitlements,
         "ghost_pins": ghost_list,
         "ghost_routes": ghost_route_list,
+        "event_pins": event_list,
         "admin_announcements": announcement_list,
         "applications": applications,
         "member_status": member,
@@ -84,6 +87,7 @@ def sync_bootstrap(
             "applications": len(applications),
             "ghost_pins": len(ghost_list),
             "ghost_routes": len(ghost_route_list),
+            "event_pins": len(event_list),
             "admin_announcements": len(announcement_list),
         },
     }

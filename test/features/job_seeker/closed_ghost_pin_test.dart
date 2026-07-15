@@ -138,4 +138,106 @@ void main() {
       isTrue,
     );
   });
+
+  test('workplaceId match suppresses ghost even without matching coordinates', () {
+    const profile = CorporateMemberProfile(
+      companyName: '아라컴퍼니',
+      businessRegistrationNumber: '5403100894',
+      department: 'HR',
+      contactPersonName: 'Kim',
+      handlerCode: '0001',
+    );
+    final closed = CorporateJobPost(
+      id: 'old-closed-2',
+      title: '마감됨',
+      warehouseName: '창고A',
+      hourlyWage: '10,000원',
+      workSchedule: '09-18',
+      summary: '',
+      status: CorporateJobPostStatus.closed,
+      applicantCount: 0,
+      postedAt: DateTime.now().subtract(const Duration(days: 5)),
+      workerCategory: WorkerCategory.daily,
+      registeredBy: profile,
+      workplaceLatitude: 37.0,
+      workplaceLongitude: 127.0,
+      workplaceId: 'wp_shared',
+    );
+    final active = CorporateJobPost(
+      id: 'new-copy-2',
+      title: '복사 등록',
+      warehouseName: '창고A(재등록)',
+      hourlyWage: '10,000원',
+      workSchedule: '09-18',
+      summary: '',
+      status: CorporateJobPostStatus.recruiting,
+      applicantCount: 0,
+      postedAt: DateTime.now(),
+      workerCategory: WorkerCategory.daily,
+      registeredBy: profile,
+      // 좌표·이름 표기가 달라져도 workplaceId가 같으면 같은 근무지로 판정.
+      workplaceLatitude: 37.5,
+      workplaceLongitude: 127.9,
+      workplaceId: 'wp_shared',
+    );
+
+    expect(
+      ClosedGhostPinSuppressionPolicy.shouldRenderGhostForPost(
+        post: closed,
+        allPosts: [closed, active],
+      ),
+      isFalse,
+    );
+  });
+
+  test('mismatched workplaceId does not suppress despite matching coordinates', () {
+    const workplace = GeoCoordinate(latitude: 37.2, longitude: 127.4);
+    const profile = CorporateMemberProfile(
+      companyName: '아라컴퍼니',
+      businessRegistrationNumber: '5403100894',
+      department: 'HR',
+      contactPersonName: 'Kim',
+      handlerCode: '0001',
+    );
+    final closed = CorporateJobPost(
+      id: 'old-closed-3',
+      title: '마감됨',
+      warehouseName: '창고B',
+      hourlyWage: '10,000원',
+      workSchedule: '09-18',
+      summary: '',
+      status: CorporateJobPostStatus.closed,
+      applicantCount: 0,
+      postedAt: DateTime.now().subtract(const Duration(days: 5)),
+      workerCategory: WorkerCategory.daily,
+      registeredBy: profile,
+      workplaceLatitude: workplace.latitude,
+      workplaceLongitude: workplace.longitude,
+      workplaceId: 'wp_old',
+    );
+    final active = CorporateJobPost(
+      id: 'new-copy-3',
+      title: '다른 근무지',
+      warehouseName: '창고B',
+      hourlyWage: '10,000원',
+      workSchedule: '09-18',
+      summary: '',
+      status: CorporateJobPostStatus.recruiting,
+      applicantCount: 0,
+      postedAt: DateTime.now(),
+      workerCategory: WorkerCategory.daily,
+      registeredBy: profile,
+      workplaceLatitude: workplace.latitude,
+      workplaceLongitude: workplace.longitude,
+      workplaceId: 'wp_new',
+    );
+
+    expect(
+      ClosedGhostPinSuppressionPolicy.shouldRenderGhostForPost(
+        post: closed,
+        allPosts: [closed, active],
+      ),
+      isTrue,
+    );
+  });
 }

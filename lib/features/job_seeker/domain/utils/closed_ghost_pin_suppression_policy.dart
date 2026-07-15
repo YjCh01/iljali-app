@@ -26,6 +26,7 @@ abstract final class ClosedGhostPinSuppressionPolicy {
     final companyKey = closedPost.registeredBy?.companyKey?.trim();
     if (companyKey == null || companyKey.isEmpty) return false;
 
+    final closedWorkplaceId = closedPost.workplaceId?.trim();
     final closedCoord = _workplaceCoordinate(closedPost);
     final closedWarehouse = closedPost.warehouseName.trim();
 
@@ -33,6 +34,17 @@ abstract final class ClosedGhostPinSuppressionPolicy {
       if (other.id == closedPost.id) continue;
       if (!_isSeekerVisibleActive(other)) continue;
       if (other.registeredBy?.companyKey?.trim() != companyKey) continue;
+
+      // 서버가 부여한 안정 식별자가 양쪽에 있으면 그것으로 판정 — 좌표/이름
+      // 추측(폴백)보다 우선.
+      final otherWorkplaceId = other.workplaceId?.trim();
+      if (closedWorkplaceId != null &&
+          closedWorkplaceId.isNotEmpty &&
+          otherWorkplaceId != null &&
+          otherWorkplaceId.isNotEmpty) {
+        if (closedWorkplaceId == otherWorkplaceId) return true;
+        continue;
+      }
 
       final otherCoord = _workplaceCoordinate(other);
       if (closedCoord != null &&

@@ -34,6 +34,9 @@ class PaymentFlowHelper {
           AuthSession.instance.currentUser?.corporateProfile?.companyKey,
       savedPaymentMethodId: request.savedPaymentMethodId,
       billingKey: request.billingKey,
+      creditType: request.creditType,
+      creditCount: request.creditCount,
+      creditLocationSlots: request.creditLocationSlots,
     );
 
     var amountKrw = enriched.amountKrw;
@@ -75,6 +78,9 @@ class PaymentFlowHelper {
       companyKey: enriched.companyKey,
       savedPaymentMethodId: enriched.savedPaymentMethodId,
       billingKey: enriched.billingKey,
+      creditType: enriched.creditType,
+      creditCount: enriched.creditCount,
+      creditLocationSlots: enriched.creditLocationSlots,
     );
 
     final result = await _gateway.requestPayment(payable);
@@ -119,12 +125,18 @@ class PaymentFlowHelper {
         paymentKey: paymentKey,
         orderId: payable.orderId,
         amountKrw: payable.amountKrw,
+        creditType: payable.creditType,
+        creditCount: payable.creditCount,
+        creditLocationSlots: payable.creditLocationSlots,
       );
     } else if (_gateway is TossPaymentsGatewayService) {
       confirmed = await (_gateway as TossPaymentsGatewayService).confirmViaServer(
         paymentKey: paymentKey,
         orderId: payable.orderId,
         amountKrw: payable.amountKrw,
+        creditType: payable.creditType,
+        creditCount: payable.creditCount,
+        creditLocationSlots: payable.creditLocationSlots,
       );
     } else {
       confirmed = PaymentResult.ok(paymentKey);

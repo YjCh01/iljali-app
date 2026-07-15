@@ -42,4 +42,11 @@ extension RecruitmentProductKindX on RecruitmentProductKind {
         RecruitmentProductKind.exposureWithPush => '노출+PUSH 1회',
         RecruitmentProductKind.pushOnly => 'PUSH 1회',
       };
+
+  /// 서버 지갑 크레딧 타입 — `server/app/push_wallet_models.py`의 CREDIT_TYPE_* 와 동일.
+  String get serverCreditType => switch (this) {
+        RecruitmentProductKind.exposureOnly => 'package',
+        RecruitmentProductKind.exposureWithPush => 'exposure_bundle',
+        RecruitmentProductKind.pushOnly => 'push_ticket',
+      };
 }

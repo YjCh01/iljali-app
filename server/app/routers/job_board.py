@@ -9,6 +9,7 @@ from app.database import get_db
 from app.job_sync_models import JobPostRow
 from app.services.auth_token_service import verify_token
 from app.services.entitlement_service import normalize_brn
+from app.services.workplace_service import resolve_or_create_workplace
 
 router = APIRouter(prefix="/v1/job-board", tags=["job-board"])
 
@@ -61,6 +62,7 @@ def _row_to_dict(row: JobPostRow) -> dict:
         "description_body_json": row.description_body_json or "{}",
         "workplace_latitude": row.workplace_latitude,
         "workplace_longitude": row.workplace_longitude,
+        "workplace_id": row.workplace_id,
         "notification_settings_json": row.notification_settings_json or "{}",
         "status": row.status,
         "posted_by_email": row.posted_by_email,
@@ -121,6 +123,13 @@ def create_post(
     post_id = body.id or f"post_{uuid4().hex[:12]}"
     if db.get(JobPostRow, post_id) is not None:
         raise HTTPException(status_code=409, detail="이미 존재하는 공고 ID")
+    workplace_id = resolve_or_create_workplace(
+        db,
+        company_key=body.company_key,
+        warehouse_name=body.warehouse_name,
+        latitude=body.workplace_latitude,
+        longitude=body.workplace_longitude,
+    )
     row = JobPostRow(
         id=post_id,
         title=body.title,
@@ -134,6 +143,7 @@ def create_post(
         description_body_json=body.description_body_json or "{}",
         workplace_latitude=body.workplace_latitude,
         workplace_longitude=body.workplace_longitude,
+        workplace_id=workplace_id,
         notification_settings_json=body.notification_settings_json or "{}",
         status=body.status,
         posted_by_email=body.posted_by_email.strip().lower(),
@@ -191,6 +201,14 @@ def update_post(
     data = body.model_dump(exclude_none=True)
     for key, value in data.items():
         setattr(row, key, value)
+    if {"warehouse_name", "workplace_latitude", "workplace_longitude"} & data.keys():
+        row.workplace_id = resolve_or_create_workplace(
+            db,
+            company_key=row.company_key,
+            warehouse_name=row.warehouse_name,
+            latitude=row.workplace_latitude,
+            longitude=row.workplace_longitude,
+        )
     row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(row)

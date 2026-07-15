@@ -1005,11 +1005,12 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
             Icons.directions_bus_outlined,
             size: 48,
-            color: AppColors.textSecondary.withValues(alpha: 0.5),
+            color: AppColors.primaryLight.withValues(alpha: 0.9),
           ),
           const SizedBox(height: 12),
           Text(
@@ -1025,7 +1026,17 @@ class _EmptyState extends StatelessWidget {
       ),
     );
     if (embedded) {
-      return SingleChildScrollView(child: content);
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(child: content),
+            ),
+          );
+        },
+      );
     }
     return Center(child: content);
   }

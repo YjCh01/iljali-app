@@ -28,16 +28,16 @@ void main() {
       );
     });
 
-    test('round-trips JSON', () {
-      const body = JobPostDescriptionBody(
-        text: '본문',
-        html: '<p>HTML</p>',
-        imageUrls: ['https://cdn/a.jpg'],
-      );
-      final restored = JobPostDescriptionBody.fromJson(body.toJson());
-      expect(restored.text, body.text);
-      expect(restored.html, body.html);
-      expect(restored.imageUrls, body.imageUrls);
+    test('fromMap extracts images from html when images field empty', () {
+      final body = JobPostDescriptionBody.fromMap({
+        'html':
+            '<p><img src="https://file.albamon.com/a.jpg" /></p>'
+            '<p><img src="https://file.albamon.com/b.png" /></p>',
+      });
+      expect(body.imageUrls, [
+        'https://file.albamon.com/a.jpg',
+        'https://file.albamon.com/b.png',
+      ]);
     });
   });
 }

@@ -14,6 +14,9 @@ class PaymentRequest {
     this.companyKey,
     this.savedPaymentMethodId,
     this.billingKey,
+    this.creditType,
+    this.creditCount,
+    this.creditLocationSlots,
   });
 
   final String orderId;
@@ -26,6 +29,12 @@ class PaymentRequest {
   final String? companyKey;
   final String? savedPaymentMethodId;
   final String? billingKey;
+
+  /// 구매 의도 — 결제 confirm 시 서버가 자동으로 지급할 지갑 크레딧.
+  /// 알림핀/PUSH 이용권 등 크레딧성 상품에서만 채워짐.
+  final String? creditType;
+  final int? creditCount;
+  final int? creditLocationSlots;
 
   bool get usesSavedCard =>
       billingKey != null && billingKey!.trim().isNotEmpty;
