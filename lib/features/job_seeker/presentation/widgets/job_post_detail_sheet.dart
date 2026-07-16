@@ -17,14 +17,8 @@ import 'package:map/features/job_seeker/data/repositories/job_bookmark_vault_rep
 import 'package:map/features/job_seeker/domain/entities/job_application.dart';
 import 'package:map/features/job_seeker/domain/entities/job_bookmark_folder.dart';
 import 'package:map/core/trust/presentation/employer_trust_section.dart';
-import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
-import 'package:map/features/commute/data/repositories/shuttle_booking_repository.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
-import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart';
-import 'package:map/features/commute/domain/entities/shuttle_booking.dart';
-import 'package:map/features/commute/domain/services/shuttle_reminder_service.dart';
 import 'package:map/features/commute/presentation/widgets/nearest_shuttle_stop_card.dart';
-import 'package:map/features/commute/presentation/widgets/shuttle_booking_sheet.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_transport_widgets.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/utils/seeker_profile_readiness.dart';
@@ -97,7 +91,6 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   Future<void> refreshApplicationState() => _loadApplicationState();
 
   Future<void> toggleBookmarkFromExternal() => _toggleBookmark();
-  ShuttleBookingSelection? _pendingShuttleSelection;
 
   @override
   void initState() {
@@ -238,7 +231,6 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
         widget.onApply();
         await _loadApplicationState();
       },
-      presetShuttleSelection: _pendingShuttleSelection,
     );
     await _loadApplicationState();
   }
@@ -263,22 +255,6 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
       context,
       widget.pin,
       employerPreview: widget.employerPreview,
-    );
-  }
-
-  Future<void> _openShuttleBooking(CommuteRoute route) async {
-    final sel = await showShuttleBookingSheet(
-      context,
-      route: route,
-      initialStop: _pendingShuttleSelection?.stop,
-    );
-    if (sel == null || !mounted) return;
-    setState(() => _pendingShuttleSelection = sel);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${sel.stop.label} 탑승이 선택되었습니다. 지원 시 함께 저장됩니다.'),
-        behavior: SnackBarBehavior.floating,
-      ),
     );
   }
 
@@ -413,40 +389,19 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
                   const SizedBox(height: 12),
                   NearestShuttleStopCard(route: widget.shuttleRoute!),
                   const SizedBox(height: 12),
-                  if (_pendingShuttleSelection != null)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '선택: ${_pendingShuttleSelection!.stop.label} '
-                        '${_pendingShuttleSelection!.pickupTime} 탑승',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.red.shade900,
-                        ),
-                      ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: () => _openShuttleBooking(widget.shuttleRoute!),
-                    icon: const Icon(Icons.directions_bus),
-                    label: const Text(
-                      '셔틀 이용 신청',
+                    child: Text(
+                      '채용이 확정되면 「내 버스」에서 탑승 노선과 정류장을 선택할 수 있습니다.',
                       style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        fontSize: 13,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade900,
                       ),
                     ),
                   ),
@@ -737,7 +692,6 @@ Future<bool> showJobApplyDialog(
   BuildContext context,
   JobMapPin pin, {
   VoidCallback? onApplied,
-  ShuttleBookingSelection? presetShuttleSelection,
 }) async {
   if (!await SeekerJobActionsPolicy.ensureCanApply(context)) {
     return false;
@@ -771,15 +725,6 @@ Future<bool> showJobApplyDialog(
     return false;
   }
 
-  CommuteRoute? shuttleRoute;
-  if (pin.post.commuteRouteId != null) {
-    final routeRepo = await CommuteRouteRepository.create();
-    final loaded = await routeRepo.findById(pin.post.commuteRouteId!);
-    if (loaded != null && ShuttleRouteVisibility.hasSeekerVisibleStops(loaded)) {
-      shuttleRoute = ShuttleRouteVisibility.forSeekerDisplay(loaded);
-    }
-  }
-
   if (!context.mounted) return false;
 
   final flowResult = await showJobApplyFlowSheet(
@@ -787,47 +732,27 @@ Future<bool> showJobApplyDialog(
     postTitle: pin.post.title,
     workSchedule: pin.post.workSchedule,
     workerCategory: pin.post.effectiveWorkerCategory,
-    hasShuttle: shuttleRoute != null,
     workScheduleNegotiable: pin.post.workScheduleNegotiable ||
         WorkScheduleNegotiable.isLabel(pin.post.workSchedule),
-    shuttleRoute: shuttleRoute,
   );
 
   if (flowResult == null || !context.mounted) return false;
 
+  var missingCredentialLabels = const <String>[];
   if (pin.post.requiredCredentialIds.isNotEmpty) {
-    final proceed = await showRequiredCredentialsApplyDialog(
+    final credentialResult = await showRequiredCredentialsApplyDialog(
       context,
       credentialIds: pin.post.requiredCredentialIds,
     );
-    if (!proceed || !context.mounted) return false;
+    if (!credentialResult.proceed || !context.mounted) return false;
+    missingCredentialLabels = CredentialCatalog.labelsForIds(
+      credentialResult.missingCredentialIds,
+    );
   }
 
-  final shuttleSel = flowResult.shuttleSelection ?? presetShuttleSelection;
   final shiftDateIso = flowResult.scheduleNegotiable
       ? ''
       : SelectedShiftDates.encode(flowResult.selectedDates);
-  String? bookingId;
-  if (shuttleSel != null && shuttleRoute != null) {
-    final shuttleDay = flowResult.primaryDate ?? DateTime.now();
-    final shuttleDateIso = SelectedShiftDates.encode([shuttleDay]);
-    bookingId = 'book_${DateTime.now().millisecondsSinceEpoch}';
-    final booking = ShuttleBooking(
-      id: bookingId,
-      seekerEmail: user.email,
-      postId: pin.post.id,
-      routeId: shuttleRoute.id,
-      stopId: shuttleSel.stop.id,
-      stopLabel: shuttleSel.stop.label,
-      pickupTime: shuttleSel.pickupTime,
-      shiftDate: shuttleDateIso,
-      createdAt: DateTime.now(),
-    );
-    final bookingRepo = await ShuttleBookingRepository.create();
-    await bookingRepo.save(booking);
-    final reminderService = await ShuttleReminderService.create();
-    await reminderService.scheduleForBooking(booking);
-  }
 
   final phone = user.phone ?? '010-0000-0000';
 
@@ -845,6 +770,13 @@ Future<bool> showJobApplyDialog(
     if (disclosed == null || !context.mounted) return false;
     disclosedItems = disclosed.toList();
   }
+
+  final heldCredentialIds = (AuthSession.instance.currentUser?.seekerProfile)
+          ?.credentialHoldings
+          .where((h) => h.isComplete)
+          .map((h) => h.credentialId)
+          .toList() ??
+      const [];
 
   await hiringRepo.submitApplication(
     postId: pin.post.id,
@@ -865,10 +797,9 @@ Future<bool> showJobApplyDialog(
     employmentType: pin.post.employmentType,
     selectedShiftDate: shiftDateIso,
     shiftSlot: flowResult.shiftSlot,
-    shuttleBookingId: bookingId,
-    preferredStopId: shuttleSel?.stop.id,
     disclosedResumeItems: disclosedItems,
     requiredCredentialIds: pin.post.requiredCredentialIds,
+    heldCredentialIds: heldCredentialIds,
   );
 
   if (repo != null) {
@@ -882,13 +813,14 @@ Future<bool> showJobApplyDialog(
         companyKey: pin.post.registeredBy?.companyKey,
         selectedShiftDate: shiftDateIso,
         shiftSlot: flowResult.shiftSlot,
-        shuttleBookingId: bookingId,
-        preferredStopId: shuttleSel?.stop.id,
       ),
     );
   }
   if (!context.mounted) return false;
-  final shuttleNote = shuttleSel != null ? ' · 셔틀 ${shuttleSel.stop.label}' : '';
+  final credentialReminder = missingCredentialLabels.isEmpty
+      ? ''
+      : '\n\n필수 자격 확인: ${missingCredentialLabels.join(', ')}\n'
+          '아직 등록하지 않았다면 이력서에서 자격증을 등록해 주세요.';
   await showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -896,11 +828,19 @@ Future<bool> showJobApplyDialog(
       icon: Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 48),
       title: const Text('지원 완료'),
       content: Text(
-        '「${pin.post.title}」에 지원했습니다.$shuttleNote\n\n기업의 연락을 기다려 주세요.',
+        '「${pin.post.title}」에 지원했습니다.$credentialReminder\n\n기업의 연락을 기다려 주세요.',
         textAlign: TextAlign.center,
       ),
       actionsAlignment: MainAxisAlignment.center,
       actions: [
+        if (missingCredentialLabels.isNotEmpty)
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              Navigator.of(context).pushNamed(AppRoutes.seekerMyCredentials);
+            },
+            child: const Text('지금 등록하기'),
+          ),
         FilledButton(
           onPressed: () => Navigator.of(dialogContext).pop(),
           child: const Text('확인'),

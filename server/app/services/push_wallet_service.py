@@ -207,6 +207,21 @@ def wallet_to_response(
     )
 
 
+def list_active_lots(db: Session, company_key: str) -> list[PushWalletCreditLotRow]:
+    """만료 스윕 후 남아있는(remaining > 0) 크레딧 배치를 만료일 임박 순으로 반환."""
+    wallet = get_or_create_wallet(db, company_key)
+    _sweep_expired_lots(db, wallet)
+    return (
+        db.query(PushWalletCreditLotRow)
+        .filter(
+            PushWalletCreditLotRow.company_key == wallet.company_key,
+            PushWalletCreditLotRow.remaining > 0,
+        )
+        .order_by(PushWalletCreditLotRow.expires_at.asc().nullslast())
+        .all()
+    )
+
+
 def get_or_create_wallet(db: Session, company_key: str) -> EmployerPushWalletRow:
     brn = normalize_brn(company_key)
     row = (

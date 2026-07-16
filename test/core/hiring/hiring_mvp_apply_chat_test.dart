@@ -7,7 +7,7 @@ import 'package:map/features/chat/domain/services/chat_access_policy.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// MVP 채용 — 공고·지원·채팅만 (근무예정 합의·출근·수수료 없음)
+/// MVP 채용 — 공고·지원·채팅 + 근무예정 합의·출근 확정(수수료 없이 무료 완료)
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -17,7 +17,8 @@ void main() {
     await AuthSession.instance.signOut();
   });
 
-  test('seeker apply then chat without work-agreement actions', () async {
+  test('seeker apply then chat then work-agreement completes without commission',
+      () async {
     const seeker = DevTestAccounts.seekerAlpha;
     final hiringRepo = await LocalHiringRepository.create();
 
@@ -45,21 +46,13 @@ void main() {
     final chatting = await hiringRepo.findById(application.id);
     expect(chatting?.status, HiringApplicationStatus.chatting);
 
-    expect(
-      () => hiringRepo.confirmWorkScheduleAgreement(
-        applicationId: application.id,
-        asEmployer: false,
-      ),
-      throwsA(isA<StateError>()),
+    final scheduled = await hiringRepo.instantAccept(
+      applicationId: application.id,
     );
-
-    expect(
-      () => hiringRepo.instantAccept(applicationId: application.id),
-      throwsA(isA<StateError>()),
-    );
+    expect(scheduled.status, HiringApplicationStatus.scheduled);
 
     final overdue =
         await hiringRepo.fetchOverdueUncheckedShifts(seeker.email);
-    expect(overdue, isEmpty);
+    expect(overdue, isEmpty, reason: '아직 근무일 전이므로 미확인 건 없음');
   });
 }

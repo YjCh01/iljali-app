@@ -27,6 +27,7 @@ _QC_MEMBER_COLUMNS_SQLITE = {
     "password_hash": "ALTER TABLE qc_members ADD COLUMN password_hash VARCHAR(256) DEFAULT ''",
     "phone_verified_at": "ALTER TABLE qc_members ADD COLUMN phone_verified_at DATETIME",
     "seeker_profile_json": "ALTER TABLE qc_members ADD COLUMN seeker_profile_json TEXT DEFAULT '{}'",
+    "no_show_count": "ALTER TABLE qc_members ADD COLUMN no_show_count INTEGER DEFAULT 0",
 }
 
 _QC_MEMBER_COLUMNS_POSTGRES = {
@@ -44,6 +45,7 @@ _QC_MEMBER_COLUMNS_POSTGRES = {
     "password_hash": "ALTER TABLE qc_members ADD COLUMN IF NOT EXISTS password_hash VARCHAR(256) DEFAULT ''",
     "phone_verified_at": "ALTER TABLE qc_members ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMP",
     "seeker_profile_json": "ALTER TABLE qc_members ADD COLUMN IF NOT EXISTS seeker_profile_json TEXT DEFAULT '{}'",
+    "no_show_count": "ALTER TABLE qc_members ADD COLUMN IF NOT EXISTS no_show_count INTEGER DEFAULT 0",
 }
 
 _JOB_POST_COLUMNS_SQLITE = {
@@ -56,6 +58,9 @@ _JOB_POST_COLUMNS_SQLITE = {
     "workplace_latitude": "ALTER TABLE job_posts ADD COLUMN workplace_latitude REAL",
     "workplace_longitude": "ALTER TABLE job_posts ADD COLUMN workplace_longitude REAL",
     "workplace_id": "ALTER TABLE job_posts ADD COLUMN workplace_id VARCHAR(32)",
+    "required_credential_ids_json": (
+        "ALTER TABLE job_posts ADD COLUMN required_credential_ids_json TEXT DEFAULT '[]'"
+    ),
     "notification_settings_json": "ALTER TABLE job_posts ADD COLUMN notification_settings_json TEXT DEFAULT '{}'",
 }
 
@@ -69,6 +74,10 @@ _JOB_POST_COLUMNS_POSTGRES = {
     "workplace_latitude": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_latitude DOUBLE PRECISION",
     "workplace_longitude": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_longitude DOUBLE PRECISION",
     "workplace_id": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS workplace_id VARCHAR(32)",
+    "required_credential_ids_json": (
+        "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS "
+        "required_credential_ids_json TEXT DEFAULT '[]'"
+    ),
     "notification_settings_json": "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS notification_settings_json TEXT DEFAULT '{}'",
 }
 
@@ -79,6 +88,14 @@ _JOB_APPLICATION_COLUMNS_SQLITE = {
     "shuttle_stop_label": "ALTER TABLE job_applications ADD COLUMN shuttle_stop_label VARCHAR(200) DEFAULT ''",
     "shuttle_pickup_time": "ALTER TABLE job_applications ADD COLUMN shuttle_pickup_time VARCHAR(32) DEFAULT ''",
     "shuttle_shift_date": "ALTER TABLE job_applications ADD COLUMN shuttle_shift_date VARCHAR(10) DEFAULT ''",
+    "required_credential_ids_json": (
+        "ALTER TABLE job_applications ADD COLUMN "
+        "required_credential_ids_json TEXT DEFAULT '[]'"
+    ),
+    "held_credential_ids_json": (
+        "ALTER TABLE job_applications ADD COLUMN "
+        "held_credential_ids_json TEXT DEFAULT '[]'"
+    ),
 }
 
 _JOB_APPLICATION_COLUMNS_POSTGRES = {
@@ -88,6 +105,14 @@ _JOB_APPLICATION_COLUMNS_POSTGRES = {
     "shuttle_stop_label": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS shuttle_stop_label VARCHAR(200) DEFAULT ''",
     "shuttle_pickup_time": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS shuttle_pickup_time VARCHAR(32) DEFAULT ''",
     "shuttle_shift_date": "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS shuttle_shift_date VARCHAR(10) DEFAULT ''",
+    "required_credential_ids_json": (
+        "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS "
+        "required_credential_ids_json TEXT DEFAULT '[]'"
+    ),
+    "held_credential_ids_json": (
+        "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS "
+        "held_credential_ids_json TEXT DEFAULT '[]'"
+    ),
 }
 
 _PILOT_PROGRAM_COLUMNS_SQLITE = {

@@ -176,11 +176,17 @@ class AdminOpsApiClient {
         'limit': limit,
       });
 
-  Future<Map<String, dynamic>> getBusLocationTowerPilot() async =>
-      _decode(await _client.get(
-        Uri.parse('$_baseUrl/v1/admin/ops/pilot/bus-location-tower'),
-        headers: _headers,
-      ));
+  Future<Map<String, dynamic>> getBusLocationTowerPilot({
+    required String companyKey,
+    required String routeId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/v1/admin/ops/pilot/bus-location-tower')
+        .replace(queryParameters: {
+      'company_key': companyKey.trim(),
+      'route_id': routeId.trim(),
+    });
+    return _decode(await _client.get(uri, headers: _headers));
+  }
 
   Future<Map<String, dynamic>> searchBusLocationTowerCandidates({
     required String phone,
@@ -201,7 +207,7 @@ class AdminOpsApiClient {
     String note = '',
     String workStartTime = '',
   }) async =>
-      _post('/v1/admin/ops/pilot/bus-location-tower', {
+      _put('/v1/admin/ops/pilot/bus-location-tower', {
         'seeker_email': seekerEmail.trim().toLowerCase(),
         'enabled': enabled,
         'company_key': companyKey.trim(),
@@ -212,8 +218,40 @@ class AdminOpsApiClient {
         'work_start_time': workStartTime.trim(),
       });
 
-  Future<Map<String, dynamic>> stopBusLocationTowerToday() async =>
-      _post('/v1/admin/ops/pilot/bus-location-tower/stop-today', {});
+  Future<Map<String, dynamic>> stopBusLocationTowerToday({
+    required String companyKey,
+    required String routeId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/v1/admin/ops/pilot/bus-location-tower/stop-today',
+    ).replace(queryParameters: {
+      'company_key': companyKey.trim(),
+      'route_id': routeId.trim(),
+    });
+    return _decode(await _client.post(uri, headers: _headers));
+  }
+
+  Future<List<Map<String, dynamic>>> listPendingOfficerRequests() async {
+    final uri = Uri.parse('$_baseUrl/v1/admin/ops/pilot/officer-requests');
+    final body = _decode(await _client.get(uri, headers: _headers));
+    final items = body['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+  }
+
+  Future<Map<String, dynamic>> approveOfficerRequest(String requestId) async {
+    final uri = Uri.parse(
+      '$_baseUrl/v1/admin/ops/pilot/officer-requests/$requestId/approve',
+    );
+    return _decode(await _client.post(uri, headers: _headers));
+  }
+
+  Future<Map<String, dynamic>> rejectOfficerRequest(String requestId) async {
+    final uri = Uri.parse(
+      '$_baseUrl/v1/admin/ops/pilot/officer-requests/$requestId/reject',
+    );
+    return _decode(await _client.post(uri, headers: _headers));
+  }
 
   Future<Map<String, dynamic>> distributeApplications({
     required String postId,
@@ -525,6 +563,18 @@ class AdminOpsApiClient {
     Map<String, dynamic> body,
   ) async {
     final response = await _client.post(
+      Uri.parse('$_baseUrl$path'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> _put(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _client.put(
       Uri.parse('$_baseUrl$path'),
       headers: _headers,
       body: jsonEncode(body),

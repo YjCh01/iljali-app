@@ -255,12 +255,8 @@ class _IndividualWorkTabState extends State<IndividualWorkTab> {
               const SizedBox(height: 120),
               EmptyStateCard(
                 icon: Icons.event_available_outlined,
-                title: ProductFeatureFlags.isHiringCommissionEnabled
-                    ? '출근 예정 일정이 없습니다'
-                    : '근무 일정이 없습니다',
-                message: ProductFeatureFlags.isHiringCommissionEnabled
-                    ? 'PUSH 알림을 받고 지원한 뒤\n기업과 채팅하거나 즉시 확정되면\n여기에 일정이 표시됩니다.'
-                    : '공고에 지원한 뒤 기업과 채팅으로\n일정을 조율할 수 있습니다.\n(출근 확인·수수료는 메인 앱에서 제공하지 않습니다)',
+                title: '출근 예정 일정이 없습니다',
+                message: 'PUSH 알림을 받고 지원한 뒤\n기업과 채팅하거나 즉시 확정되면\n여기에 일정이 표시됩니다.',
               ),
             ],
           ),

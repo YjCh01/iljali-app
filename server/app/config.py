@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     job_media_dir: str = "./uploads/job-media"
     api_public_base_url: str = "http://127.0.0.1:8000"
 
+    # 자격증 사진 — FastAPI StaticFiles `/media/credential`
+    credential_media_dir: str = "./uploads/credential-media"
+
+    # 사업자등록증 사진 — FastAPI StaticFiles `/media/business-cert`
+    business_cert_media_dir: str = "./uploads/business-cert-media"
+
     # Firebase Cloud Messaging — 서비스 계정 JSON (한 줄 문자열)
     fcm_service_account_json: str = ""
 

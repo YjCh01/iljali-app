@@ -98,6 +98,32 @@ class IljariApiClient {
     });
   }
 
+  Future<Map<String, dynamic>> socialSignupCorporate({
+    required String socialToken,
+    required String phone,
+    required String phoneVerifiedToken,
+    required String displayName,
+    required String companyName,
+    required String companyKey,
+    String department = '',
+    String contactPersonName = '',
+    String handlerCode = '',
+    String orgRole = 'recruiter',
+  }) async {
+    return _post('/v1/auth/social/corporate-signup', {
+      'social_token': socialToken,
+      'phone': phone,
+      'phone_verified_token': phoneVerifiedToken,
+      'display_name': displayName,
+      'company_name': companyName,
+      'company_key': companyKey,
+      'department': department,
+      'contact_person_name': contactPersonName,
+      'handler_code': handlerCode,
+      'org_role': orgRole,
+    });
+  }
+
   Future<Map<String, dynamic>> signUpCorporate({
     required String email,
     required String password,
@@ -550,6 +576,46 @@ class IljariApiClient {
     _ensureOk(response);
   }
 
+  /// 고용주 자기 회사 셔틀위치담당자 조회 (어드민 지정과 동일 데이터 공유)
+  Future<Map<String, dynamic>> fetchShuttleLocationOfficer({
+    required String routeId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/v1/shuttle/location-officer').replace(
+      queryParameters: {'route_id': routeId},
+    );
+    final response = await _client.get(uri, headers: _headers);
+    _ensureOk(response);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// 고용주 — 셔틀위치담당자 지정을 어드민에 승인요청 (즉시 반영되지 않음)
+  Future<Map<String, dynamic>> requestShuttleLocationOfficer({
+    required String routeId,
+    required String seekerEmail,
+    String seekerName = '',
+    String routeName = '',
+    String companyName = '',
+    String note = '',
+    String workStartTime = '',
+  }) async =>
+      _post('/v1/shuttle/location-officer/request', {
+        'route_id': routeId,
+        'seeker_email': seekerEmail.trim().toLowerCase(),
+        'seeker_name': seekerName,
+        'route_name': routeName,
+        'company_name': companyName,
+        'note': note,
+        'work_start_time': workStartTime,
+      });
+
+  /// 고용주 — 자기 회사가 보낸 셔틀위치담당자 지정 요청 목록·처리 상태
+  Future<List<Map<String, dynamic>>> fetchShuttleLocationOfficerRequests() async {
+    final raw = await _get('/v1/shuttle/location-officer/requests');
+    final items = raw['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+  }
+
   Future<List<Map<String, dynamic>>> fetchShuttlePreferences() async {
     final raw = await _get('/v1/shuttle/preferences/me');
     final items = raw['items'];
@@ -584,10 +650,89 @@ class IljariApiClient {
     _ensureOk(response);
   }
 
+  // ── Credentials ──
+
+  Future<List<Map<String, dynamic>>> fetchCredentialCatalog() async {
+    final raw = await _get('/v1/credentials/catalog');
+    final items = raw['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+  }
+
+  Future<Map<String, dynamic>> fetchApplicantCredentials(
+    String applicationId,
+  ) async =>
+      _get('/v1/credentials/applicants/$applicationId/credentials');
+
+  /// 지원자 노쇼 처리 — 서버에 누적(다른 기업도 열람 가능)
+  Future<Map<String, dynamic>> markApplicationNoShow(
+    String applicationId,
+  ) async =>
+      _post('/v1/hiring/applications/$applicationId/mark-no-show', {});
+
+  /// 자격증 사진 업로드 — 공개 URL 반환 (모바일·웹 공통)
+  Future<String> uploadCredentialMedia({
+    required Uint8List bytes,
+    required String filename,
+  }) async =>
+      _uploadMedia(
+        path: '/v1/credential-media/upload',
+        bytes: bytes,
+        filename: filename,
+        errorMessage: '자격증 사진 업로드 응답이 올바르지 않습니다.',
+      );
+
+  /// 사업자등록증 사진 업로드 — 공개 URL 반환 (가입 절차 중에도 호출 가능, 인증 불필요)
+  Future<String> uploadBusinessCertMedia({
+    required Uint8List bytes,
+    required String filename,
+  }) async =>
+      _uploadMedia(
+        path: '/v1/business-cert-media/upload',
+        bytes: bytes,
+        filename: filename,
+        errorMessage: '사업자등록증 사진 업로드 응답이 올바르지 않습니다.',
+      );
+
+  Future<String> _uploadMedia({
+    required String path,
+    required Uint8List bytes,
+    required String filename,
+    required String errorMessage,
+  }) async {
+    final uri = Uri.parse('$_baseUrl$path');
+    final request = http.MultipartRequest('POST', uri);
+    final token = accessToken ?? AuthSession.instance.accessToken;
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: filename,
+      ),
+    );
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    _ensureOk(response);
+    final map = jsonDecode(response.body) as Map<String, dynamic>;
+    final url = map['url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw IljariApiException(errorMessage);
+    }
+    return url;
+  }
+
   // ── Push wallet ──
 
   Future<Map<String, dynamic>> getWallet(String companyKey) async {
     return _get('/v1/wallet/$companyKey');
+  }
+
+  /// 만료일이 임박한 순으로 정렬된, 아직 소진되지 않은 크레딧 배치 목록.
+  Future<Map<String, dynamic>> fetchWalletLots(String companyKey) async {
+    return _get('/v1/wallet/$companyKey/lots');
   }
 
   Future<Map<String, dynamic>> addPackageCredits({

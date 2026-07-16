@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:map/core/hiring/chat_read_marker_service.dart';
 import 'package:map/core/hiring/chat_room_leave_service.dart';
 import 'package:map/core/dev/dev_chat_test_support.dart';
 import 'package:map/core/dev/dev_test_accounts.dart';
@@ -100,6 +101,12 @@ class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
                 ? '근무 일정 합의 완료 · ${app.status.label}'
                 : '지원 접수 · ${app.status.label}';
 
+    final unreadCount = await ChatReadMarkerService.unreadCount(
+      applicationId: app.id,
+      asEmployer: true,
+      messages: messages,
+    );
+
     return CorporateChatRoom(
       id: app.id,
       applicantName: app.seekerName,
@@ -108,13 +115,7 @@ class CorporateChatLocalDataSourceImpl implements CorporateChatLocalDataSource {
       updatedAtLabel: LocalHiringRepository.formatRelativeTime(
         lastChat?.sentAt ?? app.appliedAt,
       ),
-      unreadCount: ProductFeatureFlags.isHiringCommissionEnabled &&
-              app.needsCommissionPayment
-          ? 1
-          : app.status == HiringApplicationStatus.chatting ||
-                  app.status == HiringApplicationStatus.inquiry
-              ? 1
-              : 0,
+      unreadCount: unreadCount,
     );
   }
 

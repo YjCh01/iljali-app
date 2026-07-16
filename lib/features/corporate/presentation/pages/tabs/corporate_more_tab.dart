@@ -225,8 +225,6 @@ class _CorporateMoreTabState extends State<CorporateMoreTab> {
             address: profile?.businessHeadOfficeAddress,
             onEditAddress: () =>
                 Navigator.of(context).pushNamed(AppRoutes.corporateMyInfo),
-            onRegisterShuttle: () => Navigator.of(context)
-                .pushNamed(AppRoutes.corporateShuttleRoutes),
           ),
           _MenuTile(
             icon: Icons.store_mall_directory_outlined,
@@ -234,6 +232,20 @@ class _CorporateMoreTabState extends State<CorporateMoreTab> {
             subtitle: '본사 · 지역 · 매장 · 공고 연동',
             onTap: () => Navigator.of(context)
                 .pushNamed(AppRoutes.corporateBranchManagement),
+          ),
+          _MenuTile(
+            icon: Icons.directions_bus_outlined,
+            title: '통근버스 노선 등록',
+            subtitle: '노선 · 정류장 등록 및 관리',
+            onTap: () => Navigator.of(context)
+                .pushNamed(AppRoutes.corporateShuttleRoutes),
+          ),
+          _MenuTile(
+            icon: Icons.directions_bus_filled_outlined,
+            title: '셔틀위치담당자 지정 요청',
+            subtitle: '실시간 버스 위치 공유 담당자 지정 어드민 승인요청',
+            onTap: () => Navigator.of(context)
+                .pushNamed(AppRoutes.corporateShuttleLocationOfficer),
           ),
           _MenuTile(
             icon: Icons.payments_outlined,
@@ -313,13 +325,11 @@ class _HeadOfficeMenuCard extends StatelessWidget {
     required this.needsHeadOffice,
     required this.address,
     required this.onEditAddress,
-    required this.onRegisterShuttle,
   });
 
   final bool needsHeadOffice;
   final String? address;
   final VoidCallback onEditAddress;
-  final VoidCallback onRegisterShuttle;
 
   @override
   Widget build(BuildContext context) {
@@ -330,97 +340,51 @@ class _HeadOfficeMenuCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: CorporateSurfaceCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        onTap: onEditAddress,
+        child: Row(
           children: [
-            InkWell(
-              onTap: onEditAddress,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Row(
+            Icon(
+              Icons.business_outlined,
+              color: needsHeadOffice
+                  ? Colors.orange.shade800
+                  : AppColors.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.business_outlined,
-                    color: needsHeadOffice
-                        ? Colors.orange.shade800
-                        : AppColors.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '사업자 본사(소재지) 주소',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (subtitle.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            subtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              height: 1.35,
-                              color: needsHeadOffice
-                                  ? Colors.orange.shade800
-                                  : AppColors.textSecondary
-                                      .withValues(alpha: 0.95),
-                              fontWeight: needsHeadOffice
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ],
+                  const Text(
+                    '사업자 본사(소재지) 주소',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.textSecondary.withValues(alpha: 0.7),
-                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: needsHeadOffice
+                            ? Colors.orange.shade800
+                            : AppColors.textSecondary.withValues(alpha: 0.95),
+                        fontWeight: needsHeadOffice
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            Divider(
-              height: 1,
-              color: AppColors.searchBarBorder.withValues(alpha: 0.8),
-            ),
-            InkWell(
-              onTap: onRegisterShuttle,
-              borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.directions_bus_outlined,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '통근버스 노선 등록하기',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary.withValues(alpha: 0.95),
-                        ),
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: AppColors.textSecondary.withValues(alpha: 0.7),
-                    ),
-                  ],
-                ),
-              ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textSecondary.withValues(alpha: 0.7),
             ),
           ],
         ),

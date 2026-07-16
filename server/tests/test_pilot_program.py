@@ -117,6 +117,7 @@ def test_bus_location_tower_admin_and_seeker_status():
     save = client.get(
         "/v1/admin/ops/pilot/bus-location-tower",
         headers=ADMIN_HEADERS,
+        params={"company_key": COMPANY_KEY, "route_id": ROUTE_ID},
     )
     assert save.status_code == 200, save.text
     body = save.json()
@@ -142,6 +143,7 @@ def test_bus_location_tower_admin_and_seeker_status():
     admin = client.get(
         "/v1/admin/ops/pilot/bus-location-tower",
         headers=ADMIN_HEADERS,
+        params={"company_key": COMPANY_KEY, "route_id": ROUTE_ID},
     )
     assert admin.status_code == 200
     assert admin.json()["note"] == "QC pilot"
@@ -221,6 +223,7 @@ def test_bus_location_tower_location_consent_flag():
     admin = client.get(
         "/v1/admin/ops/pilot/bus-location-tower",
         headers=ADMIN_HEADERS,
+        params={"company_key": COMPANY_KEY, "route_id": ROUTE_ID},
     )
     assert admin.json()["location_consent_granted"] is True
 

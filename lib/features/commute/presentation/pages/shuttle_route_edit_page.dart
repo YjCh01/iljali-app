@@ -1014,7 +1014,34 @@ class _ShuttleRouteListPageState extends State<ShuttleRouteListPage> {
     if (updated != null) await _load();
   }
 
-  Future<void> _deleteRoute(CommuteRoute route) async {
+  bool _hasExposedStop(CommuteRoute route) =>
+      route.stops.any((stop) => stop.exposureActivated);
+
+  Future<void> _showExposureBlockedDialog(CommuteRoute route) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('삭제할 수 없습니다'),
+        content: Text(
+          '「${route.routeName}」 노선에는 아직 노출 중인 정류장이 있습니다.\n'
+          '노선을 삭제하려면 먼저 모든 정류장의 노출을 해제해 주세요.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestDeleteRoute(CommuteRoute route) async {
+    if (_hasExposedStop(route)) {
+      await _showExposureBlockedDialog(route);
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1055,30 +1082,8 @@ class _ShuttleRouteListPageState extends State<ShuttleRouteListPage> {
     );
   }
 
-  Future<bool> _confirmDeleteRoute(CommuteRoute route) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('노선 삭제'),
-        content: Text('「${route.routeName}」 노선을 삭제할까요?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFC62828),
-            ),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await _performDelete(route);
-    }
+  Future<bool> _confirmDeleteRouteSwipe(CommuteRoute route) async {
+    await _requestDeleteRoute(route);
     return false;
   }
 
@@ -1206,7 +1211,8 @@ class _ShuttleRouteListPageState extends State<ShuttleRouteListPage> {
                               direction: _pickMode
                                   ? DismissDirection.none
                                   : DismissDirection.endToStart,
-                              confirmDismiss: (_) => _confirmDeleteRoute(route),
+                              confirmDismiss: (_) =>
+                                  _confirmDeleteRouteSwipe(route),
                               background: Container(
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.only(right: 20),
@@ -1321,7 +1327,8 @@ class _ShuttleRouteListPageState extends State<ShuttleRouteListPage> {
                                         ),
                                         IconButton(
                                           tooltip: '삭제',
-                                          onPressed: () => _deleteRoute(route),
+                                          onPressed: () =>
+                                              _requestDeleteRoute(route),
                                           icon: const Icon(
                                             Icons.delete_outline_rounded,
                                             size: 20,

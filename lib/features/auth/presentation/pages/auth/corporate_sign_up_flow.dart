@@ -16,6 +16,7 @@ import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart'
 import 'package:map/features/auth/presentation/widgets/auth_scaffold.dart';
 import 'package:map/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/compliance/business_entity_type.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/core/compliance/outsourcing_policy.dart';
@@ -52,7 +53,6 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   final _validateSignUp = const ValidateSignUpFormUseCase();
   final _phoneVerification = PhoneVerificationService();
   _CorporateSignUpStep _step = _CorporateSignUpStep.account;
-  bool _usedSocialSignUp = false;
 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -143,25 +143,12 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         action: 'signup',
       );
     } on Object {
-      if (kDebugMode) {
-        _mockSocialSignUp(provider);
-        return;
-      }
-      _snack('$provider 로그인을 시작할 수 없습니다.');
+      _snack(
+        kIsWeb
+            ? '$provider 로그인을 시작할 수 없습니다.'
+            : '소셜 가입은 아직 웹에서만 이용할 수 있습니다. 이메일로 가입해 주세요.',
+      );
     }
-  }
-
-  void _mockSocialSignUp(String provider) {
-    setState(() {
-      _usedSocialSignUp = true;
-      _nameController.text = '김담당';
-      _phoneController.text = '01055556666';
-      _emailController.text = '$provider.demo@iljari.co.kr';
-      _passwordController.text = 'SocialTemp1!';
-      _passwordConfirmController.text = 'SocialTemp1!';
-      _step = _CorporateSignUpStep.account;
-    });
-    _snack('$provider 로 가입 정보를 불러왔습니다.');
   }
 
   Future<void> _sendPhoneCode() async {
@@ -209,17 +196,6 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
   }
 
   Future<void> _continueFromAccount() async {
-    if (_usedSocialSignUp) {
-      if (_nameController.text.trim().isEmpty ||
-          _emailController.text.trim().isEmpty) {
-        _snack('소셜 가입 정보를 확인해 주세요.');
-        return;
-      }
-      if (!await _ensurePhoneVerified()) return;
-      setState(() => _step = _CorporateSignUpStep.company);
-      return;
-    }
-
     final result = _validateSignUp(
       name: _nameController.text,
       phone: _phoneController.text,
@@ -253,9 +229,8 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
     );
     setState(() {
       _companyError = company.isEmpty ? '회사명을 입력해 주세요.' : null;
-      _businessRegError = request.normalizedBrn.length != 10
-          ? '사업자등록번호 10자리를 입력해 주세요.'
-          : null;
+      _businessRegError =
+          request.normalizedBrn.length != 10 ? '사업자등록번호 10자리를 입력해 주세요.' : null;
       _representativeError =
           request.representativeName.trim().isEmpty ? '대표자명을 입력해 주세요.' : null;
       _openingDateError = request.normalizedOpeningDate.length != 8
@@ -268,7 +243,11 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         _representativeError != null ||
         _openingDateError != null ||
         fieldError != null) {
-      _snack(fieldError ?? _companyError ?? _businessRegError ?? _representativeError ?? _openingDateError!);
+      _snack(fieldError ??
+          _companyError ??
+          _businessRegError ??
+          _representativeError ??
+          _openingDateError!);
       return;
     }
     setState(() {
@@ -289,8 +268,14 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         imageQuality: 85,
       );
       if (file == null) return;
+      final bytes = await file.readAsBytes();
+      final url = await IljariApiClient().uploadBusinessCertMedia(
+        bytes: bytes,
+        filename: file.name,
+      );
+      if (!mounted) return;
       setState(() {
-        _certificateImageRef = file.path;
+        _certificateImageRef = url;
         _verificationError = null;
       });
       _snack('사업자등록증이 업로드되었습니다.');
@@ -299,7 +284,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         _certificateImageRef =
             'mock://certificate/${DateTime.now().millisecondsSinceEpoch}.jpg';
       });
-      _snack('갤러리 접근 불가 — mock 업로드로 대체합니다.');
+      _snack('업로드에 실패했습니다 — 오프라인 mock 참조로 대체합니다.');
     }
   }
 
@@ -661,7 +646,9 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: Divider(color: AppColors.textSecondary.withValues(alpha: 0.3))),
+            Expanded(
+                child: Divider(
+                    color: AppColors.textSecondary.withValues(alpha: 0.3))),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Text(
@@ -672,7 +659,9 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
                 ),
               ),
             ),
-            Expanded(child: Divider(color: AppColors.textSecondary.withValues(alpha: 0.3))),
+            Expanded(
+                child: Divider(
+                    color: AppColors.textSecondary.withValues(alpha: 0.3))),
           ],
         ),
         const SizedBox(height: 16),
@@ -730,50 +719,48 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
           textInputAction: TextInputAction.next,
           errorText: _emailError,
         ),
-        if (!_usedSocialSignUp) ...[
-          const SizedBox(height: 16),
-          AuthTextField(
-            label: '비밀번호',
-            hint: '8자 이상 입력',
-            controller: _passwordController,
-            obscureText: _obscurePassword,
-            textInputAction: TextInputAction.next,
-            errorText: _passwordError,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: AppColors.textSecondary,
-                size: 22,
-              ),
-              onPressed: () =>
-                  setState(() => _obscurePassword = !_obscurePassword),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '비밀번호',
+          hint: '8자 이상 입력',
+          controller: _passwordController,
+          obscureText: _obscurePassword,
+          textInputAction: TextInputAction.next,
+          errorText: _passwordError,
+          suffixIcon: IconButton(
+            icon: Icon(
+              _obscurePassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: AppColors.textSecondary,
+              size: 22,
+            ),
+            onPressed: () =>
+                setState(() => _obscurePassword = !_obscurePassword),
+          ),
+        ),
+        const SizedBox(height: 16),
+        AuthTextField(
+          label: '비밀번호 확인',
+          hint: '비밀번호를 다시 입력하세요',
+          controller: _passwordConfirmController,
+          obscureText: _obscurePasswordConfirm,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _continueFromAccount(),
+          errorText: _passwordConfirmError,
+          suffixIcon: IconButton(
+            icon: Icon(
+              _obscurePasswordConfirm
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: AppColors.textSecondary,
+              size: 22,
+            ),
+            onPressed: () => setState(
+              () => _obscurePasswordConfirm = !_obscurePasswordConfirm,
             ),
           ),
-          const SizedBox(height: 16),
-          AuthTextField(
-            label: '비밀번호 확인',
-            hint: '비밀번호를 다시 입력하세요',
-            controller: _passwordConfirmController,
-            obscureText: _obscurePasswordConfirm,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _continueFromAccount(),
-            errorText: _passwordConfirmError,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePasswordConfirm
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: AppColors.textSecondary,
-                size: 22,
-              ),
-              onPressed: () => setState(
-                () => _obscurePasswordConfirm = !_obscurePasswordConfirm,
-              ),
-            ),
-          ),
-        ],
+        ),
         const SizedBox(height: 24),
         AuthPrimaryButton(
           label: '다음 — 기업 정보',
@@ -927,9 +914,7 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
           onPressed: _mockUploadCertificate,
           icon: const Icon(Icons.upload_file_outlined),
           label: Text(
-            _certificateImageRef == null
-                ? '사업자등록증 업로드 (선택)'
-                : '업로드 완료 — 다시 선택',
+            _certificateImageRef == null ? '사업자등록증 업로드 (선택)' : '업로드 완료 — 다시 선택',
           ),
         ),
         const SizedBox(height: 8),
@@ -1027,12 +1012,11 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
             ),
             child: Text(
               switch (record.status) {
-                BusinessVerificationStatus.pending =>
-                  record.requiresAdminReview
-                      ? '미인증 · 사업자등록증 검토 대기'
-                      : '미인증 가입 — 무료 공고 이용 가능',
-                BusinessVerificationStatus.adminReviewRequired when
-                      record.requiresAdminReview =>
+                BusinessVerificationStatus.pending => record.requiresAdminReview
+                    ? '미인증 · 사업자등록증 검토 대기'
+                    : '미인증 가입 — 무료 공고 이용 가능',
+                BusinessVerificationStatus.adminReviewRequired
+                    when record.requiresAdminReview =>
                   record.industryName?.isNotEmpty == true
                       ? '업종「${record.industryName}」— 관리자 검토·Enterprise 가입 필요'
                       : '사업자등록증 검토 대기 — 승인 후 유료 서비스 이용',
@@ -1048,15 +1032,6 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
             _verificationError!,
             style: const TextStyle(color: Colors.red, fontSize: 13),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '신규 사업장이면 국세청 조회 없이 미인증 가입 후 무료 공고를 이용할 수 있습니다.',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.4,
-              color: AppColors.textSecondary.withValues(alpha: 0.9),
-            ),
-          ),
         ],
         const SizedBox(height: 20),
         AuthPrimaryButton(
@@ -1068,10 +1043,45 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
           onPressed: _verifying ? () {} : _continueFromVerification,
         ),
         if (record == null) ...[
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: _verifying ? null : _registerProvisionalSignup,
-            child: const Text('국세청 미조회 · 미인증 회원으로 가입'),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  '사업자 인증 없이 먼저 가입할 수 있어요',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '신규 사업장 등 국세청에 아직 반영되지 않았다면, 인증 없이 우선 가입해 '
+                  '무료 공고를 이용하고 나중에 사업자등록증으로 인증할 수 있습니다.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: AppColors.textSecondary.withValues(alpha: 0.95),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: _verifying ? null : _registerProvisionalSignup,
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: const Text('미인증 회원으로 가입'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ],
@@ -1147,7 +1157,8 @@ class _CorporateSignUpFlowState extends State<CorporateSignUpFlow> {
           decoration: BoxDecoration(
             color: AppColors.primaryLight.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+            border:
+                Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
           ),
           child: Column(
             children: [

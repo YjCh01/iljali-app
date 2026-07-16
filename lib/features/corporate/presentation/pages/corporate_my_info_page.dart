@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/core/compliance/corporate_verification_access_policy.dart';
@@ -97,6 +98,11 @@ class _CorporateMyInfoPageState extends State<CorporateMyInfoPage> {
 
     setState(() => _submittingCertificate = true);
     try {
+      final bytes = await file.readAsBytes();
+      final certificateImageRef = await IljariApiClient().uploadBusinessCertMedia(
+        bytes: bytes,
+        filename: file.name,
+      );
       final service = BusinessVerificationService();
       final record = await service.submitCertificateForReview(
         request: BusinessVerificationRequest(
@@ -106,7 +112,8 @@ class _CorporateMyInfoPageState extends State<CorporateMyInfoPage> {
           openingDate: '',
         ),
         entityType: profile.entityType,
-        certificateImageRef: file.path,
+        certificateImageRef: certificateImageRef,
+        accessToken: AuthSession.instance.accessToken,
       );
       final updated = profile.copyWith(
         verificationStatus: record.status,

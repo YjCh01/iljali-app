@@ -70,6 +70,47 @@ class ComplianceApiClient {
     );
   }
 
+  /// 기업 — 사업자등록증 재검토 요청 (본인 인증 토큰 필요)
+  Future<VerifiedBusinessRecord> resubmitCertificate({
+    required String companyKey,
+    required String certificateImageRef,
+    required String accessToken,
+    String note = '',
+  }) async {
+    final response = await _client.post(
+      Uri.parse('$_baseUrl/v1/compliance/business/$companyKey/resubmit-certificate'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $accessToken',
+      },
+      body: jsonEncode({
+        'certificate_image_ref': certificateImageRef,
+        'note': note,
+      }),
+    );
+    if (response.statusCode >= 400) {
+      final body = jsonDecode(response.body);
+      final detail = body is Map ? body['detail'] : null;
+      throw ComplianceApiException(
+        detail?.toString() ?? '재검토 요청 API 오류 (${response.statusCode})',
+      );
+    }
+    final map = jsonDecode(response.body) as Map<String, dynamic>;
+    return VerifiedBusinessRecord(
+      businessRegistrationNumber: map['company_key'] as String,
+      companyName: map['company_name'] as String,
+      entityType: BusinessEntityType.values.byName(map['entity_type'] as String),
+      status: BusinessVerificationStatus.values.byName(map['status'] as String),
+      verifiedAt: DateTime.now(),
+      industryName: map['industry_name'] as String?,
+      certificateImageRef: map['certificate_image_ref'] as String? ?? certificateImageRef,
+      ntsApiMatched: map['nts_api_matched'] as bool? ?? false,
+      requiresAdminReview: map['requires_admin_review'] as bool? ?? false,
+      adminReviewReason: map['admin_review_reason'] as String?,
+      trustScore: map['trust_score'] as int? ?? 100,
+    );
+  }
+
   Future<ContactAccessResult> fetchContactEntitlement(String companyKey) async {
     final uri = Uri.parse('$_baseUrl/v1/compliance/entitlements/contact')
         .replace(queryParameters: {'company_key': companyKey});

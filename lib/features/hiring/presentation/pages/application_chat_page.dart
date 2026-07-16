@@ -11,6 +11,7 @@ import 'package:map/core/compliance/presentation/partnership_upsell_dialog.dart'
 import 'package:map/core/compliance/services/abuse_detection_service.dart';
 import 'package:map/core/compliance/services/contact_entitlement_service.dart';
 import 'package:map/core/dev/dev_chat_test_support.dart';
+import 'package:map/core/hiring/chat_read_marker_service.dart';
 import 'package:map/core/hiring/chat_room_leave_service.dart';
 import 'package:map/core/hiring/application_chat_realtime_client.dart';
 import 'package:map/core/hiring/application_chat_message.dart';
@@ -167,6 +168,10 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
         ..clear()
         ..addAll(stored);
     });
+    await ChatReadMarkerService.markRead(
+      applicationId: widget.applicationId,
+      userEmail: user.email,
+    );
 
     await _startRealtime(app);
 
@@ -197,6 +202,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
       final parsed = await chatRepo.applyIncomingRow(widget.applicationId, row);
       if (parsed == null || !mounted) return;
       setState(() => _messages.add(parsed));
+      await ChatReadMarkerService.markRead(applicationId: widget.applicationId);
     });
 
     await client.connect();
@@ -636,7 +642,7 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
   }
 
   bool get _showsWorkAgreementUi =>
-      ProductFeatureFlags.isHiringCommissionEnabled;
+      ProductFeatureFlags.isAttendanceFlowEnabled;
 
   bool get _canConfirmAgreement {
     if (!_showsWorkAgreementUi) return false;

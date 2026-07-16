@@ -901,6 +901,8 @@ class _TrackingPanelState extends State<_TrackingPanel> {
             myStopId: pref.stopId,
             etaToMyStop: widget.eta,
             onOpenMap: () => setState(() => _showMap = !_showMap),
+            isPositionStale: status.isLocationStale,
+            lastUpdatedAt: status.lastLocationUpdatedAt,
           ),
         if (_showMap && route != null) ...[
           const SizedBox(height: 12),

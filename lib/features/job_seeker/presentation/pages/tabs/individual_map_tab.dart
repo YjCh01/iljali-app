@@ -23,6 +23,7 @@ import 'package:map/features/job_seeker/presentation/widgets/job_seeker_map_view
 import 'package:map/features/map_dashboard/data/datasources/map_camera_holder.dart';
 import 'package:map/features/map_dashboard/domain/entities/warehouse.dart';
 import 'package:map/features/map_dashboard/presentation/widgets/map_search_bar.dart';
+import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
 import 'package:map/features/job_seeker/presentation/map/job_recruitment_map_pin.dart';
@@ -58,6 +59,8 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   GeoCoordinate? _activeShuttleWorkplace;
   String? _searchFilter;
   bool _shuttleOnlyFilter = false;
+  int? _minHourlyWage;
+  WorkerCategory? _workerCategoryFilter;
   JobBookmarkVaultRepository? _vaultRepo;
 
   JobMapPinRankingContext get _rankingContext => JobMapPinRankingContext(
@@ -237,6 +240,22 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
     });
   }
 
+  Future<void> _openFilterSheet() async {
+    final result = await showModalBottomSheet<_JobFilterResult>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _JobFilterSheet(
+        initialMinWage: _minHourlyWage,
+        initialCategory: _workerCategoryFilter,
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() {
+      _minHourlyWage = result.minWage;
+      _workerCategoryFilter = result.category;
+    });
+  }
+
   void _openHotPinOnMap(JobMapPin pin) {
     setState(() => _screenMode = _MapScreenMode.map);
     _selectPin(pin);
@@ -271,6 +290,8 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
             key: ValueKey(widget.reloadToken),
             searchFilter: _searchFilter,
             shuttleOnlyFilter: _shuttleOnlyFilter,
+            minHourlyWage: _minHourlyWage,
+            workerCategoryFilter: _workerCategoryFilter,
             shuttleRoute: _activeShuttleRoute,
             shuttleWorkplace: _activeShuttleWorkplace,
             recruitmentPins: recruitmentPins,
@@ -385,6 +406,12 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
                     if (showMap) ...[
                       const SizedBox(width: 8),
                       MapSearchIconButton(onTap: _openSearch),
+                      const SizedBox(width: 8),
+                      _JobFilterIconButton(
+                        active: _minHourlyWage != null ||
+                            _workerCategoryFilter != null,
+                        onTap: _openFilterSheet,
+                      ),
                     ],
                   ],
                 ),
@@ -392,24 +419,41 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
               if (showMap && !showOverlay)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                  child: Row(
-                    children: [
-                      ShuttleMapFilterChip(
-                        active: _shuttleOnlyFilter,
-                        onChanged: (value) =>
-                            setState(() => _shuttleOnlyFilter = value),
-                      ),
-                      if (_searchFilter != null) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: InputChip(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ShuttleMapFilterChip(
+                          active: _shuttleOnlyFilter,
+                          onChanged: (value) =>
+                              setState(() => _shuttleOnlyFilter = value),
+                        ),
+                        if (_searchFilter != null) ...[
+                          const SizedBox(width: 8),
+                          InputChip(
                             label: Text('검색: $_searchFilter'),
                             onDeleted: () =>
                                 setState(() => _searchFilter = null),
                           ),
-                        ),
+                        ],
+                        if (_minHourlyWage != null) ...[
+                          const SizedBox(width: 8),
+                          InputChip(
+                            label: Text('시급 $_minHourlyWage원 이상'),
+                            onDeleted: () =>
+                                setState(() => _minHourlyWage = null),
+                          ),
+                        ],
+                        if (_workerCategoryFilter != null) ...[
+                          const SizedBox(width: 8),
+                          InputChip(
+                            label: Text(_workerCategoryFilter!.label),
+                            onDeleted: () =>
+                                setState(() => _workerCategoryFilter = null),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
             ],
@@ -463,6 +507,142 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _JobFilterIconButton extends StatelessWidget {
+  const _JobFilterIconButton({required this.active, required this.onTap});
+
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 3,
+      shadowColor: Colors.black26,
+      shape: const CircleBorder(),
+      color: active ? AppColors.primary : AppColors.surface,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            Icons.tune_rounded,
+            size: 22,
+            color: active
+                ? Colors.white
+                : AppColors.textSecondary.withValues(alpha: 0.9),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JobFilterResult {
+  const _JobFilterResult({this.minWage, this.category});
+
+  final int? minWage;
+  final WorkerCategory? category;
+}
+
+class _JobFilterSheet extends StatefulWidget {
+  const _JobFilterSheet({this.initialMinWage, this.initialCategory});
+
+  final int? initialMinWage;
+  final WorkerCategory? initialCategory;
+
+  @override
+  State<_JobFilterSheet> createState() => _JobFilterSheetState();
+}
+
+class _JobFilterSheetState extends State<_JobFilterSheet> {
+  static const _wageSteps = [10000, 11000, 12000, 13000, 15000, 20000];
+
+  late int? _minWage = widget.initialMinWage;
+  late WorkerCategory? _category = widget.initialCategory;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: 20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '공고 필터',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '최소 시급',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('전체'),
+                  selected: _minWage == null,
+                  onSelected: (_) => setState(() => _minWage = null),
+                ),
+                for (final wage in _wageSteps)
+                  ChoiceChip(
+                    label: Text('$wage원 이상'),
+                    selected: _minWage == wage,
+                    onSelected: (_) => setState(() => _minWage = wage),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              '고용 형태',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('전체'),
+                  selected: _category == null,
+                  onSelected: (_) => setState(() => _category = null),
+                ),
+                for (final category in WorkerCategory.values)
+                  ChoiceChip(
+                    label: Text(category.label),
+                    selected: _category == category,
+                    onSelected: (_) => setState(() => _category = category),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(
+                  _JobFilterResult(minWage: _minWage, category: _category),
+                ),
+                child: const Text('적용'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

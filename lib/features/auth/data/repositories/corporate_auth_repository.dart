@@ -115,6 +115,63 @@ abstract final class CorporateAuthRepository {
     await QcSyncBootstrap.pullIfEnabled();
   }
 
+  /// 소셜 로그인 콜백에서 이미 발급된 access_token + 회원 정보로 세션을 완료.
+  static Future<void> completeSocialLogin(Map<String, dynamic> result) async {
+    final token = result['access_token'] as String?;
+    if (token != null && token.isNotEmpty) {
+      await AuthSession.instance.setAccessToken(token);
+    }
+    await _signInFromLoginResult(
+      result,
+      fallbackEmail: result['email'] as String? ?? '',
+    );
+    await const CorporateOrgJoinService().syncCurrentUser();
+    await QcSyncBootstrap.pullIfEnabled();
+  }
+
+  static Future<void> signUpSocial({
+    required String socialToken,
+    required String displayName,
+    required String phone,
+    required String phoneVerifiedToken,
+    required CorporateMemberProfile profile,
+  }) async {
+    final normalizedPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (!_useRemoteApi) {
+      throw ArgumentError(
+        '기업 가입은 서버 연동(COMPLIANCE_API_URL) 설정 후 이용할 수 있습니다.',
+      );
+    }
+
+    final client = IljariApiClient();
+    final result = await client.socialSignupCorporate(
+      socialToken: socialToken,
+      phone: normalizedPhone,
+      phoneVerifiedToken: phoneVerifiedToken,
+      displayName: displayName.trim(),
+      companyName: profile.companyName,
+      companyKey: profile.companyKey,
+      department: profile.department,
+      contactPersonName: profile.contactPersonName,
+      handlerCode: profile.handlerCode,
+    );
+
+    final token = result['access_token'] as String?;
+    if (token != null && token.isNotEmpty) {
+      await AuthSession.instance.setAccessToken(token);
+    }
+    await _signInFromLoginResult(
+      result,
+      fallbackEmail: result['email'] as String? ?? '',
+      fallbackName: displayName.trim(),
+      fallbackPhone: phone.trim(),
+      fallbackProfile: profile,
+    );
+    await const CorporateOrgJoinService().syncCurrentUser();
+    await QcSyncBootstrap.pullIfEnabled();
+  }
+
   static Future<void> _signInFromLoginResult(
     Map<String, dynamic> result, {
     required String fallbackEmail,

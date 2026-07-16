@@ -5,12 +5,15 @@ import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/core/widgets/push_wallet_bonus_feedback.dart';
 import 'package:map/core/widgets/transient_snack_bar.dart';
+import 'package:map/features/corporate/domain/entities/employer_push_wallet.dart';
 import 'package:map/features/corporate/domain/entities/payment_method.dart';
 import 'package:map/features/corporate/domain/entities/payment_method_option.dart';
 import 'package:map/features/corporate/domain/entities/push_package_catalog.dart';
+import 'package:map/features/corporate/domain/entities/wallet_credit_lot.dart';
 import 'package:map/features/corporate/domain/services/push_package_purchase_service.dart';
 import 'package:map/features/corporate/domain/services/push_wallet_service.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_tax_documents_page.dart';
+import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 import 'package:map/features/corporate/presentation/widgets/payment/payment_amount_breakdown.dart';
 import 'package:map/features/corporate/presentation/widgets/payment/payment_method_selection_section.dart';
 
@@ -33,6 +36,8 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
   int _purchaseQuantity = 1;
   bool _processing = false;
   String? _error;
+  EmployerPushWallet? _wallet;
+  WalletCreditLot? _nearestExpiringLot;
 
   @override
   void initState() {
@@ -50,7 +55,13 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
     final profile = AuthSession.instance.currentUser?.corporateProfile;
     if (profile == null) return;
     final outcome = await _walletService.loadWalletDetailed(profile);
+    final lots = await _walletService.fetchActiveLots(profile);
+    final expiring = lots.where((lot) => lot.expiresAt != null).toList();
     if (!mounted) return;
+    setState(() {
+      _wallet = outcome.wallet;
+      _nearestExpiringLot = expiring.isEmpty ? null : expiring.first;
+    });
     if (showBonusSnackBar) {
       showPushWalletBonusSnackBar(context, outcome);
     }
@@ -157,6 +168,16 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
                     color: AppColors.textSecondary.withValues(alpha: 0.95),
                   ),
                 ),
+                const SizedBox(height: 16),
+                if (_wallet != null) _WalletSummaryCard(wallet: _wallet!),
+                if (_nearestExpiringLot != null) ...[
+                  const SizedBox(height: 10),
+                  _ExpiringCreditBanner(
+                    lot: _nearestExpiringLot!,
+                    onViewDetail: () => Navigator.of(context)
+                        .pushNamed(AppRoutes.corporateWalletCreditLots),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
                   onPressed: () => Navigator.of(context)
@@ -224,6 +245,128 @@ class _PushPackageShopPageState extends State<PushPackageShopPage> {
                         '${_selected.productName} 구매',
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WalletSummaryCard extends StatelessWidget {
+  const _WalletSummaryCard({required this.wallet});
+
+  final EmployerPushWallet wallet;
+
+  @override
+  Widget build(BuildContext context) {
+    return CorporateSurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 18,
+                color: AppColors.primary.withValues(alpha: 0.9),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                '보유 크레딧',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: [
+              _WalletBalanceStat(
+                label: '일자리 알림핀',
+                value: '${wallet.packageCredits}회',
+              ),
+              _WalletBalanceStat(
+                label: '노출+PUSH',
+                value: '${wallet.exposurePushBundleCredits}회',
+              ),
+              _WalletBalanceStat(
+                label: 'PUSH 알림권',
+                value: '${wallet.pushTicketCredits}회',
+              ),
+              _WalletBalanceStat(
+                label: '보유금',
+                value: wallet.cashBalanceLabel,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WalletBalanceStat extends StatelessWidget {
+  const _WalletBalanceStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary.withValues(alpha: 0.9),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
+}
+
+class _ExpiringCreditBanner extends StatelessWidget {
+  const _ExpiringCreditBanner({required this.lot, required this.onViewDetail});
+
+  final WalletCreditLot lot;
+  final VoidCallback onViewDetail;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = lot.daysUntilExpiry ?? 0;
+    return CorporateSurfaceCard(
+      onTap: onViewDetail,
+      child: Row(
+        children: [
+          const Icon(
+            Icons.access_time_rounded,
+            size: 18,
+            color: Color(0xFFC62828),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${lot.creditTypeLabel} ${lot.remaining}회가 '
+              '${days <= 0 ? '오늘' : 'D-$days'} 만료됩니다.',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFC62828),
+              ),
+            ),
+          ),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.textSecondary.withValues(alpha: 0.7),
           ),
         ],
       ),

@@ -75,6 +75,8 @@ class _QrCheckInPageState extends State<QrCheckInPage> {
 
       final geofence = await AttendanceGeofenceService.evaluateCurrent(
         workplace: widget.application.workplaceCoordinate,
+        workDate: widget.application.workDate,
+        workSchedule: widget.application.workSchedule,
       );
       final detailed = await DeviceLocationService.getCurrentPositionDetailed();
 

@@ -25,6 +25,7 @@ dependencies:
   webview_flutter: ^4.10.0
   app_links: ^6.4.0
   geolocator: ^13.0.2
+  wakelock_plus: ^1.5.2
   daum_postcode_search: ^1.1.0
   web: ^1.1.1
   sentry_flutter: ^9.6.0

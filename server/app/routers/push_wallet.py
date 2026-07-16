@@ -10,6 +10,8 @@ from app.push_wallet_schemas import (
     EmployerPushWalletResponse,
     EmployerPushWalletUpsert,
     SIGNUP_BONUS_GRANT,
+    WalletCreditLotListResponse,
+    WalletCreditLotResponse,
 )
 from app.services.entitlement_service import normalize_brn
 from app.services.push_wallet_service import (
@@ -17,6 +19,7 @@ from app.services.push_wallet_service import (
     get_bonus_ledger,
     get_or_create_wallet,
     grant_credit_lot,
+    list_active_lots,
     try_claim_signup_bonus,
     wallet_to_response,
 )
@@ -95,6 +98,25 @@ def consume_wallet_credit(
         raise HTTPException(status_code=402, detail="크레딧 잔액이 부족합니다.")
     wallet = get_or_create_wallet(db, brn)
     return wallet_to_response(brn, wallet, db)
+
+
+@router.get("/{company_key}/lots", response_model=WalletCreditLotListResponse)
+def list_wallet_lots(company_key: str, db: Session = Depends(get_db)):
+    brn = normalize_brn(company_key)
+    lots = list_active_lots(db, brn)
+    return WalletCreditLotListResponse(
+        company_key=brn,
+        lots=[
+            WalletCreditLotResponse(
+                credit_type=lot.credit_type,
+                remaining=lot.remaining,
+                granted_at=lot.granted_at,
+                expires_at=lot.expires_at,
+                source_order_id=lot.source_order_id,
+            )
+            for lot in lots
+        ],
+    )
 
 
 @router.get("/{company_key}/bonus", response_model=CompanyBonusLedgerResponse)

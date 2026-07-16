@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
+import 'package:map/core/navigation/global_navigator.dart';
 import 'package:map/core/constants/app_strings.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/core/theme/app_theme.dart';
@@ -38,6 +39,7 @@ import 'package:map/features/corporate/presentation/pages/corporate_job_post_pus
 import 'package:map/features/corporate/presentation/pages/corporate_notification_payment_args.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_notification_payment_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_branch_management_page.dart';
+import 'package:map/features/corporate/presentation/pages/corporate_shuttle_location_officer_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_roi_dashboard_page.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_talent_search_page.dart';
 import 'package:map/features/corporate/presentation/pages/chat_reply_macro_settings_page.dart';
@@ -50,6 +52,7 @@ import 'package:map/features/corporate/presentation/pages/corporate_welcome_onbo
 import 'package:map/features/corporate/presentation/pages/corporate_cash_charge_page.dart';
 import 'package:map/features/corporate/presentation/pages/exposure_renewal_page.dart';
 import 'package:map/features/corporate/presentation/pages/push_package_shop_page.dart';
+import 'package:map/features/corporate/presentation/pages/wallet_credit_lots_page.dart';
 import 'package:map/features/corporate/presentation/pages/job_pin_activation_page.dart';
 import 'package:map/features/corporate/presentation/pages/push_notification_base_point_page.dart';
 import 'package:map/core/legal/legal_consent_gate.dart';
@@ -113,6 +116,7 @@ class MapApp extends StatelessWidget {
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      navigatorKey: navigatorKey,
       initialRoute: initialRoute,
       onGenerateRoute: _onGenerateRoute,
       builder: (context, child) {
@@ -422,6 +426,11 @@ class MapApp extends StatelessWidget {
           settings: settings,
           builder: (_) => PushPackageShopPage(initialOfferId: initialOfferId),
         );
+      case AppRoutes.corporateWalletCreditLots:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const WalletCreditLotsPage(),
+        );
       case AppRoutes.adminCompliance:
         return MaterialPageRoute<void>(
           settings: settings,
@@ -447,6 +456,11 @@ class MapApp extends StatelessWidget {
         return MaterialPageRoute<CommuteRoute>(
           settings: settings,
           builder: (_) => ShuttleRouteListPage(args: shuttleArgs),
+        );
+      case AppRoutes.corporateShuttleLocationOfficer:
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => const CorporateShuttleLocationOfficerPage(),
         );
       case AppRoutes.corporateShuttleRouteEdit:
         CommuteRoute? existing;

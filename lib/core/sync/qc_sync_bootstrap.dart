@@ -1,12 +1,14 @@
+import 'dart:convert';
+
 import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/config/env_config.dart';
+import 'package:map/features/credential/domain/entities/credential_catalog.dart';
 import 'package:map/core/dev/qc_local_storage_purge.dart';
 import 'package:map/core/dev/qc_visual_scenario_seeder.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/sync/member_sanction_store.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/core/hiring/hiring_application.dart';
-import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/session/auth_user.dart';
@@ -47,6 +49,13 @@ abstract final class QcSyncBootstrap {
       await _hydrateAdminAnnouncements(bootstrap);
     } on Object {
       // offline — 로컬 캐시 유지
+    }
+
+    try {
+      final items = await client.fetchCredentialCatalog();
+      CredentialCatalog.overrideFromServer(items);
+    } on Object {
+      // offline — 앱 내장 15종 기본값 유지
     }
   }
 
@@ -149,10 +158,23 @@ abstract final class QcSyncBootstrap {
           mapPinDisplayTier: null,
           hasShuttleRouteOverlay: shuttleActive,
           workplaceId: map['workplace_id'] as String?,
+          requiredCredentialIds:
+              _parseStringList(map['required_credential_ids_json']),
         ),
       );
     }
     CorporateJobPostLocalDataSourceImpl.replaceFromServer(mapped);
+  }
+
+  static List<String> _parseStringList(Object? jsonString) {
+    if (jsonString is! String || jsonString.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(jsonString);
+      if (decoded is! List) return const [];
+      return decoded.map((e) => e.toString()).toList();
+    } on FormatException {
+      return const [];
+    }
   }
 
   static Future<void> _hydrateGhostPins(Map<String, dynamic> bootstrap) async {
@@ -251,12 +273,19 @@ abstract final class QcSyncBootstrap {
           status: _statusFromApi(map['status'] as String? ?? 'applied'),
           workSchedule: map['work_schedule'] as String? ?? '',
           companyKey: map['company_key'] as String?,
+          requiredCredentialIds:
+              _parseStringList(map['required_credential_ids_json']),
+          heldCredentialIds:
+              _parseStringList(map['held_credential_ids_json']),
+          seekerNoShowCount: (map['seeker_no_show_count'] as num?)?.toInt() ?? 0,
         ),
       );
     }
   }
 
   static HiringApplicationStatus _statusFromApi(String label) {
+    final wireMatch = hiringApplicationStatusFromWire(label);
+    if (wireMatch != null) return wireMatch;
     try {
       return HiringApplicationStatus.values.byName(label);
     } catch (_) {

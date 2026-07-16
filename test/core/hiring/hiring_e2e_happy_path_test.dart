@@ -128,21 +128,7 @@ void main() {
       isTrue,
     );
 
-    // ── 7+. 근무합의·출근·수수료 — 제휴 채널(ENABLE_HIRING_COMMISSION) 전용 ──
-    expect(
-      () => hiringRepo.confirmWorkScheduleAgreement(
-        applicationId: application.id,
-        asEmployer: false,
-      ),
-      throwsA(isA<StateError>()),
-      reason: 'main app must not run work-agreement flow',
-    );
-
-    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
-      return;
-    }
-
-    // ── 7. 근무예정 쌍방 합의 ──
+    // ── 7. 근무예정 쌍방 합의 — 수수료 여부와 무관하게 항상 동작 ──
     await AuthSession.instance.signIn(seeker.toAuthUser());
     var agreed = await hiringRepo.confirmWorkScheduleAgreement(
       applicationId: application.id,
@@ -180,32 +166,41 @@ void main() {
     await AuthSession.instance.signIn(corp.toAuthUser());
     final mutual = await hiringRepo.confirmEmployerAttendance(application.id);
     expect(mutual.isMutuallyConfirmed, isTrue);
-    expect(mutual.status, HiringApplicationStatus.checkedIn);
-    expect(mutual.needsCommissionPayment, isTrue);
-    expect(
-      mutual.commissionAmountKrw,
-      CommissionCalculator.dailyWorkerFee(),
-    );
 
-    final pending = await hiringRepo.fetchPendingCommissions();
-    expect(pending.any((p) => p.id == application.id), isTrue);
+    if (ProductFeatureFlags.isHiringCommissionEnabled) {
+      // ── 제휴 채널 빌드: 상호확인 후 수수료 결제·에스컬레이션 흐름 ──
+      expect(mutual.status, HiringApplicationStatus.checkedIn);
+      expect(mutual.needsCommissionPayment, isTrue);
+      expect(
+        mutual.commissionAmountKrw,
+        CommissionCalculator.dailyWorkerFee(),
+      );
 
-    // ── 10. 수수료 정산 알림 (에스컬레이션) + 결제 ──
-    final overdueSeed = mutual.copyWith(
-      commissionDueAt: DateTime.now().subtract(const Duration(minutes: 5)),
-    );
-    SharedPreferences.setMockInitialValues({
-      'hiring_applications_v1': jsonEncode([overdueSeed.toJson()]),
-    });
-    final overdueRepo = await LocalHiringRepository.create();
-    final escalated = await overdueRepo.escalateOverdueCommissions();
-    expect(escalated, hasLength(1));
-    expect(escalated.first.escalationLevel, 1);
+      final pending = await hiringRepo.fetchPendingCommissions();
+      expect(pending.any((p) => p.id == application.id), isTrue);
 
-    final paid = await overdueRepo.markCommissionPaid(application.id);
-    expect(paid.status, HiringApplicationStatus.commissionPaid);
-    expect(paid.commissionPaidAt, isNotNull);
-    expect(paid.needsCommissionPayment, isFalse);
+      // ── 10. 수수료 정산 알림 (에스컬레이션) + 결제 ──
+      final overdueSeed = mutual.copyWith(
+        commissionDueAt: DateTime.now().subtract(const Duration(minutes: 5)),
+      );
+      SharedPreferences.setMockInitialValues({
+        'hiring_applications_v1': jsonEncode([overdueSeed.toJson()]),
+      });
+      final overdueRepo = await LocalHiringRepository.create();
+      final escalated = await overdueRepo.escalateOverdueCommissions();
+      expect(escalated, hasLength(1));
+      expect(escalated.first.escalationLevel, 1);
+
+      final paid = await overdueRepo.markCommissionPaid(application.id);
+      expect(paid.status, HiringApplicationStatus.commissionPaid);
+      expect(paid.commissionPaidAt, isNotNull);
+      expect(paid.needsCommissionPayment, isFalse);
+    } else {
+      // ── 메인 앱(수수료 없음): 상호확인 즉시 무료로 완료 처리 ──
+      expect(mutual.status, HiringApplicationStatus.commissionPaid);
+      expect(mutual.commissionAmountKrw, 0);
+      expect(mutual.needsCommissionPayment, isFalse);
+    }
 
     final afterChat =
         await const CorporateChatLocalDataSourceImpl().fetchChatRooms();

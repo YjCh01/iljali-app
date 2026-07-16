@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/hiring/application_chat_message_repository.dart';
+import 'package:map/core/hiring/chat_read_marker_service.dart';
 import 'package:map/core/hiring/chat_room_leave_service.dart';
 import 'package:map/core/hiring/hiring_refresh.dart';
 import 'package:map/core/hiring/hiring_application.dart';
@@ -34,6 +36,7 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
   SeekerAttendanceGateResult? _gate;
   List<HiringApplication> _applications = [];
   List<CorporateChatRoom> _noticeRooms = const [];
+  Map<String, int> _unreadCounts = const {};
   bool _loading = true;
 
   @override
@@ -70,11 +73,22 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
       userEmail: email,
     );
     final noticeRooms = await AdminAnnouncementRoomService.fetchNoticeRooms();
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    final unreadCounts = <String, int>{};
+    for (final app in visible) {
+      unreadCounts[app.id] = await ChatReadMarkerService.unreadCount(
+        applicationId: app.id,
+        asEmployer: false,
+        messages: await chatRepo.load(app.id),
+        userEmail: email,
+      );
+    }
     if (mounted) {
       setState(() {
         _gate = gate;
         _applications = visible;
         _noticeRooms = noticeRooms;
+        _unreadCounts = unreadCounts;
         _loading = false;
       });
     }
@@ -207,6 +221,7 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
             }
             final roomIndex = afterNotices - bannerCount;
             final app = _applications[roomIndex];
+            final unread = _unreadCounts[app.id] ?? 0;
             return CorporateSurfaceCard(
               onTap: _gate?.isLocked == true ? null : () => _openChat(app),
               child: Row(
@@ -242,12 +257,38 @@ class _IndividualChatTabState extends State<IndividualChatTab> {
                       ],
                     ),
                   ),
-                  Text(
-                    LocalHiringRepository.formatRelativeTime(app.appliedAt),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary.withValues(alpha: 0.85),
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        LocalHiringRepository.formatRelativeTime(app.appliedAt),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary.withValues(alpha: 0.85),
+                        ),
+                      ),
+                      if (unread > 0) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            unread > 99 ? '99+' : '$unread',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   ChatRoomLeaveMenu(onLeave: () => _leaveChat(app)),
                 ],

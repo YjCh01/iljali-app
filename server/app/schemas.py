@@ -17,6 +17,11 @@ class VerifyBusinessRequest(BaseModel):
     ocr_confidence: float | None = None
 
 
+class ResubmitCertificateRequest(BaseModel):
+    certificate_image_ref: str = Field(min_length=1)
+    note: str = ""
+
+
 class VerifyBusinessResponse(BaseModel):
     company_key: str
     company_name: str
@@ -27,6 +32,7 @@ class VerifyBusinessResponse(BaseModel):
     trust_score: int = 100
     nts_api_matched: bool = False
     entity_type: str
+    certificate_image_ref: str | None = None
 
 
 class ContactEntitlementResponse(BaseModel):

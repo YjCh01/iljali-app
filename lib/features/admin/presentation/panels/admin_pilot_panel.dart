@@ -32,6 +32,8 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
   var _updatingScopeFields = false;
   String? _searchError;
   String _workStartTime = '';
+  List<Map<String, dynamic>> _pendingRequests = const [];
+  var _loadingRequests = true;
 
   @override
   void initState() {
@@ -39,6 +41,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
     _companyKeyCtrl.addListener(_onScopeChanged);
     _routeIdCtrl.addListener(_onScopeChanged);
     _load();
+    _loadPendingRequests();
   }
 
   @override
@@ -57,6 +60,8 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
   void _onScopeChanged() {
     if (_updatingScopeFields) return;
     if (mounted) setState(() {});
+    // 회사·노선별 독립 슬롯 — 범위가 바뀌면 해당 슬롯 현황을 다시 조회.
+    _load();
   }
 
   void _setScopeFields({
@@ -80,18 +85,23 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
       setState(() => _loading = false);
       return;
     }
+    final companyKey = _companyKeyCtrl.text.trim();
+    final routeId = _routeIdCtrl.text.trim();
+    if (companyKey.isEmpty || routeId.isEmpty) {
+      // 회사·노선별 독립 슬롯이라 어느 슬롯을 볼지 먼저 지정해야 함.
+      setState(() {
+        _config = null;
+        _loading = false;
+      });
+      return;
+    }
     setState(() => _loading = true);
     try {
-      final json = await c.client.getBusLocationTowerPilot();
+      final json = await c.client.getBusLocationTowerPilot(
+        companyKey: companyKey,
+        routeId: routeId,
+      );
       if (!mounted) return;
-      if (_companyKeyCtrl.text.trim().isEmpty) {
-        _setScopeFields(
-          companyKey: json['company_key'] as String? ?? '',
-          companyName: json['company_name'] as String? ?? '',
-          routeId: json['route_id'] as String? ?? '',
-          routeName: json['route_name'] as String? ?? '',
-        );
-      }
       setState(() {
         _config = json;
         _noteCtrl.text = json['note'] as String? ?? '';
@@ -307,10 +317,51 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
     await _load();
   }
 
+  Future<void> _loadPendingRequests() async {
+    final c = widget.controller;
+    if (!c.apiReady) {
+      setState(() => _loadingRequests = false);
+      return;
+    }
+    setState(() => _loadingRequests = true);
+    try {
+      final items = await c.client.listPendingOfficerRequests();
+      if (!mounted) return;
+      setState(() {
+        _pendingRequests = items;
+        _loadingRequests = false;
+      });
+    } on Object {
+      if (mounted) setState(() => _loadingRequests = false);
+    }
+  }
+
+  Future<void> _approveRequest(String requestId) async {
+    final c = widget.controller;
+    await c.run(
+      () => c.client.approveOfficerRequest(requestId),
+      successMessage: '셔틀위치담당자 지정 요청 승인',
+    );
+    await _loadPendingRequests();
+    await _load();
+  }
+
+  Future<void> _rejectRequest(String requestId) async {
+    final c = widget.controller;
+    await c.run(
+      () => c.client.rejectOfficerRequest(requestId),
+      successMessage: '셔틀위치담당자 지정 요청 반려',
+    );
+    await _loadPendingRequests();
+  }
+
   Future<void> _stopToday() async {
     final c = widget.controller;
     await c.run(
-      () => c.client.stopBusLocationTowerToday(),
+      () => c.client.stopBusLocationTowerToday(
+        companyKey: _companyKeyCtrl.text.trim(),
+        routeId: _routeIdCtrl.text.trim(),
+      ),
       successMessage: '오늘 셔틀 위치 공유 중지',
     );
     await _load();
@@ -326,6 +377,36 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          AdminCard(
+            title: '기업 셔틀위치담당자 지정 요청',
+            subtitle: '기업이 보낸 요청을 검토·승인·반려합니다.',
+            child: _loadingRequests
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : _pendingRequests.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text('대기 중인 요청이 없습니다.'),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _pendingRequests
+                            .map(
+                              (request) => _OfficerRequestTile(
+                                request: request,
+                                busy: c.busy,
+                                onApprove: () =>
+                                    _approveRequest('${request['id']}'),
+                                onReject: () =>
+                                    _rejectRequest('${request['id']}'),
+                              ),
+                            )
+                            .toList(),
+                      ),
+          ),
+          const SizedBox(height: 16),
           if (approved && approvedEmail.isNotEmpty) ...[
             AdminCard(
               title: '현재 승인된 셔틀위치담당자',
@@ -663,6 +744,79 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
                   label: '셔틀 표시명',
                   controller: _routeNameCtrl,
                   hint: '세종 물류센터 1호차',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfficerRequestTile extends StatelessWidget {
+  const _OfficerRequestTile({
+    required this.request,
+    required this.busy,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final Map<String, dynamic> request;
+  final bool busy;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${request['seeker_name'] ?? '-'} (${request['seeker_email'] ?? '-'})',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${request['company_name'] ?? request['company_key'] ?? '-'} · '
+            '${request['route_name'] ?? request['route_id'] ?? '-'}',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary.withValues(alpha: 0.95),
+            ),
+          ),
+          if ('${request['note'] ?? ''}'.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '메모: ${request['note']}',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: busy ? null : onReject,
+                  child: const Text('반려'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: busy ? null : onApprove,
+                  child: const Text('승인'),
                 ),
               ),
             ],

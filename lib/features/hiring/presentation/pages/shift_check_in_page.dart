@@ -71,6 +71,8 @@ class _ShiftCheckInPageState extends State<ShiftCheckInPage> {
         current: current,
         workplace: workplace,
         isMocked: position?.isMocked ?? false,
+        workDate: widget.application.workDate,
+        workSchedule: widget.application.workSchedule,
       );
 
       await AttendanceGeofenceService.logVerificationAttempt(

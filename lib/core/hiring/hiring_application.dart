@@ -56,6 +56,8 @@ class HiringApplication {
     this.employerGeofenceDistanceM,
     this.disclosedResumeItems = const [],
     this.requiredCredentialIds = const [],
+    this.heldCredentialIds = const [],
+    this.seekerNoShowCount = 0,
   });
 
   final String id;
@@ -123,6 +125,12 @@ class HiringApplication {
 
   /// 지원 당시 공고 필수 자격증 ID (스냅샷)
   final List<String> requiredCredentialIds;
+
+  /// 지원 당시 구직자가 보유(사진 등록 완료)하고 있던 자격증 ID (스냅샷)
+  final List<String> heldCredentialIds;
+
+  /// 서버 누적 노쇼 횟수 — 다른 기업이 마킹한 것도 포함(구직자 단위 서버 카운트).
+  final int seekerNoShowCount;
 
   bool get isWorkAgreementComplete =>
       seekerWorkAgreedAt != null && employerWorkAgreedAt != null;
@@ -227,6 +235,8 @@ class HiringApplication {
     double? employerGeofenceDistanceM,
     List<ResumeItemKind>? disclosedResumeItems,
     List<String>? requiredCredentialIds,
+    List<String>? heldCredentialIds,
+    int? seekerNoShowCount,
     bool clearSeekerWorkAgreedAt = false,
     bool clearEmployerWorkAgreedAt = false,
     bool clearNoShowMarkedAt = false,
@@ -298,6 +308,8 @@ class HiringApplication {
           disclosedResumeItems ?? this.disclosedResumeItems,
       requiredCredentialIds:
           requiredCredentialIds ?? this.requiredCredentialIds,
+      heldCredentialIds: heldCredentialIds ?? this.heldCredentialIds,
+      seekerNoShowCount: seekerNoShowCount ?? this.seekerNoShowCount,
     );
   }
 
@@ -352,6 +364,9 @@ class HiringApplication {
             ResumeItemKindX.encodeList(disclosedResumeItems),
         if (requiredCredentialIds.isNotEmpty)
           'requiredCredentialIds': requiredCredentialIds,
+        if (heldCredentialIds.isNotEmpty)
+          'heldCredentialIds': heldCredentialIds,
+        if (seekerNoShowCount > 0) 'seekerNoShowCount': seekerNoShowCount,
       };
 
   factory HiringApplication.fromJson(Map<String, dynamic> json) {
@@ -425,6 +440,11 @@ class HiringApplication {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
+      heldCredentialIds: (json['heldCredentialIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      seekerNoShowCount: (json['seekerNoShowCount'] as num?)?.toInt() ?? 0,
     );
   }
 

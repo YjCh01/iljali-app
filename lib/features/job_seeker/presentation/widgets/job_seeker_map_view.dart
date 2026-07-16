@@ -20,7 +20,9 @@ import 'package:map/core/map/web/job_map_web_marker_factory.dart';
 import 'package:map/core/map/web/naver_map_web_layer.dart';
 import 'package:map/core/utils/naver_map_platform.dart';
 import 'package:map/core/map/web/shuttle_map_web_overlay_builder.dart';
+import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
 import 'package:map/features/corporate/domain/entities/push_notification_settings.dart';
+import 'package:map/features/corporate/domain/entities/worker_category.dart';
 import 'package:map/features/corporate/domain/utils/recruitment_pin_link_factory.dart';
 
 import 'package:map/features/corporate/presentation/widgets/push_radius_map_picker.dart';
@@ -69,6 +71,8 @@ class JobSeekerMapView extends StatefulWidget {
 
     this.searchFilter,
     this.shuttleOnlyFilter = false,
+    this.minHourlyWage,
+    this.workerCategoryFilter,
 
     this.overlay,
     this.shuttleRoute,
@@ -94,6 +98,12 @@ class JobSeekerMapView extends StatefulWidget {
 
   /// true면 셔틀 운행 공고만 지도에 표시
   final bool shuttleOnlyFilter;
+
+  /// 설정 시 이 시급(원) 미만인 공고는 제외
+  final int? minHourlyWage;
+
+  /// 설정 시 해당 고용 유형인 공고만 표시
+  final WorkerCategory? workerCategoryFilter;
 
   final Widget? overlay;
 
@@ -235,7 +245,9 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.searchFilter != widget.searchFilter ||
-        oldWidget.shuttleOnlyFilter != widget.shuttleOnlyFilter) {
+        oldWidget.shuttleOnlyFilter != widget.shuttleOnlyFilter ||
+        oldWidget.minHourlyWage != widget.minHourlyWage ||
+        oldWidget.workerCategoryFilter != widget.workerCategoryFilter) {
 
       _applyFilters(_activeViewport);
 
@@ -313,7 +325,25 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
           })
           .toList();
     }
+    final minWage = widget.minHourlyWage;
+    if (minWage != null) {
+      result = result
+          .where((pin) => _parseWageKrw(pin.post.hourlyWage) >= minWage)
+          .toList();
+    }
+    final categoryFilter = widget.workerCategoryFilter;
+    if (categoryFilter != null) {
+      result = result
+          .where((pin) => pin.post.effectiveWorkerCategory == categoryFilter)
+          .toList();
+    }
     return result;
+  }
+
+  int _parseWageKrw(String wage) {
+    final digits = wage.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return 0;
+    return int.tryParse(digits) ?? 0;
   }
 
 

@@ -58,7 +58,7 @@ void main() {
     );
   });
 
-  test('mutual confirm after seeker then employer enables commission',
+  test('mutual confirm after seeker then employer completes attendance',
       () async {
     final repository = await repo();
     final id = await seedScheduled(repository: repository);
@@ -67,16 +67,13 @@ void main() {
     final mutual = await repository.confirmEmployerAttendance(id);
 
     expect(mutual.isMutuallyConfirmed, isTrue);
-    expect(mutual.status, HiringApplicationStatus.checkedIn);
-    expect(mutual.commissionAmountKrw, 15000);
-    expect(mutual.needsCommissionPayment, isTrue);
-
-    final paid = await repository.markCommissionPaid(id);
-    expect(paid.status, HiringApplicationStatus.commissionPaid);
-    expect(paid.commissionPaidAt, isNotNull);
+    // 수수료 기능은 기본 비활성 — 상호확인 즉시 무료로 완료 처리된다.
+    expect(mutual.status, HiringApplicationStatus.commissionPaid);
+    expect(mutual.commissionAmountKrw, 0);
+    expect(mutual.needsCommissionPayment, isFalse);
   });
 
-  test('mutual confirm after employer then seeker enables commission',
+  test('mutual confirm after employer then seeker completes attendance',
       () async {
     final repository = await repo();
     final id = await seedScheduled(repository: repository);
@@ -85,7 +82,7 @@ void main() {
     final mutual = await repository.checkIn(id);
 
     expect(mutual.isMutuallyConfirmed, isTrue);
-    expect(mutual.needsCommissionPayment, isTrue);
+    expect(mutual.needsCommissionPayment, isFalse);
   });
 
   test('does not auto-confirm employer after silence (mutual confirm required)',

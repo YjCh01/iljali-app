@@ -39,6 +39,7 @@ class _AdminCompanyVerificationCardState
   bool _loadedFromServer = false;
   String? _loadError;
   String? _dataSource;
+  String? _certificateImageRef;
 
   AdminOpsApiClient get _admin => widget.adminClient ?? AdminOpsApiClient();
   ComplianceApiClient get _compliance => ComplianceApiClient();
@@ -76,12 +77,14 @@ class _AdminCompanyVerificationCardState
     String? reason,
     required bool fromServer,
     String? source,
+    String? certificateImageRef,
   }) {
     _status = status;
     _needsReview = needsReview;
     _reason = reason;
     _loadedFromServer = fromServer;
     _dataSource = source;
+    _certificateImageRef = certificateImageRef;
   }
 
   bool _recordNeedsReview(Map<String, dynamic> record) {
@@ -143,6 +146,7 @@ class _AdminCompanyVerificationCardState
             reason: data['admin_review_reason'] as String?,
             fromServer: true,
             source: 'admin/ops/verification',
+            certificateImageRef: data['certificate_image_ref'] as String?,
           );
         });
         return;
@@ -309,6 +313,21 @@ class _AdminCompanyVerificationCardState
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary.withValues(alpha: 0.95),
+              ),
+            ),
+          ],
+          if (_certificateImageRef != null &&
+              (_certificateImageRef!.startsWith('http://') ||
+                  _certificateImageRef!.startsWith('https://'))) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(
+                _certificateImageRef!,
+                height: 160,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
               ),
             ),
           ],

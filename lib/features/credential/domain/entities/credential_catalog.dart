@@ -141,7 +141,7 @@ abstract final class CredentialCatalog {
     ],
   );
 
-  static const List<CredentialDefinition> all = [
+  static const List<CredentialDefinition> _offlineDefaults = [
     constructionSafetyBasic,
     specialHealthExam,
     constructionMachineryLicense,
@@ -158,6 +158,48 @@ abstract final class CredentialCatalog {
     childcareTeacherCert,
     healthCertificate,
   ];
+
+  /// 서버 카탈로그(`GET /v1/credentials/catalog`)가 성공하면 이 캐시를 덮어씀 —
+  /// 앱 재배포 없이 항목 추가 가능. 실패 시(오프라인 등) 위 15종 기본값 유지.
+  static List<CredentialDefinition> _cache = _offlineDefaults;
+
+  static List<CredentialDefinition> get all => _cache;
+
+  /// 테스트 전용 — 캐시를 오프라인 기본값으로 리셋.
+  static void resetToOfflineDefaultsForTest() => _cache = _offlineDefaults;
+
+  /// 서버 응답(JSON 목록)으로 캐시 교체 — 파싱 실패 항목은 건너뜀.
+  static void overrideFromServer(List<Map<String, dynamic>> items) {
+    final parsed = <CredentialDefinition>[];
+    for (final item in items) {
+      final id = item['id'] as String?;
+      final label = item['label'] as String?;
+      final categoryName = item['category'] as String?;
+      if (id == null || label == null || categoryName == null) continue;
+      CredentialCategory? category;
+      for (final candidate in CredentialCategory.values) {
+        if (candidate.name == categoryName) {
+          category = candidate;
+          break;
+        }
+      }
+      if (category == null) continue;
+      parsed.add(
+        CredentialDefinition(
+          id: id,
+          label: label,
+          category: category,
+          aliases: (item['aliases'] as List<dynamic>? ?? const [])
+              .map((e) => e.toString())
+              .toList(),
+          requiresPhoto: item['requires_photo'] as bool? ?? true,
+          summary: item['summary'] as String?,
+          guideDocumentId: item['guide_document_id'] as String?,
+        ),
+      );
+    }
+    if (parsed.isNotEmpty) _cache = parsed;
+  }
 
   static CredentialDefinition? findById(String? id) {
     if (id == null || id.isEmpty) return null;

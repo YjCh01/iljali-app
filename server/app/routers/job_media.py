@@ -1,23 +1,18 @@
 """공고 본문 이미지 업로드·프록시."""
 
-from pathlib import Path
 from urllib.parse import urlparse
-from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 
 from app.config import settings
-from app.services.job_post_image_mirror import (
-    ensure_job_media_dir,
-    is_external_job_cdn,
-)
+from app.services.job_post_image_mirror import is_external_job_cdn
+from app.services.media_upload_service import MAX_UPLOAD_BYTES, save_uploaded_image
 
 router = APIRouter(prefix="/v1/job-media", tags=["job-media"])
 
-_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-_MAX_BYTES = 8 * 1024 * 1024
+_MAX_BYTES = MAX_UPLOAD_BYTES
 _USER_AGENT = (
     "Mozilla/5.0 (compatible; IljariJobImporter/1.0; +https://iljari.co.kr/bot)"
 )
@@ -25,27 +20,11 @@ _USER_AGENT = (
 
 @router.post("/upload")
 async def upload_job_media(file: UploadFile = File(...)):
-    content = await file.read()
-    if len(content) > _MAX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="파일 크기는 8MB 이하여야 합니다.",
-        )
-    ext = Path(file.filename or "").suffix.lower()
-    if ext not in _ALLOWED_EXT:
-        raise HTTPException(
-            status_code=400,
-            detail="jpg, png, webp, gif만 업로드할 수 있습니다.",
-        )
-
-    media_dir = ensure_job_media_dir()
-    name = f"{uuid4().hex}{ext}"
-    dest = media_dir / name
-    dest.write_bytes(content)
-
-    base = settings.api_public_base_url.rstrip("/")
-    url = f"{base}/media/job-posts/{name}"
-    return {"url": url, "filename": name}
+    return await save_uploaded_image(
+        file,
+        dir_path=settings.job_media_dir,
+        url_prefix="/media/job-posts",
+    )
 
 
 @router.get("/proxy")

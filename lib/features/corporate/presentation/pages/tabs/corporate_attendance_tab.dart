@@ -288,6 +288,8 @@ class _CorporateAttendanceTabState extends State<CorporateAttendanceTab> {
 
       final geofence = await AttendanceGeofenceService.evaluateCurrent(
         workplace: app.workplaceCoordinate,
+        workDate: app.workDate,
+        workSchedule: app.workSchedule,
       );
       final detailed = await DeviceLocationService.getCurrentPositionDetailed();
 

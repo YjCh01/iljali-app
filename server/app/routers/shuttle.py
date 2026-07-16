@@ -9,6 +9,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.job_sync_models import JobApplicationRow
 from app.services.auth_token_service import verify_token
+from app.services.pilot_program_service import (
+    bus_location_tower_admin_view,
+    create_officer_request,
+    list_officer_requests_for_company,
+)
 from app.services.shuttle_commute_service import (
     admin_participants_view,
     deactivate_commute_route,
@@ -65,6 +70,16 @@ class ShuttleRouteShareConsentBody(BaseModel):
     route_id: str = ""
     stop_id: str = ""
     pickup_time: str = ""
+
+
+class ShuttleOfficerRequestBody(BaseModel):
+    seeker_email: str = Field(min_length=1)
+    seeker_name: str = ""
+    route_id: str = Field(min_length=1, max_length=64)
+    route_name: str = ""
+    company_name: str = ""
+    note: str = ""
+    work_start_time: str = ""
 
 
 class ShuttlePreferenceBody(BaseModel):
@@ -310,3 +325,58 @@ def shuttle_delete_preference(
     email = str(payload.get("sub", "")).lower()
     delete_seeker_preference(db, seeker_email=email, company_key=company_key)
     return {"deleted": True}
+
+
+@router.get("/location-officer")
+def shuttle_get_location_officer(
+    route_id: str = Query(min_length=1, max_length=64),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """고용주 자기 회사의 셔틀위치담당자 지정 현황 — 어드민 화면과 동일 데이터."""
+    payload = _resolve_bearer(authorization)
+    company_key = _normalize_company_key(str(payload.get("company_key", "")))
+    _assert_corporate_company(payload, company_key)
+    return bus_location_tower_admin_view(db, company_key=company_key, route_id=route_id)
+
+
+@router.post("/location-officer/request")
+def shuttle_request_location_officer(
+    body: ShuttleOfficerRequestBody,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """고용주 — 셔틀위치담당자 지정을 어드민에 승인요청 (즉시 반영되지 않음).
+
+    company_key는 토큰에서만 가져온다(다른 회사 지정 원천 차단)."""
+    payload = _resolve_bearer(authorization)
+    company_key = _normalize_company_key(str(payload.get("company_key", "")))
+    _assert_corporate_company(payload, company_key)
+    try:
+        return create_officer_request(
+            db,
+            company_key=company_key,
+            company_name=body.company_name,
+            route_id=body.route_id,
+            route_name=body.route_name,
+            seeker_email=body.seeker_email,
+            seeker_name=body.seeker_name,
+            work_start_time=body.work_start_time,
+            note=body.note,
+            requested_by=str(payload.get("sub", "")),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/location-officer/requests")
+def shuttle_list_location_officer_requests(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """고용주 — 자기 회사가 보낸 셔틀위치담당자 지정 요청 목록·처리 상태."""
+    payload = _resolve_bearer(authorization)
+    company_key = _normalize_company_key(str(payload.get("company_key", "")))
+    _assert_corporate_company(payload, company_key)
+    items = list_officer_requests_for_company(db, company_key=company_key)
+    return {"items": items, "count": len(items)}

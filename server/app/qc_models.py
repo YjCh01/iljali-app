@@ -35,6 +35,8 @@ class QcMemberRow(Base):
     password_hash: Mapped[str] = mapped_column(String(256), default="")
     phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     seeker_profile_json: Mapped[str] = mapped_column(Text, default="{}")
+    # 기업이 노쇼 처리할 때마다 누적 — 다른 기업도 지원자 조회 시 열람 가능.
+    no_show_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

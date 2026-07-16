@@ -17,6 +17,8 @@ class ShuttleRouteVerticalTracker extends StatelessWidget {
     this.myStopId,
     this.onOpenMap,
     this.etaToMyStop,
+    this.isPositionStale = false,
+    this.lastUpdatedAt,
   });
 
   final CommuteRoute route;
@@ -26,10 +28,22 @@ class ShuttleRouteVerticalTracker extends StatelessWidget {
   final VoidCallback? onOpenMap;
   final Duration? etaToMyStop;
 
+  /// 위치는 있으나 갱신 주기 이상 지난 오래된 데이터인지 — "실시간"으로 오인하지 않도록 표시.
+  final bool isPositionStale;
+  final DateTime? lastUpdatedAt;
+
   List<CommuteRouteStop> get _stops =>
       ShuttleBusTimelinePosition.orderedStops(route);
 
   Color get _routeColor => ShuttleRouteColorUtils.parseHex(route.overlayColorHex);
+
+  String _staleSuffix() {
+    final updated = lastUpdatedAt;
+    if (updated == null) return '';
+    final minutes = DateTime.now().toUtc().difference(updated).inMinutes;
+    if (minutes < 1) return '';
+    return ' ($minutes분 전 기준)';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +102,26 @@ class ShuttleRouteVerticalTracker extends StatelessWidget {
             ),
           ),
         ),
-        if (etaToMyStop != null && busPosition != null) ...[
+        if (busPosition != null && isPositionStale) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFE65100)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '위치 갱신이 안 되고 있습니다${_staleSuffix()} — 실시간 위치가 아닐 수 있습니다.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFE65100),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ] else if (etaToMyStop != null && busPosition != null) ...[
           const SizedBox(height: 10),
           Text(
             '내 정류장 도착 예상 · ${ShuttleBusEtaEstimator.formatCountdown(etaToMyStop!)}',

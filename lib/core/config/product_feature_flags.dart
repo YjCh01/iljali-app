@@ -33,6 +33,14 @@ abstract final class ProductFeatureFlags {
     defaultValue: false,
   );
 
+  /// 근무 확정(즉시확정·상호합의)·근태 관리·출근 에스컬레이션 — 수수료와 무관하게
+  /// 항상 필요한 근태 데이터 수집 흐름이라 기본 활성. 수수료 지급 자체는
+  /// [enableHiringCommission]으로 계속 별도 통제.
+  static const bool enableAttendanceFlow = bool.fromEnvironment(
+    'ENABLE_ATTENDANCE_FLOW',
+    defaultValue: true,
+  );
+
   /// 구직자 앱 — 고용주 평점·신뢰100·배지 표시 (페이즈 2)
   static const bool enableEmployerTrustDisplay = bool.fromEnvironment(
     'ENABLE_EMPLOYER_TRUST_DISPLAY',
@@ -54,6 +62,8 @@ abstract final class ProductFeatureFlags {
   static bool get isEnterpriseOutsourcingEnabled => enableEnterpriseOutsourcing;
 
   static bool get isHiringCommissionEnabled => enableHiringCommission;
+
+  static bool get isAttendanceFlowEnabled => enableAttendanceFlow;
 
   static bool get isEmployerTrustDisplayEnabled => enableEmployerTrustDisplay;
 
@@ -163,6 +173,21 @@ abstract final class ProductFeatureFlags {
             ],
             reEnableSteps:
                 '제휴 연계 채널 빌드 시 --dart-define=ENABLE_HIRING_COMMISSION=true 추가.',
+          ),
+        if (!enableAttendanceFlow)
+          const DisabledFeature(
+            id: 'attendance_flow',
+            displayName: '근무 확정·근태 관리',
+            description:
+                '즉시확정·근무예정 상호합의·근태 관리 탭·출근 에스컬레이션 — 수수료와'
+                ' 무관하게 근태 데이터 자체를 수집하기 위한 핵심 흐름',
+            flagKey: 'ENABLE_ATTENDANCE_FLOW',
+            affectedFiles: [
+              'lib/core/hiring/local_hiring_repository.dart',
+              'lib/features/corporate/presentation/pages/tabs/corporate_attendance_tab.dart',
+              'lib/features/hiring/presentation/pages/application_chat_page.dart',
+            ],
+            reEnableSteps: '기본값 true. 비활성화했던 경우 --dart-define=ENABLE_ATTENDANCE_FLOW=true.',
           ),
         if (!enableEmployerTrustDisplay)
           const DisabledFeature(

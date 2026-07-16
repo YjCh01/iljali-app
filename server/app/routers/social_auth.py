@@ -23,6 +23,7 @@ from app.services.auth_token_service import (
     verify_phone_verified_token,
     verify_social_signup_token,
 )
+from app.services.entitlement_service import normalize_brn
 from app.services.password_service import hash_password, validate_password_strength
 from app.services.phone_verify_service import normalize_phone
 from app.services.social_auth_service import (
@@ -46,6 +47,19 @@ class SocialSignupBody(BaseModel):
     phone_verified_token: str
     password: str = Field(default="", min_length=0)
     display_name: str = ""
+
+
+class CorporateSocialSignupBody(BaseModel):
+    social_token: str
+    phone: str
+    phone_verified_token: str
+    display_name: str = Field(min_length=1, max_length=100)
+    company_name: str = Field(min_length=1, max_length=200)
+    company_key: str = Field(min_length=1, max_length=20)
+    department: str = ""
+    contact_person_name: str = ""
+    handler_code: str = ""
+    org_role: str = "recruiter"
 
 
 class SocialStatusResponse(BaseModel):
@@ -211,6 +225,7 @@ def social_callback(
                 email=login.email,
                 display_name=login.display_name,
                 provider=normalized,
+                member_type=login.member_type,
             )
             return RedirectResponse(url=url, status_code=302)
 
@@ -228,6 +243,7 @@ def social_callback(
         email=profile.email,
         display_name=profile.display_name,
         provider=normalized,
+        member_type=member_type,
     )
     return RedirectResponse(url=url, status_code=302)
 
@@ -345,6 +361,111 @@ def social_signup(body: SocialSignupBody, db: Session = Depends(get_db)):
             member_id=row.id,
             email=email,
             display_name=display_name,
+        )
+    )
+    db.commit()
+    db.refresh(row)
+    return _member_to_login(row)
+
+
+@router.post("/corporate-signup", response_model=LoginResponse)
+def social_corporate_signup(
+    body: CorporateSocialSignupBody, db: Session = Depends(get_db)
+):
+    """기업회원 소셜 가입 완료 — social_token으로 본인확인, 비밀번호 없이 계정 생성."""
+    payload = verify_social_signup_token(body.social_token)
+    if payload is None:
+        raise HTTPException(
+            status_code=400,
+            detail="소셜 가입 정보가 만료되었습니다. 다시 시도해 주세요.",
+        )
+
+    provider = str(payload.get("provider") or "")
+    provider_user_id = str(payload.get("provider_user_id") or "")
+    email = str(payload.get("email") or "").strip().lower()
+    member_type = str(payload.get("member_type") or "")
+    if member_type not in {"corporate", "employer"}:
+        raise HTTPException(
+            status_code=400,
+            detail="개인회원 소셜 가입은 다른 화면에서 진행해 주세요.",
+        )
+    if not email:
+        raise HTTPException(status_code=400, detail="소셜 계정 이메일을 확인할 수 없습니다.")
+
+    phone = normalize_phone(body.phone)
+    if not verify_phone_verified_token(
+        body.phone_verified_token,
+        phone=phone,
+        purpose="signup",
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="휴대폰 인증이 만료되었습니다. 다시 인증해 주세요.",
+        )
+
+    company_key = normalize_brn(body.company_key)
+    if not company_key:
+        raise HTTPException(status_code=400, detail="사업자등록번호를 확인해 주세요.")
+
+    existing_link = (
+        db.query(MemberSocialLinkRow)
+        .filter(MemberSocialLinkRow.provider == provider)
+        .filter(MemberSocialLinkRow.provider_user_id == provider_user_id)
+        .first()
+    )
+    if existing_link is not None:
+        row = (
+            db.query(QcMemberRow)
+            .filter(QcMemberRow.id == existing_link.member_id)
+            .first()
+        )
+        if row is not None:
+            return _member_to_login(row)
+
+    if db.query(QcMemberRow).filter(QcMemberRow.email == email).first():
+        raise HTTPException(status_code=409, detail="이미 사용 중인 이메일입니다.")
+
+    handler_code = body.handler_code.strip()
+    if handler_code:
+        taken = (
+            db.query(QcMemberRow)
+            .filter(QcMemberRow.company_key == company_key)
+            .filter(QcMemberRow.handler_code == handler_code)
+            .first()
+        )
+        if taken:
+            raise HTTPException(
+                status_code=409,
+                detail="이미 사용 중인 담당자 코드입니다.",
+            )
+
+    contact_name = (body.contact_person_name or body.display_name).strip()
+    row = QcMemberRow(
+        id=f"qc_{uuid4().hex[:12]}",
+        email=email,
+        display_name=body.display_name.strip(),
+        member_type="corporate",
+        company_key=company_key,
+        company_name=body.company_name.strip(),
+        phone=phone,
+        department=body.department.strip(),
+        contact_person_name=contact_name,
+        handler_code=handler_code,
+        org_role=body.org_role.strip() or "recruiter",
+        # 소셜 로그인 전용 — 본인은 절대 알 수 없는 랜덤 비밀번호(로그인은 소셜 버튼으로만).
+        password_hash=hash_password(secrets.token_urlsafe(24)),
+        phone_verified_at=datetime.utcnow(),
+    )
+    db.add(row)
+    db.flush()
+    db.add(
+        MemberSocialLinkRow(
+            id=f"soc_{uuid4().hex[:12]}",
+            provider=provider,
+            provider_user_id=provider_user_id,
+            member_id=row.id,
+            email=email,
+            display_name=row.display_name,
         )
     )
     db.commit()

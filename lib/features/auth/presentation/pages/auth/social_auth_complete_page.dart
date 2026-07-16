@@ -4,8 +4,10 @@ import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/auth/data/repositories/corporate_auth_repository.dart';
 import 'package:map/features/auth/data/repositories/individual_auth_repository.dart';
 import 'package:map/features/auth/domain/utils/auth_error_message.dart';
+import 'package:map/features/auth/presentation/pages/auth/corporate_social_sign_up_page.dart';
 import 'package:map/features/auth/presentation/pages/auth/individual_social_sign_up_page.dart';
 import 'package:map/features/auth/presentation/widgets/auth_form_card.dart';
 import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart';
@@ -63,10 +65,15 @@ class _SocialAuthCompletePageState extends State<SocialAuthCompletePage> {
         await AuthSession.instance.setAccessToken(token);
         final client = IljariApiClient()..accessToken = token;
         final me = await client.fetchCurrentMember();
-        await IndividualAuthRepository.completeRemoteLogin({
-          ...me,
-          'access_token': token,
-        });
+        final memberType =
+            params['member_type'] ?? me['member_type'] as String? ?? '';
+        final isCorporate = memberType == 'corporate' || memberType == 'employer';
+        final result = {...me, 'access_token': token};
+        if (isCorporate) {
+          await CorporateAuthRepository.completeSocialLogin(result);
+        } else {
+          await IndividualAuthRepository.completeRemoteLogin(result);
+        }
         if (!mounted) return;
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.home,
@@ -93,16 +100,27 @@ class _SocialAuthCompletePageState extends State<SocialAuthCompletePage> {
         return;
       }
       if (!mounted) return;
+      final memberType = params['member_type'] ?? '';
+      final isCorporate = memberType == 'corporate' || memberType == 'employer';
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => IndividualSocialSignUpPage(
-            args: IndividualSocialSignUpArgs(
-              socialToken: socialToken,
-              email: params['email'] ?? '',
-              displayName: params['name'] ?? '',
-              provider: params['provider'] ?? '',
-            ),
-          ),
+          builder: (_) => isCorporate
+              ? CorporateSocialSignUpPage(
+                  args: CorporateSocialSignUpArgs(
+                    socialToken: socialToken,
+                    email: params['email'] ?? '',
+                    displayName: params['name'] ?? '',
+                    provider: params['provider'] ?? '',
+                  ),
+                )
+              : IndividualSocialSignUpPage(
+                  args: IndividualSocialSignUpArgs(
+                    socialToken: socialToken,
+                    email: params['email'] ?? '',
+                    displayName: params['name'] ?? '',
+                    provider: params['provider'] ?? '',
+                  ),
+                ),
         ),
       );
       return;

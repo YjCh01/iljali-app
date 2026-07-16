@@ -11,6 +11,7 @@ import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/chat/domain/services/admin_announcement_room_service.dart';
 import 'package:map/features/chat/presentation/pages/admin_announcement_chat_page.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 /// 실시간 버스 위치 관제 — 파일럿 허브 (지정 구직자 전용)
 class BusLocationTowerPilotPage extends StatefulWidget {
@@ -41,6 +42,7 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
   void dispose() {
     _pollTimer?.cancel();
     _shareTimer?.cancel();
+    if (_autoSharing) unawaited(WakelockPlus.disable());
     super.dispose();
   }
 
@@ -53,6 +55,7 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
       final status = await _future;
       if (status.arrivedAtWorkplace) {
         _shareTimer?.cancel();
+        if (_autoSharing) unawaited(WakelockPlus.disable());
         _autoSharing = false;
       }
     } on Object {
@@ -151,8 +154,9 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
   void _ensureAutoSharing() {
     if (_autoSharing) return;
     _autoSharing = true;
+    unawaited(WakelockPlus.enable());
     _shareTimer = Timer.periodic(
-      const Duration(seconds: 30),
+      const Duration(seconds: 12),
       (_) => _shareCurrentLocation(silent: true),
     );
   }
@@ -179,8 +183,7 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
   }
 
   String _updatedLabel(BusLocationTowerPilotStatus status) {
-    final raw = status.todaySession?['last_updated_at'] as String?;
-    final parsed = raw == null ? null : DateTime.tryParse(raw);
+    final parsed = status.lastLocationUpdatedAt;
     if (parsed == null) return '아직 갱신 전';
     final local = parsed.toLocal();
     final hh = local.hour.toString().padLeft(2, '0');
@@ -335,7 +338,7 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
                   title: '같은 셔틀 탑승 확인',
                   subtitle: status.riderStopLabel.isNotEmpty
                       ? '${status.riderStopLabel} · ${status.riderPickupTime} 탑승'
-                      : '오늘 같은 회사·같은 셔틀 예약이 확인되었습니다.',
+                      : '오늘 같은 회사·같은 셔틀 이용이 확인되었습니다.',
                   done: true,
                   actionLabel: '내 버스 지도 열기',
                   onAction: () => Navigator.of(context).pushNamed(

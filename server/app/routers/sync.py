@@ -54,7 +54,7 @@ def sync_bootstrap(
             JobApplicationRow.company_key == normalize_brn(company_key)
         )
     applications = [
-        app_to_dict(r)
+        app_to_dict(r, db)
         for r in app_query.order_by(JobApplicationRow.applied_at.desc()).all()
     ]
 

@@ -44,7 +44,7 @@ class SeekerCredentialViewerPage extends StatelessWidget {
         return;
       }
 
-      if (kIsWeb) {
+      if (kIsWeb || ref.startsWith('http://') || ref.startsWith('https://')) {
         if (!context.mounted) return;
         await Share.share('자격증: $title\n$ref');
         return;

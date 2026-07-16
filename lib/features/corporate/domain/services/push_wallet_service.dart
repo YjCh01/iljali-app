@@ -11,6 +11,7 @@ import 'package:map/features/corporate/domain/entities/push_package_catalog.dart
 import 'package:map/features/corporate/domain/entities/push_ticket_catalog.dart';
 import 'package:map/features/corporate/domain/entities/push_wallet_load_outcome.dart';
 import 'package:map/features/corporate/domain/entities/recruitment_product_kind.dart';
+import 'package:map/features/corporate/domain/entities/wallet_credit_lot.dart';
 
 /// PUSH·거점 지갑 — 로드·구매·소진
 class PushWalletService {
@@ -199,6 +200,22 @@ class PushWalletService {
       return merged;
     } on Object {
       return local;
+    }
+  }
+
+  /// 만료 임박 순으로 정렬된, 아직 소진되지 않은 크레딧 배치 — 서버 미연동 환경에선 빈 목록.
+  Future<List<WalletCreditLot>> fetchActiveLots(
+    CorporateMemberProfile profile,
+  ) async {
+    if (!EnvConfig.isComplianceApiEnabled) return const [];
+    try {
+      final json = await IljariApiClient().fetchWalletLots(profile.companyKey);
+      final lots = json['lots'] as List<dynamic>? ?? const [];
+      return lots
+          .map((e) => WalletCreditLot.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on Object {
+      return const [];
     }
   }
 

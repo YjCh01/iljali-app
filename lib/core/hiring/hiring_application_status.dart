@@ -40,4 +40,21 @@ extension HiringApplicationStatusX on HiringApplicationStatus {
         HiringApplicationStatus.noShow => false,
         _ => true,
       };
+
+  /// 서버 전송용 — 서버는 스네이크케이스를 기대함(예: 셔틀 노선 열람 자격 판정).
+  String get wireValue => switch (this) {
+        HiringApplicationStatus.checkedIn => 'checked_in',
+        HiringApplicationStatus.commissionPaid => 'commission_paid',
+        HiringApplicationStatus.noShow => 'no_show',
+        _ => name,
+      };
+}
+
+/// 서버에서 내려온 스네이크케이스 상태값을 역파싱 — [HiringApplicationStatusX.wireValue]의 역함수.
+HiringApplicationStatus? hiringApplicationStatusFromWire(String? value) {
+  if (value == null) return null;
+  for (final status in HiringApplicationStatus.values) {
+    if (status.wireValue == value) return status;
+  }
+  return null;
 }

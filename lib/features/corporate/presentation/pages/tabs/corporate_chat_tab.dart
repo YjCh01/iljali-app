@@ -37,6 +37,14 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
   List<CorporateChatRoom> _rooms = [];
   bool _loading = true;
   int _pendingCommissionCount = 0;
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -157,6 +165,15 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
     if (updated == true && mounted) await _load();
   }
 
+  List<CorporateChatRoom> get _filteredRooms {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return _rooms;
+    return _rooms.where((room) {
+      return room.applicantName.toLowerCase().contains(query) ||
+          room.jobTitle.toLowerCase().contains(query);
+    }).toList();
+  }
+
   Future<void> _leaveRoom(CorporateChatRoom room) async {
     final left = await ChatRoomLeaveService.confirmAndLeave(
       context,
@@ -176,10 +193,13 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
       );
     }
 
-    final showEmpty = _rooms.isEmpty;
-    final itemCount = (_pendingCommissionCount > 0 ? 1 : 0) +
+    final filtered = _filteredRooms;
+    final showSearch = _rooms.length > 1;
+    final showEmpty = filtered.isEmpty;
+    final itemCount = (showSearch ? 1 : 0) +
+        (_pendingCommissionCount > 0 ? 1 : 0) +
         (showEmpty ? 1 : 0) +
-        _rooms.length;
+        filtered.length;
 
     return ColoredBox(
       color: AppColors.background,
@@ -193,6 +213,15 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             var cursor = 0;
+            if (showSearch) {
+              if (index == cursor) {
+                return _ChatSearchField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                );
+              }
+              cursor++;
+            }
             if (_pendingCommissionCount > 0) {
               if (index == cursor) {
                 return _CommissionBanner(count: _pendingCommissionCount);
@@ -201,11 +230,13 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
             }
             if (showEmpty) {
               if (index == cursor) {
-                return const _EmptyChatCard();
+                return _query.trim().isEmpty
+                    ? const _EmptyChatCard()
+                    : const _NoSearchResultsCard();
               }
               cursor++;
             }
-            final room = _rooms[index - cursor];
+            final room = filtered[index - cursor];
             return CorporateChatRoomCard(
               room: room,
               onTap: () => _openRoom(room),
@@ -213,6 +244,55 @@ class _CorporateChatTabState extends State<CorporateChatTab> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _ChatSearchField extends StatelessWidget {
+  const _ChatSearchField({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: '지원자 이름·공고명으로 검색',
+        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close_rounded, size: 18),
+                onPressed: () {
+                  controller.clear();
+                  onChanged('');
+                },
+              ),
+        filled: true,
+        fillColor: AppColors.surface,
+        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+}
+
+class _NoSearchResultsCard extends StatelessWidget {
+  const _NoSearchResultsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CorporateSurfaceCard(
+      child: Text(
+        '검색 결과가 없습니다.',
+        style: TextStyle(fontSize: 14, height: 1.5),
       ),
     );
   }

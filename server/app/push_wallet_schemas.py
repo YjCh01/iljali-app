@@ -62,3 +62,16 @@ class ClaimSignupBonusResponse(BaseModel):
     claimed: bool
     granted_pushes: int = 0
     message: str | None = None
+
+
+class WalletCreditLotResponse(BaseModel):
+    credit_type: str
+    remaining: int
+    granted_at: datetime
+    expires_at: datetime | None = None
+    source_order_id: str | None = None
+
+
+class WalletCreditLotListResponse(BaseModel):
+    company_key: str
+    lots: list[WalletCreditLotResponse]

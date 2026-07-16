@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/config/env_config.dart';
 import 'package:map/core/session/auth_session.dart';
@@ -30,6 +32,7 @@ class JobPostSyncService {
         'description_body_json': post.descriptionBody.toJsonString(),
         'workplace_latitude': _workplaceLatitude(post),
         'workplace_longitude': _workplaceLongitude(post),
+        'required_credential_ids_json': jsonEncode(post.requiredCredentialIds),
         'status': post.status.name,
         'posted_by_email': user?.email ?? post.recruiterEmail ?? '',
         'posted_by_name': user?.name ??
@@ -58,6 +61,7 @@ class JobPostSyncService {
         'description_body_json': post.descriptionBody.toJsonString(),
         'workplace_latitude': _workplaceLatitude(post),
         'workplace_longitude': _workplaceLongitude(post),
+        'required_credential_ids_json': jsonEncode(post.requiredCredentialIds),
         'status': post.status.name,
         'notification_settings_json':
             post.notificationSettings?.toJsonString() ?? '{}',

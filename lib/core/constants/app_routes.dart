@@ -35,6 +35,8 @@ abstract final class AppRoutes {
   static const String corporatePartnershipSubscription =
       '/corporate/partnership/subscribe';
   static const String corporatePushPackageShop = '/corporate/push-packages';
+  static const String corporateWalletCreditLots =
+      '/corporate/wallet/credit-lots';
   static const String corporateBranchManagement = '/corporate/branches';
   static const String corporateShuttleRoutes = '/corporate/shuttle-routes';
   static const String corporateShuttleRouteEdit = '/corporate/shuttle-route/edit';
@@ -42,6 +44,8 @@ abstract final class AppRoutes {
       '/corporate/shuttle-route/stop-activation';
   static const String corporateShuttleStopPayment =
       '/corporate/shuttle-route/stop-payment';
+  static const String corporateShuttleLocationOfficer =
+      '/corporate/shuttle-location-officer';
   static const String corporateJobPinActivation = '/corporate/job-pin/activation';
   static const String corporatePushTicketUse = '/corporate/push-ticket/use';
   static const String corporateExposureRenewal = '/corporate/exposure-renewal';

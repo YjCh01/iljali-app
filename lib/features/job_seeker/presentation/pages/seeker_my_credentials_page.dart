@@ -12,7 +12,7 @@ import 'package:map/features/credential/presentation/widgets/credential_guide_li
 import 'package:map/features/job_seeker/domain/entities/seeker_credential_holding.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.dart';
 import 'package:map/features/job_seeker/domain/utils/seeker_profile_credentials.dart';
-import 'package:map/features/job_seeker/presentation/utils/seeker_document_storage.dart';
+import 'package:map/features/job_seeker/presentation/utils/credential_media_upload.dart';
 import 'package:map/features/job_seeker/presentation/widgets/seeker_document_image.dart';
 
 /// 카테고리 표시 순서 — 식품·건설 보건 항목을 상단에
@@ -118,7 +118,7 @@ class _SeekerMyCredentialsPageState extends State<SeekerMyCredentialsPage> {
     );
     if (file == null || !mounted) return;
 
-    final storedPath = await persistSeekerDocumentImage(
+    final storedPath = await persistCredentialImage(
       file,
       'credential_${def.id}',
     );
@@ -206,7 +206,7 @@ class _SeekerMyCredentialsPageState extends State<SeekerMyCredentialsPage> {
     if (file == null || !mounted) return;
 
     final id = CustomCredentialSupport.newId();
-    final storedPath = await persistSeekerDocumentImage(file, id);
+    final storedPath = await persistCredentialImage(file, id);
     if (storedPath == null || !mounted) return;
 
     await _saveProfile(
@@ -265,7 +265,7 @@ class _SeekerMyCredentialsPageState extends State<SeekerMyCredentialsPage> {
     );
     if (file == null || !mounted) return;
 
-    final storedPath = await persistSeekerDocumentImage(
+    final storedPath = await persistCredentialImage(
       file,
       holding.credentialId,
     );

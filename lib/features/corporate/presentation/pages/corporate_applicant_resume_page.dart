@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/hiring/hiring_application.dart';
-import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/widgets/app_back_button.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
@@ -42,6 +42,8 @@ class _CorporateApplicantResumePageState
     extends State<CorporateApplicantResumePage> {
   HiringApplication? _application;
   List<String> _postRequiredCredentialIds = const [];
+  List<Map<String, dynamic>>? _serverCredentialHoldings;
+  bool? _serverCanViewDocuments;
   bool _loading = true;
 
   @override
@@ -59,10 +61,32 @@ class _CorporateApplicantResumePageState
           .findById(app.postId);
       requiredIds = post?.requiredCredentialIds ?? const [];
     }
+
+    List<Map<String, dynamic>>? holdings;
+    bool? canViewDocuments;
+    if (app != null) {
+      try {
+        final response =
+            await IljariApiClient().fetchApplicantCredentials(app.id);
+        final rawHoldings = response['holdings'];
+        if (rawHoldings is List) {
+          holdings = rawHoldings
+              .whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList();
+        }
+        canViewDocuments = response['can_view_documents'] as bool?;
+      } on Object {
+        // 오프라인 — 기기 로컬 프로필 폴백으로 진행.
+      }
+    }
+
     if (!mounted) return;
     setState(() {
       _application = app;
       _postRequiredCredentialIds = requiredIds;
+      _serverCredentialHoldings = holdings;
+      _serverCanViewDocuments = canViewDocuments;
       _loading = false;
     });
   }
@@ -86,6 +110,8 @@ class _CorporateApplicantResumePageState
               : _ResumeGridView(
                   application: _application!,
                   postRequiredCredentialIds: _postRequiredCredentialIds,
+                  serverCredentialHoldings: _serverCredentialHoldings,
+                  serverCanViewDocuments: _serverCanViewDocuments,
                 ),
     );
   }
@@ -115,16 +141,22 @@ class _ResumeGridView extends StatelessWidget {
   const _ResumeGridView({
     required this.application,
     required this.postRequiredCredentialIds,
+    this.serverCredentialHoldings,
+    this.serverCanViewDocuments,
   });
 
   final HiringApplication application;
   final List<String> postRequiredCredentialIds;
+  final List<Map<String, dynamic>>? serverCredentialHoldings;
+  final bool? serverCanViewDocuments;
 
   @override
   Widget build(BuildContext context) {
     final snapshot = SeekerResumeSnapshot.fromApplication(
       application,
       postRequiredCredentialIds: postRequiredCredentialIds,
+      serverCredentialHoldings: serverCredentialHoldings,
+      serverCanViewDocuments: serverCanViewDocuments,
     );
     final status = _mapStatus(application.status);
     final heldCount = snapshot.heldCredentialCount;
@@ -153,6 +185,26 @@ class _ResumeGridView extends StatelessWidget {
             color: AppColors.textSecondary.withValues(alpha: 0.9),
           ),
         ),
+        if (application.seekerNoShowCount > 0) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFEBEE),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '이 구직자는 다른 기업 포함 누적 노쇼 ${application.seekerNoShowCount}회',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFC62828),
+                ),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,

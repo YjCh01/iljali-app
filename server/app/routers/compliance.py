@@ -6,6 +6,7 @@ from app.models import AbuseFlag, Company, ContactEvent, industry_requires_revie
 from app.schemas import (
     ContactEntitlementResponse,
     ContactEventRequest,
+    ResubmitCertificateRequest,
     VerifyBusinessRequest,
     VerifyBusinessResponse,
     WorkplaceMismatchReportRequest,
@@ -116,6 +117,7 @@ async def verify_business(body: VerifyBusinessRequest, db: Session = Depends(get
         trust_score=40 if flagged else 100,
         nts_api_matched=lookup.api_source != "mock_nts",
         entity_type=body.entity_type,
+        certificate_image_ref=company.certificate_image_ref,
     )
 
 
@@ -135,6 +137,52 @@ def get_business(company_key: str, db: Session = Depends(get_db)):
         trust_score=40 if company.requires_admin_review else 100,
         nts_api_matched=True,
         entity_type=company.entity_type,
+        certificate_image_ref=company.certificate_image_ref,
+    )
+
+
+@router.post("/business/{company_key}/resubmit-certificate", response_model=VerifyBusinessResponse)
+def resubmit_certificate(
+    company_key: str,
+    body: ResubmitCertificateRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """기업 — 사업자등록증 재검토 요청 (NTS 재조회 없이 사진만 교체, 어드민 검토 대기로 전환)."""
+    payload = _resolve_bearer(authorization)
+    brn = normalize_brn(company_key)
+    _assert_employer_company(payload, brn)
+
+    company = get_or_create_company(db, brn, "", "corporation")
+    company.certificate_image_ref = body.certificate_image_ref
+    company.verification_status = "adminReviewRequired"
+    company.requires_admin_review = True
+    company.admin_review_approved = False
+    company.admin_review_reason = body.note or "기업 재검토 요청"
+    db.commit()
+    db.refresh(company)
+
+    db.add(
+        AbuseFlag(
+            company_key=brn,
+            type="certificate_resubmission",
+            severity="medium",
+            message=body.note or "사업자등록증 재검토 요청",
+        )
+    )
+    db.commit()
+
+    return VerifyBusinessResponse(
+        company_key=brn,
+        company_name=company.company_name,
+        status=company.verification_status,
+        industry_name=company.industry_name,
+        requires_admin_review=company.requires_admin_review,
+        admin_review_reason=company.admin_review_reason,
+        trust_score=40 if company.requires_admin_review else 100,
+        nts_api_matched=True,
+        entity_type=company.entity_type,
+        certificate_image_ref=company.certificate_image_ref,
     )
 
 

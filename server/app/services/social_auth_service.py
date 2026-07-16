@@ -324,6 +324,7 @@ def build_app_redirect_url(
     display_name: str = "",
     provider: str = "",
     error: str = "",
+    member_type: str = "",
 ) -> str:
     params: dict[str, str] = {"status": status}
     if access_token:
@@ -338,6 +339,8 @@ def build_app_redirect_url(
         params["provider"] = provider
     if error:
         params["error"] = error
+    if member_type:
+        params["member_type"] = member_type
     base = app_redirect.strip() or settings.social_app_success_url
     joiner = "&" if "?" in base else "?"
     return f"{base}{joiner}{urlencode(params)}"

@@ -7,12 +7,14 @@ class CorporateApplicantCard extends StatelessWidget {
   const CorporateApplicantCard({
     super.key,
     required this.applicant,
+    this.isNew = false,
     this.onTap,
     this.onChat,
     this.onInstantAccept,
   });
 
   final CorporateApplicant applicant;
+  final bool isNew;
   final VoidCallback? onTap;
   final VoidCallback? onChat;
   final VoidCallback? onInstantAccept;
@@ -26,7 +28,15 @@ class CorporateApplicantCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              if (isNew) ...[
+                const _NewBadge(),
+                const SizedBox(width: 6),
+              ],
               _StatusBadge(status: applicant.status),
+              if (applicant.noShowCount > 0) ...[
+                const SizedBox(width: 6),
+                _NoShowBadge(count: applicant.noShowCount),
+              ],
               const Spacer(),
               Text(
                 applicant.appliedAtLabel,
@@ -138,6 +148,54 @@ class _StatusBadge extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w700,
           color: foreground,
+        ),
+      ),
+    );
+  }
+}
+
+class _NewBadge extends StatelessWidget {
+  const _NewBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE53935),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Text(
+        'NEW',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+class _NoShowBadge extends StatelessWidget {
+  const _NoShowBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFEBEE),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        '노쇼 $count회',
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFFC62828),
         ),
       ),
     );

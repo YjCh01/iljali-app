@@ -1,9 +1,11 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:map/core/navigation/global_navigator.dart';
+import 'package:map/features/hiring/presentation/pages/application_chat_page.dart';
 import 'package:map/features/job_seeker/data/repositories/seeker_push_inbox_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/seeker_push_notification.dart';
 
-/// FCM 수신 — 받은함 기록 (탭 시 앱 내 라우팅은 추후 글로벌 navigator 연동)
+/// FCM 수신 — 받은함 기록 + 탭 시 앱 내 채팅방으로 딥링크
 abstract final class PushIncomingHandler {
   static Future<void> handleForeground(RemoteMessage message) async {
     await _persistJobPushIfNeeded(message);
@@ -15,6 +17,21 @@ abstract final class PushIncomingHandler {
 
   static Future<void> handleOpenedApp(RemoteMessage message) async {
     await _persistJobPushIfNeeded(message);
+    _openChatIfNeeded(message);
+  }
+
+  static void _openChatIfNeeded(RemoteMessage message) {
+    final data = message.data;
+    if (data['type'] != 'chat_message') return;
+    final applicationId = data['application_id'] as String?;
+    if (applicationId == null || applicationId.isEmpty) return;
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) return;
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => ApplicationChatPage(applicationId: applicationId),
+      ),
+    );
   }
 
   static Future<void> _persistJobPushIfNeeded(RemoteMessage message) async {

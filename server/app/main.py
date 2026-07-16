@@ -17,6 +17,7 @@ from app.database import (
     ensure_push_wallet_schema,
 )
 from app.notification_models import DevicePushTokenRow  # noqa: F401
+from app.credential_models import CredentialDefinitionRow  # noqa: F401
 from app.push_wallet_models import (  # noqa: F401
     CompanyBonusLedgerRow,
     EmployerPushWalletRow,
@@ -47,6 +48,7 @@ from app.qc_models import (  # noqa: F401
     MemberSocialLinkRow,
     QcMemberRow,
 )
+from app.services.credential_service import seed_credential_catalog_if_empty
 from app.services.social_auth_service import social_mock_enabled
 from app.services.workplace_service import backfill_missing_workplace_ids
 from app.routers import (
@@ -54,8 +56,11 @@ from app.routers import (
     admin,
     admin_ops,
     auth,
+    business_cert_media,
     chat_sync,
     compliance,
+    credential_media,
+    credentials,
     hiring,
     job_board,
     job_import,
@@ -82,6 +87,7 @@ ensure_payment_order_schema()
 
 with SessionLocal() as _startup_db:
     backfill_missing_workplace_ids(_startup_db)
+    seed_credential_catalog_if_empty(_startup_db)
 
 app = FastAPI(
     title="Iljari Compliance API",
@@ -106,6 +112,9 @@ app.add_middleware(
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 app.include_router(compliance.router)
+app.include_router(credentials.router)
+app.include_router(credential_media.router)
+app.include_router(business_cert_media.router)
 app.include_router(auth.router)
 app.include_router(social_auth.router)
 app.include_router(addresses.router)
@@ -134,6 +143,22 @@ app.mount(
     "/media/job-posts",
     StaticFiles(directory=str(_media_dir)),
     name="job-post-media",
+)
+
+_credential_media_dir = Path(settings.credential_media_dir)
+_credential_media_dir.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/media/credential",
+    StaticFiles(directory=str(_credential_media_dir)),
+    name="credential-media",
+)
+
+_business_cert_media_dir = Path(settings.business_cert_media_dir)
+_business_cert_media_dir.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/media/business-cert",
+    StaticFiles(directory=str(_business_cert_media_dir)),
+    name="business-cert-media",
 )
 
 

@@ -21,6 +21,16 @@ Widget seekerDocumentImage(String? imageRef, {double height = 140}) {
     );
   }
 
+  if (ref.startsWith('http://') || ref.startsWith('https://')) {
+    return Image.network(
+      ref,
+      height: height,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+    );
+  }
+
   return buildSeekerDocumentImage(ref, height: height);
 }
 

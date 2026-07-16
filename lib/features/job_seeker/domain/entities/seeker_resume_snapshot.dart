@@ -134,9 +134,71 @@ class SeekerResumeSnapshot {
     return _allHeldCredentials(profile, canViewDocuments: canViewDocuments);
   }
 
+  /// 서버(`GET /v1/credentials/applicants/{id}/credentials`)가 내려준 보유
+  /// 자격증 목록으로 조립 — 기기·로그인 상태와 무관하게 항상 동작.
+  static List<EmployerVisibleCredential> _employerCredentialsFromServer({
+    required List<Map<String, dynamic>> holdings,
+    required List<String> requiredCredentialIds,
+    required bool canViewDocuments,
+  }) {
+    Map<String, dynamic>? holdingFor(String id) {
+      for (final holding in holdings) {
+        if (holding['credentialId'] == id) return holding;
+      }
+      return null;
+    }
+
+    String labelFor(Map<String, dynamic> holding, String credentialId) {
+      final customLabel = holding['customLabel'] as String?;
+      if (customLabel != null && customLabel.trim().isNotEmpty) {
+        return customLabel.trim();
+      }
+      return CredentialCatalog.findById(credentialId)?.label ?? credentialId;
+    }
+
+    EmployerVisibleCredential fromHolding(
+      Map<String, dynamic> holding,
+      String credentialId,
+    ) {
+      final held = holding['has_photo'] == true;
+      return EmployerVisibleCredential(
+        credentialId: credentialId,
+        label: labelFor(holding, credentialId),
+        isHeld: held,
+        imagePath: canViewDocuments && held
+            ? holding['imagePath'] as String?
+            : null,
+      );
+    }
+
+    if (requiredCredentialIds.isNotEmpty) {
+      return requiredCredentialIds.map((id) {
+        final holding = holdingFor(id);
+        if (holding == null) {
+          return EmployerVisibleCredential(
+            credentialId: id,
+            label: CredentialCatalog.findById(id)?.label ?? id,
+            isHeld: false,
+          );
+        }
+        return fromHolding(holding, id);
+      }).toList();
+    }
+
+    return holdings
+        .where((holding) => holding['has_photo'] == true)
+        .map((holding) => fromHolding(
+              holding,
+              holding['credentialId'] as String? ?? '',
+            ))
+        .toList();
+  }
+
   factory SeekerResumeSnapshot.fromApplication(
     HiringApplication application, {
     List<String> postRequiredCredentialIds = const [],
+    List<Map<String, dynamic>>? serverCredentialHoldings,
+    bool? serverCanViewDocuments,
   }) {
     final profile = SeekerProfileLookup.memberProfileForEmail(
       application.seekerEmail,
@@ -147,14 +209,20 @@ class SeekerResumeSnapshot {
     final requiredIds = application.requiredCredentialIds.isNotEmpty
         ? application.requiredCredentialIds
         : postRequiredCredentialIds;
-    final canViewDocuments =
+    final canViewDocuments = serverCanViewDocuments ??
         HiringCredentialAccess.canEmployerViewCredentialDocuments(application);
-    final credentials = _employerCredentials(
-      profile: profile,
-      requiredCredentialIds: requiredIds,
-      canViewDocuments: canViewDocuments,
-      disclosed: disclosed.isEmpty ? null : disclosed,
-    );
+    final credentials = serverCredentialHoldings != null
+        ? _employerCredentialsFromServer(
+            holdings: serverCredentialHoldings,
+            requiredCredentialIds: requiredIds,
+            canViewDocuments: canViewDocuments,
+          )
+        : _employerCredentials(
+            profile: profile,
+            requiredCredentialIds: requiredIds,
+            canViewDocuments: canViewDocuments,
+            disclosed: disclosed.isEmpty ? null : disclosed,
+          );
 
     return SeekerResumeSnapshot(
       name: application.seekerName,

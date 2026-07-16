@@ -65,6 +65,23 @@ class BusLocationTowerPilotStatus {
       todaySession?['last_latitude'] != null &&
       todaySession?['last_longitude'] != null;
 
+  /// 서버는 naive UTC(오프셋 없는 ISO 문자열)로 내려주므로 'Z'를 붙여 UTC로 해석.
+  DateTime? get lastLocationUpdatedAt {
+    final raw = todaySession?['last_updated_at'] as String?;
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse('${raw}Z');
+  }
+
+  /// 갱신 주기(라이더 폴링 12초·드라이버 갱신 10~15초)의 2~3배 이상 지나면 오래된 데이터.
+  static const staleAfter = Duration(seconds: 45);
+
+  bool get isLocationStale {
+    if (!hasLiveLocation) return false;
+    final updated = lastLocationUpdatedAt;
+    if (updated == null) return true;
+    return DateTime.now().toUtc().difference(updated) > staleAfter;
+  }
+
   factory BusLocationTowerPilotStatus.fromJson(Map<String, dynamic> json) {
     return BusLocationTowerPilotStatus(
       isDesignated: json['is_designated'] == true,

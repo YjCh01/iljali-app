@@ -262,7 +262,7 @@ class _LoginPageState extends State<LoginPage> {
                 onPressed: _submitting ? () {} : _signIn,
               ),
               const SizedBox(height: 28),
-              if (_isIndividual) const SocialLoginButtons(),
+              SocialLoginButtons(memberType: widget.memberType),
             ],
           ),
         ),

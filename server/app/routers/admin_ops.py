@@ -13,7 +13,10 @@ from app.services.admin_bulk_url_import_service import (
 )
 from app.services.job_post_image_remirror import remirror_job_post_images
 from app.services.pilot_program_service import (
+    approve_officer_request,
     bus_location_tower_admin_view,
+    list_pending_officer_requests,
+    reject_officer_request,
     search_bus_location_tower_candidates,
     stop_bus_location_tower_today,
     upsert_bus_location_tower,
@@ -346,6 +349,7 @@ def ops_company_verification(
         "has_registered_member": member is not None,
         "has_server_record": has_server_record,
         "needs_admin_approval": _company_needs_admin_approval(company, member),
+        "certificate_image_ref": company.certificate_image_ref if company else None,
     }
 
 
@@ -656,10 +660,12 @@ async def ops_remirror_description_images(
 
 @router.get("/pilot/bus-location-tower")
 def ops_get_bus_location_tower_pilot(
+    company_key: str = Query(...),
+    route_id: str = Query(...),
     db: Session = Depends(get_db),
     _: str = Depends(require_admin_api_key),
 ):
-    return bus_location_tower_admin_view(db)
+    return bus_location_tower_admin_view(db, company_key=company_key, route_id=route_id)
 
 
 @router.get("/pilot/bus-location-tower/candidates")
@@ -688,8 +694,8 @@ def ops_set_bus_location_tower_pilot(
             seeker_email=body.seeker_email,
             enabled=body.enabled,
             company_key=body.company_key,
-            company_name=body.company_name,
             route_id=body.route_id,
+            company_name=body.company_name,
             route_name=body.route_name,
             note=body.note,
             work_start_time=body.work_start_time,
@@ -700,10 +706,45 @@ def ops_set_bus_location_tower_pilot(
 
 @router.post("/pilot/bus-location-tower/stop-today")
 def ops_stop_bus_location_tower_today(
+    company_key: str = Query(...),
+    route_id: str = Query(...),
     db: Session = Depends(get_db),
     _: str = Depends(require_admin_api_key),
 ):
-    return stop_bus_location_tower_today(db)
+    return stop_bus_location_tower_today(db, company_key=company_key, route_id=route_id)
+
+
+@router.get("/pilot/officer-requests")
+def ops_list_pending_officer_requests(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    items = list_pending_officer_requests(db)
+    return {"items": items, "count": len(items)}
+
+
+@router.post("/pilot/officer-requests/{request_id}/approve")
+def ops_approve_officer_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    try:
+        return approve_officer_request(db, request_id=request_id, reviewed_by="admin")
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/pilot/officer-requests/{request_id}/reject")
+def ops_reject_officer_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    try:
+        return reject_officer_request(db, request_id=request_id, reviewed_by="admin")
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @router.get("/shuttle/participants")

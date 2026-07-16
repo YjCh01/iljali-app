@@ -9,12 +9,14 @@ class CorporateApplicant {
     required this.phoneMasked,
     required this.status,
     required this.appliedAtLabel,
+    required this.appliedAt,
     this.applicationId,
     this.workDateLabel,
     this.seekerEmail,
     this.jobPostId,
     this.companyCheckInCount = 0,
     this.applicationAttempt = 1,
+    this.noShowCount = 0,
   });
 
   final String id;
@@ -23,6 +25,7 @@ class CorporateApplicant {
   final String phoneMasked;
   final CorporateApplicantStatus status;
   final String appliedAtLabel;
+  final DateTime appliedAt;
   final String? applicationId;
   final String? workDateLabel;
   final String? seekerEmail;
@@ -33,6 +36,9 @@ class CorporateApplicant {
 
   /// 이 기업에 몇 번째 지원인지 (1차, 2차, …)
   final int applicationAttempt;
+
+  /// 서버 누적 노쇼 횟수 — 다른 기업이 마킹한 것도 포함.
+  final int noShowCount;
 }
 
 enum CorporateApplicantStatus {

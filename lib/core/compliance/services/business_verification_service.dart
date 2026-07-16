@@ -155,11 +155,13 @@ class BusinessVerificationService {
     return record;
   }
 
-  /// 미인증 회원 — 사업자등록증 제출 → 관리자 검토 대기
+  /// 사업자등록증 재검토 요청 — 실서비스 API 연결 시 서버(어드민 검토 큐)로 전송
   Future<VerifiedBusinessRecord> submitCertificateForReview({
     required BusinessVerificationRequest request,
     required BusinessEntityType entityType,
     required String certificateImageRef,
+    String note = '',
+    String? accessToken,
   }) async {
     final fieldError = request.validateForCertificateReview();
     if (fieldError != null) {
@@ -167,6 +169,21 @@ class BusinessVerificationService {
     }
     if (certificateImageRef.trim().isEmpty) {
       throw BusinessVerificationException('사업자등록증을 업로드해 주세요.');
+    }
+
+    if (EnvConfig.isComplianceApiEnabled &&
+        _apiClient.isEnabled &&
+        accessToken != null &&
+        accessToken.isNotEmpty) {
+      final record = await _apiClient.resubmitCertificate(
+        companyKey: request.normalizedBrn,
+        certificateImageRef: certificateImageRef,
+        accessToken: accessToken,
+        note: note,
+      );
+      final repo = await _repo();
+      await repo.saveBusinessRecord(record);
+      return record;
     }
 
     final ocr = await _ocr.extractFromImage(

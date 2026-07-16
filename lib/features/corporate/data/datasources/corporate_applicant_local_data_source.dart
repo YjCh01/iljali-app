@@ -43,6 +43,7 @@ class CorporateApplicantLocalDataSourceImpl
       phoneMasked: app.seekerPhoneMasked,
       status: _mapStatus(app.status),
       appliedAtLabel: LocalHiringRepository.formatRelativeTime(app.appliedAt),
+      appliedAt: app.appliedAt,
       workDateLabel: app.workDate != null
           ? LocalHiringRepository.formatWorkDateFull(app.workDate!)
           : null,
@@ -57,6 +58,7 @@ class CorporateApplicantLocalDataSourceImpl
         seekerEmail: seekerEmail,
         applicationId: app.id,
       ),
+      noShowCount: app.seekerNoShowCount,
     );
   }
 

@@ -25,6 +25,8 @@ class JobPostRow(Base):
     workplace_longitude: Mapped[float | None] = mapped_column(nullable=True)
     # 같은 물리적 근무지 식별 — 좌표/이름으로 매번 추측하지 않도록 resolve-or-create.
     workplace_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # 지원 시 필수인 표준 자격증 id 목록(JSON 배열) — credential_definitions.id 참조.
+    required_credential_ids_json: Mapped[str] = mapped_column(Text, default="[]")
     notification_settings_json: Mapped[str] = mapped_column(Text, default="{}")
     status: Mapped[str] = mapped_column(String(32), default="recruiting")
     posted_by_email: Mapped[str] = mapped_column(String(200), default="", index=True)
@@ -66,6 +68,9 @@ class JobApplicationRow(Base):
     shuttle_stop_label: Mapped[str] = mapped_column(String(200), default="")
     shuttle_pickup_time: Mapped[str] = mapped_column(String(32), default="")
     shuttle_shift_date: Mapped[str] = mapped_column(String(10), default="", index=True)
+    # 지원 시점 스냅샷(JSON 배열) — 공고가 요구한 자격증 / 구직자가 보유한 자격증.
+    required_credential_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    held_credential_ids_json: Mapped[str] = mapped_column(Text, default="[]")
     applied_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from app.pilot_models import (
     BUS_LOCATION_TOWER_KEY,
     AppPilotProgramRow,
     BusLocationTowerSessionRow,
+    ShuttleOfficerRequestRow,
 )
 from app.qc_models import QcMemberRow
 from app.services.admin_ops_service import _audit
@@ -107,6 +109,12 @@ def _tracking_blocked_by_work_start(
 def _normalize_company_key(company_key: str) -> str:
     normalized = normalize_brn(company_key)
     return normalized if normalized else company_key.strip()
+
+
+def _program_key(company_key: str, route_id: str) -> str:
+    """회사·노선별 독립 슬롯 — 고용주 자기 지정과 어드민 지정이 서로 다른 회사끼리
+    덮어쓰지 않도록 program_key를 (company_key, route_id) 조합으로 만든다."""
+    return f"{BUS_LOCATION_TOWER_KEY}:{_normalize_company_key(company_key)}:{route_id.strip()}"
 
 
 def _seeker_location_consent(seeker: QcMemberRow | None) -> bool:
@@ -304,13 +312,18 @@ def upsert_bus_location_tower(
     *,
     seeker_email: str,
     enabled: bool,
-    company_key: str = "",
+    company_key: str,
+    route_id: str,
     company_name: str = "",
-    route_id: str = "",
     route_name: str = "",
     note: str = "",
     work_start_time: str = "",
 ) -> dict:
+    normalized_company_key = _normalize_company_key(company_key)
+    normalized_route_id = route_id.strip()
+    if not normalized_company_key or not normalized_route_id:
+        raise ValueError("회사와 셔틀 노선을 함께 지정해 주세요.")
+
     email = _normalize_email(seeker_email)
     if enabled and email:
         seeker = (
@@ -321,12 +334,9 @@ def upsert_bus_location_tower(
         )
         if seeker is None:
             raise ValueError("지정한 개인회원을 찾을 수 없습니다.")
-    normalized_company_key = _normalize_company_key(company_key)
-    normalized_route_id = route_id.strip()
-    if enabled and email and (not normalized_company_key or not normalized_route_id):
-        raise ValueError("회사와 셔틀 노선을 함께 지정해 주세요.")
     normalized_work_start = _normalize_work_start_time(work_start_time)
-    row = get_or_create_program(db, BUS_LOCATION_TOWER_KEY)
+    program_key = _program_key(normalized_company_key, normalized_route_id)
+    row = get_or_create_program(db, program_key)
     row.seeker_email = email
     row.company_key = normalized_company_key
     row.company_name = company_name.strip()
@@ -348,7 +358,7 @@ def upsert_bus_location_tower(
         db,
         action="pilot.bus_location_tower",
         target_type="program",
-        target_id=BUS_LOCATION_TOWER_KEY,
+        target_id=program_key,
         detail={
             "seeker_email": email,
             "company_key": row.company_key,
@@ -358,14 +368,19 @@ def upsert_bus_location_tower(
         },
     )
     db.commit()
-    return bus_location_tower_admin_view(db)
+    return bus_location_tower_admin_view(
+        db, company_key=normalized_company_key, route_id=normalized_route_id
+    )
 
 
-def bus_location_tower_admin_view(db: Session) -> dict:
-    row = get_program(db, BUS_LOCATION_TOWER_KEY)
+def bus_location_tower_admin_view(
+    db: Session, *, company_key: str, route_id: str
+) -> dict:
+    program_key = _program_key(company_key, route_id)
+    row = get_program(db, program_key)
     if row is None:
         return {
-            "program_key": BUS_LOCATION_TOWER_KEY,
+            "program_key": program_key,
             "seeker_email": "",
             "company_key": "",
             "company_name": "",
@@ -418,7 +433,7 @@ def bus_location_tower_admin_view(db: Session) -> dict:
         )
 
     return {
-        "program_key": BUS_LOCATION_TOWER_KEY,
+        "program_key": program_key,
         "seeker_email": email,
         "company_key": row.company_key or "",
         "company_name": row.company_name or "",
@@ -436,17 +451,52 @@ def bus_location_tower_admin_view(db: Session) -> dict:
     }
 
 
+def _designated_program_for_seeker(
+    db: Session, email: str
+) -> AppPilotProgramRow | None:
+    return (
+        db.query(AppPilotProgramRow)
+        .filter(AppPilotProgramRow.seeker_email == _normalize_email(email))
+        .filter(AppPilotProgramRow.enabled.is_(True))
+        .first()
+    )
+
+
+def _own_shuttle_application_today(
+    db: Session, *, email: str, service_date: str
+) -> JobApplicationRow | None:
+    return (
+        db.query(JobApplicationRow)
+        .filter(JobApplicationRow.seeker_email == _normalize_email(email))
+        .filter(JobApplicationRow.commute_route_id != "")
+        .filter(JobApplicationRow.shuttle_shift_date == service_date)
+        .filter(JobApplicationRow.status.notin_(["withdrawn", "rejected", "cancelled"]))
+        .order_by(JobApplicationRow.applied_at.desc())
+        .first()
+    )
+
+
 def bus_location_tower_status_for_seeker(db: Session, *, email: str) -> dict:
     normalized = _normalize_email(email)
-    row = get_program(db, BUS_LOCATION_TOWER_KEY)
-    configured = _configured(row)
-    designated = bool(
-        row
-        and row.enabled
-        and row.seeker_email
-        and _normalize_email(row.seeker_email) == normalized
-    )
     service_date = _today_kst()
+
+    row = _designated_program_for_seeker(db, normalized)
+    designated = row is not None
+    if row is None:
+        own_application = _own_shuttle_application_today(
+            db, email=normalized, service_date=service_date
+        )
+        if own_application is not None:
+            candidate = get_program(
+                db,
+                _program_key(
+                    own_application.company_key, own_application.commute_route_id
+                ),
+            )
+            if candidate is not None and _configured(candidate):
+                row = candidate
+
+    configured = _configured(row)
     rider_application = (
         _matching_today_application(
             db,
@@ -559,8 +609,8 @@ def update_bus_location_tower_position(
     accuracy_m: float | None = None,
 ) -> dict:
     normalized = _normalize_email(email)
-    row = get_program(db, BUS_LOCATION_TOWER_KEY)
-    if not _configured(row) or _normalize_email(row.seeker_email) != normalized:
+    row = _designated_program_for_seeker(db, normalized)
+    if not _configured(row):
         raise ValueError("셔틀위치담당자만 위치를 공유할 수 있습니다.")
 
     service_date = _today_kst()
@@ -625,13 +675,153 @@ def update_bus_location_tower_position(
     return bus_location_tower_status_for_seeker(db, email=normalized)
 
 
-def stop_bus_location_tower_today(db: Session) -> dict:
-    row = get_program(db, BUS_LOCATION_TOWER_KEY)
+def stop_bus_location_tower_today(db: Session, *, company_key: str, route_id: str) -> dict:
+    row = get_program(db, _program_key(company_key, route_id))
     if not _configured(row):
-        return bus_location_tower_admin_view(db)
+        return bus_location_tower_admin_view(db, company_key=company_key, route_id=route_id)
     session = _active_session_for_program(db, row, service_date=_today_kst())
     if session is not None:
         session.active = False
         session.stopped_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
-    return bus_location_tower_admin_view(db)
+    return bus_location_tower_admin_view(db, company_key=company_key, route_id=route_id)
+
+
+def _request_to_dict(row: ShuttleOfficerRequestRow) -> dict:
+    return {
+        "id": row.id,
+        "company_key": row.company_key,
+        "company_name": row.company_name,
+        "route_id": row.route_id,
+        "route_name": row.route_name,
+        "seeker_email": row.seeker_email,
+        "seeker_name": row.seeker_name,
+        "work_start_time": row.work_start_time,
+        "note": row.note,
+        "requested_by": row.requested_by,
+        "status": row.status,
+        "created_at": row.created_at.replace(tzinfo=timezone.utc).isoformat()
+        if row.created_at
+        else None,
+        "reviewed_at": row.reviewed_at.replace(tzinfo=timezone.utc).isoformat()
+        if row.reviewed_at
+        else None,
+        "reviewed_by": row.reviewed_by,
+    }
+
+
+def create_officer_request(
+    db: Session,
+    *,
+    company_key: str,
+    company_name: str,
+    route_id: str,
+    route_name: str,
+    seeker_email: str,
+    seeker_name: str = "",
+    work_start_time: str = "",
+    note: str = "",
+    requested_by: str = "",
+) -> dict:
+    """기업이 셔틀위치담당자 지정을 어드민에 승인요청 — 즉시 반영되지 않는다."""
+    normalized_company_key = _normalize_company_key(company_key)
+    normalized_route_id = route_id.strip()
+    email = _normalize_email(seeker_email)
+    if not normalized_company_key or not normalized_route_id or not email:
+        raise ValueError("회사·노선·담당자 이메일이 모두 필요합니다.")
+
+    seeker = (
+        db.query(QcMemberRow)
+        .filter(QcMemberRow.email == email)
+        .filter(QcMemberRow.member_type == "seeker")
+        .first()
+    )
+    if seeker is None:
+        raise ValueError("지정한 개인회원을 찾을 수 없습니다.")
+
+    row = ShuttleOfficerRequestRow(
+        id=f"sor_{uuid4().hex[:12]}",
+        company_key=normalized_company_key,
+        company_name=company_name.strip(),
+        route_id=normalized_route_id,
+        route_name=route_name.strip() or normalized_route_id,
+        seeker_email=email,
+        seeker_name=seeker_name.strip() or seeker.display_name or "",
+        work_start_time=_normalize_work_start_time(work_start_time),
+        note=note.strip(),
+        requested_by=requested_by.strip(),
+        status="pending",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _request_to_dict(row)
+
+
+def list_officer_requests_for_company(db: Session, *, company_key: str) -> list[dict]:
+    rows = (
+        db.query(ShuttleOfficerRequestRow)
+        .filter(
+            ShuttleOfficerRequestRow.company_key
+            == _normalize_company_key(company_key)
+        )
+        .order_by(ShuttleOfficerRequestRow.created_at.desc())
+        .all()
+    )
+    return [_request_to_dict(r) for r in rows]
+
+
+def list_pending_officer_requests(db: Session) -> list[dict]:
+    rows = (
+        db.query(ShuttleOfficerRequestRow)
+        .filter(ShuttleOfficerRequestRow.status == "pending")
+        .order_by(ShuttleOfficerRequestRow.created_at.asc())
+        .all()
+    )
+    return [_request_to_dict(r) for r in rows]
+
+
+def approve_officer_request(
+    db: Session, *, request_id: str, reviewed_by: str = ""
+) -> dict:
+    row = db.get(ShuttleOfficerRequestRow, request_id)
+    if row is None:
+        raise ValueError("요청을 찾을 수 없습니다.")
+    if row.status != "pending":
+        raise ValueError("이미 처리된 요청입니다.")
+
+    upsert_bus_location_tower(
+        db,
+        seeker_email=row.seeker_email,
+        enabled=True,
+        company_key=row.company_key,
+        route_id=row.route_id,
+        company_name=row.company_name,
+        route_name=row.route_name,
+        note=row.note,
+        work_start_time=row.work_start_time,
+    )
+
+    row.status = "approved"
+    row.reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    row.reviewed_by = reviewed_by.strip()
+    db.commit()
+    db.refresh(row)
+    return _request_to_dict(row)
+
+
+def reject_officer_request(
+    db: Session, *, request_id: str, reviewed_by: str = ""
+) -> dict:
+    row = db.get(ShuttleOfficerRequestRow, request_id)
+    if row is None:
+        raise ValueError("요청을 찾을 수 없습니다.")
+    if row.status != "pending":
+        raise ValueError("이미 처리된 요청입니다.")
+
+    row.status = "rejected"
+    row.reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    row.reviewed_by = reviewed_by.strip()
+    db.commit()
+    db.refresh(row)
+    return _request_to_dict(row)

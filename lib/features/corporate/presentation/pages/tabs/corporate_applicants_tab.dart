@@ -8,6 +8,7 @@ import 'package:map/core/hiring/hiring_refresh.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/features/corporate/data/datasources/corporate_applicant_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_applicant.dart';
+import 'package:map/features/corporate/domain/services/corporate_applicants_view_marker_service.dart';
 import 'package:map/features/corporate/domain/usecases/get_corporate_applicants_usecase.dart';
 import 'package:map/features/corporate/presentation/pages/corporate_applicant_resume_page.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_applicant_card.dart';
@@ -47,6 +48,7 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
 
 
   List<CorporateApplicant> _applicants = [];
+  DateTime? _lastViewedAt;
   bool _loading = true;
 
   @override
@@ -64,11 +66,22 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final applicants = await _getApplicants();
+    final lastViewedAt = await CorporateApplicantsViewMarkerService.lastViewedAt();
+    final sorted = List<CorporateApplicant>.from(applicants)
+      ..sort((a, b) => b.appliedAt.compareTo(a.appliedAt));
     if (!mounted) return;
     setState(() {
-      _applicants = applicants;
+      _applicants = sorted;
+      _lastViewedAt = lastViewedAt;
       _loading = false;
     });
+    await CorporateApplicantsViewMarkerService.markViewedNow();
+  }
+
+  bool _isNew(CorporateApplicant applicant) {
+    final lastViewedAt = _lastViewedAt;
+    if (lastViewedAt == null) return false;
+    return applicant.appliedAt.isAfter(lastViewedAt);
   }
 
   Future<bool> _blockIfContactSanctioned() async {
@@ -205,6 +218,7 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
 
             return CorporateApplicantCard(
               applicant: applicant,
+              isNew: _isNew(applicant),
               onTap: () {
                 final id = applicant.applicationId ?? applicant.id;
                 openCorporateApplicantResume(context, applicationId: id);
@@ -217,7 +231,7 @@ class _CorporateApplicantsTabState extends State<CorporateApplicantsTab> {
 
                   : null,
 
-              onInstantAccept: ProductFeatureFlags.isHiringCommissionEnabled &&
+              onInstantAccept: ProductFeatureFlags.isAttendanceFlowEnabled &&
 
                   (applicant.status == CorporateApplicantStatus.pending ||
 

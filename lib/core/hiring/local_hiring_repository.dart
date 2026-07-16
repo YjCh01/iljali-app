@@ -435,6 +435,7 @@ class LocalHiringRepository {
     String? preferredStopId,
     List<ResumeItemKind> disclosedResumeItems = const [],
     List<String> requiredCredentialIds = const [],
+    List<String> heldCredentialIds = const [],
   }) async {
     final existingInquiry = await findInquiryForPost(
       postId: postId,
@@ -466,6 +467,7 @@ class LocalHiringRepository {
         preferredStopId: preferredStopId,
         disclosedResumeItems: disclosedResumeItems,
         requiredCredentialIds: requiredCredentialIds,
+        heldCredentialIds: heldCredentialIds,
       );
       await _upsert(upgraded);
       HiringRefresh.markUpdated();
@@ -523,6 +525,7 @@ class LocalHiringRepository {
       preferredStopId: preferredStopId,
       disclosedResumeItems: disclosedResumeItems,
       requiredCredentialIds: requiredCredentialIds,
+      heldCredentialIds: heldCredentialIds,
     );
 
     await _upsert(application);
@@ -558,8 +561,11 @@ class LocalHiringRepository {
         'company_key': application.companyKey ?? '',
         'seeker_email': application.seekerEmail,
         'seeker_name': application.seekerName,
-        'status': application.status.name,
+        'status': application.status.wireValue,
         'work_schedule': application.workSchedule,
+        'required_credential_ids_json':
+            jsonEncode(application.requiredCredentialIds),
+        'held_credential_ids_json': jsonEncode(application.heldCredentialIds),
         if (booking != null) ...{
           'commute_route_id': booking.routeId,
           'commute_route_name': route?.routeName ?? '',
@@ -618,7 +624,7 @@ class LocalHiringRepository {
     required String applicationId,
     DateTime? workDate,
   }) async {
-    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
+    if (!ProductFeatureFlags.isAttendanceFlowEnabled) {
       throw StateError('attendance_flow_disabled');
     }
     final existing = await findById(applicationId);
@@ -644,7 +650,7 @@ class LocalHiringRepository {
     required String applicationId,
     required bool asEmployer,
   }) async {
-    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
+    if (!ProductFeatureFlags.isAttendanceFlowEnabled) {
       throw StateError('attendance_flow_disabled');
     }
     final existing = await findById(applicationId);
@@ -701,10 +707,21 @@ class LocalHiringRepository {
     }
 
     final now = DateTime.now();
-    final updated = existing.copyWith(
+    var updated = existing.copyWith(
       status: HiringApplicationStatus.noShow,
       noShowMarkedAt: now,
     );
+    try {
+      final response =
+          await IljariApiClient().markApplicationNoShow(applicationId);
+      final serverCount = response['seeker_no_show_count'] as num?;
+      if (serverCount != null) {
+        updated = updated.copyWith(seekerNoShowCount: serverCount.toInt());
+      }
+    } on Object {
+      // 오프라인 — 로컬 상태만 반영, 서버 누적은 다음 동기화 때 재시도되지 않으므로
+      // 근태 탭에서 다시 열 때 재시도할 수 있게 상태만 noShow로 남겨둔다.
+    }
     await _upsert(updated);
     HiringRefresh.markUpdated();
     return updated;
@@ -835,7 +852,7 @@ class LocalHiringRepository {
   Future<List<HiringApplication>> fetchOverdueUncheckedShifts(
     String seekerEmail,
   ) async {
-    if (!ProductFeatureFlags.isHiringCommissionEnabled) {
+    if (!ProductFeatureFlags.isAttendanceFlowEnabled) {
       return const [];
     }
     final all = await fetchForSeeker(seekerEmail);

@@ -5,72 +5,45 @@ import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/credential/domain/entities/credential_catalog.dart';
 import 'package:map/features/job_seeker/domain/utils/seeker_profile_credentials.dart';
 
-/// 공고 필수 자격 — 보유 확인 후 지원 진행
-Future<bool> showRequiredCredentialsApplyDialog(
+/// [showRequiredCredentialsApplyDialog] 결과 — 자격증 보유 여부와 무관하게 지원은
+/// 항상 진행 가능. 미보유 자격증이 있으면 등록 유도만 하고, 실제 검증은 채용 확정 후 진행.
+class RequiredCredentialDialogResult {
+  const RequiredCredentialDialogResult({
+    required this.proceed,
+    required this.missingCredentialIds,
+  });
+
+  final bool proceed;
+  final List<String> missingCredentialIds;
+}
+
+/// 공고 필수 자격 안내 — 지원은 자격증 등록 여부와 관계없이 항상 가능하며,
+/// 미보유 시 등록을 유도만 한다(지원을 막지 않음).
+Future<RequiredCredentialDialogResult> showRequiredCredentialsApplyDialog(
   BuildContext context, {
   required List<String> credentialIds,
 }) async {
-  if (credentialIds.isEmpty) return true;
+  if (credentialIds.isEmpty) {
+    return const RequiredCredentialDialogResult(
+      proceed: true,
+      missingCredentialIds: [],
+    );
+  }
 
   final profile = AuthSession.instance.currentUser?.seekerProfile;
   final missingIds = credentialIds
       .where((id) => !(profile?.holdingFor(id)?.isComplete ?? false))
       .toList();
 
-  final labels = CredentialCatalog.labelsForIds(credentialIds);
-  final heldLabels = credentialIds
-      .where((id) => profile?.holdingFor(id)?.isComplete ?? false)
-      .map((id) => CredentialCatalog.findById(id)?.label ?? id)
-      .toList();
-  final missingLabels = CredentialCatalog.labelsForIds(missingIds);
-
-  if (missingIds.isNotEmpty) {
-    final goRegister = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('필수 자격·면허 미등록'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '아래 자격증을 내 프로필에 등록(사진 업로드)한 뒤 지원할 수 있습니다.',
-              style: TextStyle(height: 1.45),
-            ),
-            const SizedBox(height: 12),
-            ...missingLabels.map(
-              (label) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text('• $label', style: const TextStyle(fontWeight: FontWeight.w700)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('닫기'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('자격증 등록'),
-          ),
-        ],
-      ),
+  if (missingIds.isEmpty) {
+    return RequiredCredentialDialogResult(
+      proceed: true,
+      missingCredentialIds: missingIds,
     );
-    if (goRegister == true && context.mounted) {
-      await Navigator.of(context).pushNamed(AppRoutes.seekerMyCredentials);
-    }
-    return false;
   }
 
-  final body = labels.map((label) {
-    final held = heldLabels.contains(label);
-    return held ? '• $label (보유)' : '• $label';
-  }).join('\n');
-
-  final confirmed = await showDialog<bool>(
+  final missingLabels = CredentialCatalog.labelsForIds(missingIds);
+  final decision = await showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('필수 자격·면허 안내'),
@@ -79,34 +52,51 @@ Future<bool> showRequiredCredentialsApplyDialog(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '해당 공고는 아래 자격증 보유가 필요합니다.\n'
-            '채용 확정 전까지는 기업에 자격증 이름만 공개되며, '
-            '원본은 채용 확정 후 열람·다운로드됩니다.\n\n지원하시겠습니까?',
+            '이 공고는 아래 자격증 보유를 확인합니다.\n'
+            '자격증 등록 여부와 관계없이 지금 지원할 수 있습니다.\n'
+            '아직 등록하지 않았다면, 지원을 마친 직후 이력서에서 '
+            '자격증을 등록해 주세요.',
             style: TextStyle(height: 1.45),
           ),
           const SizedBox(height: 12),
-          Text(
-            body,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              height: 1.6,
+          ...missingLabels.map(
+            (label) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('• $label', style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
           ),
         ],
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('아니오 (지원취소)'),
+          onPressed: () => Navigator.of(context).pop('cancel'),
+          child: const Text('취소'),
+        ),
+        OutlinedButton(
+          onPressed: () => Navigator.of(context).pop('register'),
+          child: const Text('지금 등록하기'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(context).pop('proceed'),
           style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-          child: const Text('예'),
+          child: const Text('지원 계속하기'),
         ),
       ],
     ),
   );
 
-  return confirmed == true;
+  if (decision == 'register') {
+    if (context.mounted) {
+      await Navigator.of(context).pushNamed(AppRoutes.seekerMyCredentials);
+    }
+    return RequiredCredentialDialogResult(
+      proceed: false,
+      missingCredentialIds: missingIds,
+    );
+  }
+
+  return RequiredCredentialDialogResult(
+    proceed: decision == 'proceed',
+    missingCredentialIds: missingIds,
+  );
 }
