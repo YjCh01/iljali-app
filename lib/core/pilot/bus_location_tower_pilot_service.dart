@@ -60,6 +60,17 @@ abstract final class BusLocationTowerPilotService {
     return _cached!;
   }
 
+  /// 버스위치 공유 담당 본인이 위치 공유를 직접 중지 — 관제의 핵심 기능.
+  static Future<BusLocationTowerPilotStatus> stopSharing() async {
+    final api = IljariApiClient(
+      accessToken: AuthSession.instance.accessToken,
+    );
+    final json = await api.stopBusLocationTowerSharing();
+    _cached = BusLocationTowerPilotStatus.fromJson(json);
+    _cachedAt = DateTime.now();
+    return _cached!;
+  }
+
   static void invalidate() {
     _cached = null;
     _cachedAt = null;

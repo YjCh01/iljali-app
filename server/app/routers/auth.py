@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.qc_models import QcMemberRow
 from app.services.auth_token_service import (
@@ -56,7 +57,7 @@ def _phone_send_error_detail(exc: ValueError) -> str:
         return "잠시 후 다시 시도해 주세요."
     if code == "invalid_phone":
         return "휴대폰 번호를 확인해 주세요."
-    if code.startswith("sms_failed:"):
+    if code.startswith("sms_failed:") or code.startswith("sms_provider_unsupported:"):
         return "문자 발송에 실패했습니다. 잠시 후 다시 시도해 주세요."
     return code
 
@@ -703,7 +704,7 @@ def phone_send(body: PhoneSendBody):
         sent=True,
         hint=result.hint,
         mock=result.mock,
-        dev_code="123456" if result.mock else None,
+        dev_code=(settings.sms_mock_code or "123456") if result.mock else None,
         sms_sent=result.sms_sent,
     )
 

@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/job_board/job_board_refresh.dart';
 import 'package:map/core/session/auth_session.dart';
+import 'package:map/features/corporate/data/datasources/corporate_applicant_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
+import 'package:map/features/corporate/domain/services/corporate_applicants_view_marker_service.dart';
+import 'package:map/features/corporate/domain/services/corporate_new_applicant_signal.dart';
+import 'package:map/features/corporate/domain/usecases/get_corporate_applicants_usecase.dart';
 import 'package:map/features/corporate/presentation/navigation/corporate_job_post_flow_result.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_applicants_tab.dart';
 import 'package:map/features/corporate/presentation/pages/tabs/corporate_attendance_tab.dart';
@@ -30,11 +34,16 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
   int _jobPostsRevision = 0;
   int _chatRevision = 0;
   int _hiringRevision = 0;
+  int _newApplicantBadgeCount = 0;
   String? _applicantsFocusJobPostId;
   String? _applicantsFocusJobTitle;
   String? _mapFocusPostId;
   CorporateJobPost? _mapFocusPost;
   late List<Widget> _tabs;
+
+  static const _getApplicants = GetCorporateApplicantsUseCase(
+    CorporateApplicantLocalDataSourceImpl(),
+  );
 
   @override
   void initState() {
@@ -42,7 +51,20 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
     _rebuildTabs();
     if (CorporateShellAccess.isSignedInCorporate) {
       _clearPromoExposureIfNeeded();
+      _refreshNewApplicantBadge();
     }
+    CorporateNewApplicantSignal.ping.addListener(_refreshNewApplicantBadge);
+  }
+
+  Future<void> _refreshNewApplicantBadge() async {
+    if (!CorporateShellAccess.isSignedInCorporate) return;
+    final applicants = await _getApplicants();
+    final lastViewedAt = await CorporateApplicantsViewMarkerService.lastViewedAt();
+    final count = lastViewedAt == null
+        ? 0
+        : applicants.where((a) => a.appliedAt.isAfter(lastViewedAt)).length;
+    if (!mounted) return;
+    setState(() => _newApplicantBadgeCount = count);
   }
 
   Future<void> _clearPromoExposureIfNeeded() async {
@@ -56,6 +78,7 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
 
   @override
   void dispose() {
+    CorporateNewApplicantSignal.ping.removeListener(_refreshNewApplicantBadge);
     super.dispose();
   }
 
@@ -102,7 +125,10 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
 
     setState(() {
       _currentIndex = index;
-      if (index == 2) _hiringRevision++;
+      if (index == 2) {
+        _hiringRevision++;
+        _newApplicantBadgeCount = 0;
+      }
       if (index == 4) _chatRevision++;
       _rebuildTabs();
     });
@@ -243,11 +269,15 @@ class _CorporateHomeShellPageState extends State<CorporateHomeShellPage> {
             _applicantsFocusJobTitle = null;
           }
           _currentIndex = index;
-          if (index == 2) _hiringRevision++;
+          if (index == 2) {
+            _hiringRevision++;
+            _newApplicantBadgeCount = 0;
+          }
           if (index == 4) _chatRevision++;
           _rebuildTabs();
         });
       },
+      applicantsBadgeCount: _newApplicantBadgeCount,
       actions: signedIn
           ? [
               IconButton(

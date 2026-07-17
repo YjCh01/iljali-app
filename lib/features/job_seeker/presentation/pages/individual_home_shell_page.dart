@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/job_board/job_board_refresh.dart';
 
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/sync/member_sanction_guard.dart';
+import 'package:map/features/job_seeker/domain/services/seeker_application_update_signal.dart';
+import 'package:map/features/job_seeker/domain/services/seeker_my_jobs_view_marker_service.dart';
 import 'package:map/features/job_seeker/presentation/pages/tabs/individual_chat_tab.dart';
 import 'package:map/features/job_seeker/presentation/pages/tabs/individual_map_tab.dart';
 import 'package:map/features/job_seeker/presentation/pages/tabs/individual_more_tab.dart';
@@ -38,6 +41,7 @@ class _IndividualHomeShellPageState extends State<IndividualHomeShellPage> {
   int _workRevision = 0;
 
   int _myJobsSegment = 0;
+  int _myJobsBadgeCount = 0;
 
   void _switchTab(int index) {
     if (!SeekerShellAccess.isTabEnabled(index)) {
@@ -51,7 +55,9 @@ class _IndividualHomeShellPageState extends State<IndividualHomeShellPage> {
       if (index == 0 || index == 1 || JobBoardRefresh.consumeIfDirty()) {
         _reloadToken++;
       }
+      if (index == 2) _myJobsBadgeCount = 0;
     });
+    if (index == 2) SeekerMyJobsViewMarkerService.markViewedNow();
   }
 
   void _onApplied() {
@@ -60,7 +66,39 @@ class _IndividualHomeShellPageState extends State<IndividualHomeShellPage> {
       _workRevision++;
       _myJobsSegment = 0;
       _currentIndex = 2;
+      _myJobsBadgeCount = 0;
     });
+    SeekerMyJobsViewMarkerService.markViewedNow();
+  }
+
+  Future<void> _refreshMyJobsBadge() async {
+    final email = AuthSession.instance.currentUser?.email;
+    if (email == null) return;
+    final lastViewedAt = await SeekerMyJobsViewMarkerService.lastViewedAt();
+    if (lastViewedAt == null) {
+      if (mounted) setState(() => _myJobsBadgeCount = 0);
+      return;
+    }
+    final repo = await LocalHiringRepository.create();
+    final apps = await repo.fetchForSeeker(email);
+    final count = apps.where((a) {
+      final workAt = a.isWorkAgreementComplete
+          ? _laterOf(a.seekerWorkAgreedAt, a.employerWorkAgreedAt)
+          : null;
+      final interviewAt = a.isInterviewAgreementComplete
+          ? _laterOf(a.seekerInterviewAgreedAt, a.employerInterviewAgreedAt)
+          : null;
+      return (workAt != null && workAt.isAfter(lastViewedAt)) ||
+          (interviewAt != null && interviewAt.isAfter(lastViewedAt));
+    }).length;
+    if (!mounted) return;
+    setState(() => _myJobsBadgeCount = count);
+  }
+
+  DateTime? _laterOf(DateTime? a, DateTime? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a.isAfter(b) ? a : b;
   }
 
   Future<void> _openVaultTabOrPrompt() async {
@@ -82,6 +120,14 @@ class _IndividualHomeShellPageState extends State<IndividualHomeShellPage> {
         SeekerShellAccess.isTabEnabled(initial) ? initial : SeekerShellAccess.mapTabIndex;
     _myJobsSegment = widget.initialMyJobsSegment.clamp(0, 1);
     WidgetsBinding.instance.addPostFrameCallback((_) => _showSanctionNotices());
+    _refreshMyJobsBadge();
+    SeekerApplicationUpdateSignal.ping.addListener(_refreshMyJobsBadge);
+  }
+
+  @override
+  void dispose() {
+    SeekerApplicationUpdateSignal.ping.removeListener(_refreshMyJobsBadge);
+    super.dispose();
   }
 
   Future<void> _showSanctionNotices() async {
@@ -95,6 +141,7 @@ class _IndividualHomeShellPageState extends State<IndividualHomeShellPage> {
     return IndividualWebScaffold(
       currentIndex: _currentIndex,
       isItemEnabled: SeekerShellAccess.isTabEnabled,
+      myJobsBadgeCount: _myJobsBadgeCount,
       onSectionChanged: (index) {
         if (index == 2) _myJobsSegment = 0;
         _switchTab(index);

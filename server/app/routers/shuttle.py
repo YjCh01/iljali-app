@@ -333,7 +333,7 @@ def shuttle_get_location_officer(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """고용주 자기 회사의 셔틀위치담당자 지정 현황 — 어드민 화면과 동일 데이터."""
+    """고용주 자기 회사의 버스위치 공유 담당 지정 현황 — 어드민 화면과 동일 데이터."""
     payload = _resolve_bearer(authorization)
     company_key = _normalize_company_key(str(payload.get("company_key", "")))
     _assert_corporate_company(payload, company_key)
@@ -346,7 +346,7 @@ def shuttle_request_location_officer(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """고용주 — 셔틀위치담당자 지정을 어드민에 승인요청 (즉시 반영되지 않음).
+    """고용주 — 버스위치 공유 담당 지정을 어드민에 승인요청 (즉시 반영되지 않음).
 
     company_key는 토큰에서만 가져온다(다른 회사 지정 원천 차단)."""
     payload = _resolve_bearer(authorization)
@@ -374,7 +374,7 @@ def shuttle_list_location_officer_requests(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    """고용주 — 자기 회사가 보낸 셔틀위치담당자 지정 요청 목록·처리 상태."""
+    """고용주 — 자기 회사가 보낸 버스위치 공유 담당 지정 요청 목록·처리 상태."""
     payload = _resolve_bearer(authorization)
     company_key = _normalize_company_key(str(payload.get("company_key", "")))
     _assert_corporate_company(payload, company_key)

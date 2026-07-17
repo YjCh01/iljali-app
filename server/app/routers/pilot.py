@@ -8,6 +8,7 @@ from app.database import get_db
 from app.services.auth_token_service import verify_token
 from app.services.pilot_program_service import (
     bus_location_tower_status_for_seeker,
+    stop_bus_location_tower_sharing_for_seeker,
     update_bus_location_tower_position,
 )
 
@@ -62,5 +63,22 @@ def bus_location_tower_location(
             longitude=body.longitude,
             accuracy_m=body.accuracy_m,
         )
+    except ValueError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@router.post("/bus-location-tower/stop")
+def bus_location_tower_stop(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """버스위치 공유 담당 본인이 위치 공유를 직접 중지."""
+    payload = _resolve_bearer(authorization)
+    member_type = str(payload.get("member_type", "seeker"))
+    if member_type != "seeker":
+        raise HTTPException(status_code=403, detail="개인회원만 이용할 수 있습니다.")
+    email = str(payload.get("sub", "")).lower()
+    try:
+        return stop_bus_location_tower_sharing_for_seeker(db, email=email)
     except ValueError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error

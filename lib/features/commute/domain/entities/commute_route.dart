@@ -3,8 +3,8 @@ import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 
 /// 통근 버스·셔틀 경로
 class CommuteRoute {
-  /// 노선당 등록 가능한 정류장 상한 (추가·수정 공통)
-  static const maxStopsPerRoute = 15;
+  /// 노선당 등록 가능한 정류장 상한 (경유 정류장 15곳 + 근무지(종점) 1곳 = 16)
+  static const maxStopsPerRoute = 16;
 
   const CommuteRoute({
     required this.id,

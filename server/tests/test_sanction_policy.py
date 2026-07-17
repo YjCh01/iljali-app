@@ -61,17 +61,6 @@ def test_apply_seeker_caution_and_lift():
     assert lift.json()["sanction_tier"] == ""
 
 
-def test_auto_noshow_hiring_endpoint():
-    email = "seeker-noshow-auto@qc.iljari.co.kr"
-    r = client.post(
-        "/v1/hiring/seeker/no-show/sync",
-        json={"seeker_email": email, "streak": 2},
-    )
-    assert r.status_code == 200
-    assert r.json()["applied"] is True
-    assert r.json()["sanction"]["member"]["sanction_tier"] == "caution"
-
-
 def test_company_exposure_limit_on_sync():
     email = "employer-exposure@qc.iljari.co.kr"
     post_id = "exposure_limit_post"

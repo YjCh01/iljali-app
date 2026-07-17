@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.job_sync_models import JobApplicationRow, JobPostRow
 from app.qc_models import JobPostEntitlementRow
+from app.routers.hiring import _assert_seeker_identity, _assert_self_email
 from app.routers.hiring import _row_to_dict as app_to_dict
+from app.routers.job_board import _assert_employer_company, _resolve_bearer
 from app.routers.job_board import _row_to_dict as post_to_dict
 from app.services.entitlement_service import normalize_brn
 from app.services.ghost_pin_service import list_ghost_pins
@@ -27,8 +29,18 @@ def sync_bootstrap(
     member_email: str | None = Query(default=None),
     company_key: str | None = Query(default=None),
     member_type: str | None = Query(default=None),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
+    # 지원 내역·제재 상태·지갑은 본인 신원 확인 후에만 포함 — 공고·고스트핀 등
+    # 공개 데이터는 비로그인 게스트 브라우징을 위해 인증 없이도 계속 제공한다.
+    if seeker_email or company_key or member_email:
+        payload = _resolve_bearer(authorization)
+        if company_key:
+            _assert_employer_company(payload, company_key)
+        else:
+            _assert_seeker_identity(payload, seeker_email or member_email)  # type: ignore[arg-type]
+
     posts = db.query(JobPostRow).order_by(JobPostRow.created_at.desc()).all()
     post_items = []
     entitlements: dict[str, dict] = {}
@@ -96,7 +108,10 @@ def sync_bootstrap(
 @router.get("/member/sanction")
 def sync_member_sanction(
     email: str = Query(..., min_length=3),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """본인 제재 상태·이력 (이메일 일치 시에만)."""
+    payload = _resolve_bearer(authorization)
+    _assert_self_email(payload, email)
     return member_sanction_self_view(db, email=email)

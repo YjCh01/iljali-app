@@ -26,6 +26,8 @@ import 'package:map/features/commute/domain/utils/shuttle_route_schedule.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_stop_policy.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_commute_consent_dialog.dart';
 import 'package:map/features/commute/domain/utils/shuttle_bus_eta_estimator.dart';
+import 'package:map/features/commute/domain/utils/shuttle_bus_timeline_position.dart';
+import 'package:map/features/commute/domain/utils/shuttle_route_polyline_geometry.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_bus_live_map_view.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_route_vertical_tracker.dart';
 import 'package:map/features/commute/presentation/widgets/shuttle_stop_selection_grid.dart';
@@ -145,20 +147,37 @@ class _SeekerMyBusPageState extends State<SeekerMyBusPage> {
     );
 
     if (mounted) {
-      await _maybePromptTowerTrackingOn(
-        routeShareConsents: routeShareConsents,
-        towerConsents: towerConsents,
+      await _maybePromptOfficerSharingStart(
+        pilotStatus: pilotStatus,
         preferences: preferences,
-        employers: optedInEmployers,
+        routeShareConsents: routeShareConsents,
       );
     }
 
-    final eta = tracking.stop == null
-        ? null
-        : ShuttleBusEtaEstimator.etaToStop(
-            busPosition: tracking.busPosition,
-            stopPosition: tracking.stop!.coordinate,
+    Duration? eta;
+    if (tracking.stop != null) {
+      final route = tracking.route;
+      ShuttleRoutePolylineGeometry? geometry;
+      int? stopIndex;
+      if (route != null) {
+        final orderedStops = ShuttleBusTimelinePosition.orderedStops(route);
+        stopIndex = orderedStops.indexWhere((s) => s.id == tracking.stop!.id);
+        if (stopIndex >= 0) {
+          geometry = ShuttleRoutePolylineGeometry.build(
+            points: route.effectivePolylinePoints,
+            stops: orderedStops,
           );
+        } else {
+          stopIndex = null;
+        }
+      }
+      eta = ShuttleBusEtaEstimator.etaToStop(
+        busPosition: tracking.busPosition,
+        stopPosition: tracking.stop!.coordinate,
+        routeGeometry: geometry,
+        stopIndex: stopIndex,
+      );
+    }
 
     return SeekerMyBusViewModel(
       seekerEmail: email,
@@ -174,85 +193,61 @@ class _SeekerMyBusPageState extends State<SeekerMyBusPage> {
     );
   }
 
-  Future<void> _maybePromptTowerTrackingOn({
-    required List<SeekerShuttleRouteShareConsent> routeShareConsents,
-    required List<SeekerCommuteTowerConsent> towerConsents,
+  /// 오늘 지정된 버스위치 공유 담당 본인에게만 — 관제 화면으로 위치 공유를 시작하도록 안내.
+  /// (일반 탑승자는 위치를 공유하지 않고 보기만 하므로 이 안내가 해당되지 않음)
+  Future<void> _maybePromptOfficerSharingStart({
+    required BusLocationTowerPilotStatus pilotStatus,
     required List<SeekerShuttleCommutePreference> preferences,
-    required List<SeekerShuttleEmployerContext> employers,
+    required List<SeekerShuttleRouteShareConsent> routeShareConsents,
   }) async {
+    if (!pilotStatus.isDesignated) return;
+    if (pilotStatus.hasLiveLocation || pilotStatus.arrivedAtWorkplace) return;
+    if (pilotStatus.companyKey.isEmpty || pilotStatus.routeId.isEmpty) return;
+    final email = AuthSession.instance.currentUser?.email;
+    if (email == null || email.isEmpty) return;
+
+    final towerRepo = await SeekerCommuteTowerConsentRepository.create();
+    final consent = await towerRepo.findForRoute(
+      seekerEmail: email,
+      companyKey: pilotStatus.companyKey,
+      routeId: '',
+    );
+    if (consent == null || consent.trackingEnabled) return;
+
+    final route = await (await CommuteRouteRepository.create())
+        .findById(pilotStatus.routeId);
+    if (route == null) return;
+
+    final firstTime = ShuttleRouteSchedule.firstStopDepartureTime(route);
+    if (firstTime == null) return;
     final now = DateTime.now();
-    for (final pref in preferences) {
-      SeekerShuttleRouteShareConsent? share;
-      for (final c in routeShareConsents) {
-        if (c.companyKey == pref.companyKey && c.towerParticipationConsented) {
-          share = c;
-          break;
-        }
-      }
-      if (share == null) continue;
+    final parts = firstTime.split(':');
+    final departure = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
+    if (now.isBefore(departure)) return;
 
-      final towerRepo = await SeekerCommuteTowerConsentRepository.create();
-      var consent = await towerRepo.findForRoute(
-        seekerEmail: pref.seekerEmail,
-        companyKey: pref.companyKey,
-        routeId: pref.routeId,
-      );
-      consent ??= await towerRepo.findForRoute(
-        seekerEmail: pref.seekerEmail,
-        companyKey: pref.companyKey,
-        routeId: '',
-      );
-      if (consent == null || consent.trackingEnabled) continue;
+    final agreed = await showShuttleCommuteConsentDialog(
+      context,
+      title: ShuttleCommuteConsentCopy.trackingOnPromptTitle,
+      body: ShuttleCommuteConsentCopy.trackingOnPromptBody,
+      acceptLabel: '관제 화면 열기',
+      declineLabel: '나중에',
+    );
+    if (!mounted) return;
 
-      CommuteRoute? route;
-      for (final employer in employers) {
-        if (employer.companyKey != pref.companyKey) continue;
-        for (final r in employer.routes) {
-          if (r.id == pref.routeId) {
-            route = r;
-            break;
-          }
-        }
-      }
-      route ??=
-          await (await CommuteRouteRepository.create()).findById(pref.routeId);
-      if (route == null) continue;
-
-      final firstTime = ShuttleRouteSchedule.firstStopDepartureTime(route);
-      if (firstTime == null) continue;
-      final parts = firstTime.split(':');
-      final departure = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-      );
-      if (now.isBefore(departure)) continue;
-
-      final agreed = await showShuttleCommuteConsentDialog(
-        context,
-        title: ShuttleCommuteConsentCopy.trackingOnPromptTitle,
-        body: ShuttleCommuteConsentCopy.trackingOnPromptBody,
-        acceptLabel: '지금 ON',
-        declineLabel: '나중에',
-      );
-      if (!mounted || agreed != true) continue;
-
-      final repo = await SeekerCommuteTowerConsentRepository.create();
-      await repo.save(
-        consent.copyWith(
-          trackingEnabled: true,
-          trackingEnabledAt: DateTime.now(),
-        ),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('버스 운행 중 위치 공유를 켰습니다. 관제 화면에서 끌 수 있습니다.'),
-        ),
-      );
-    }
+    await towerRepo.save(
+      consent.copyWith(
+        trackingEnabled: true,
+        trackingEnabledAt: DateTime.now(),
+      ),
+    );
+    if (agreed != true || !mounted) return;
+    await Navigator.of(context).pushNamed(AppRoutes.seekerBusLocationTowerPilot);
   }
 
   Future<void> _promptRouteShareIfNeeded(SeekerMyBusViewModel model) async {

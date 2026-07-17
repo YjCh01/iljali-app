@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:map/core/hiring/hiring_application.dart';
 import 'package:map/core/hiring/hiring_application_status.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
-import 'package:map/core/hiring/seeker_no_show_blacklist_service.dart';
 import 'package:map/core/hiring/work_schedule_time.dart';
 import 'package:map/features/corporate/data/datasources/corporate_attendance_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_job_post.dart';
@@ -99,63 +98,6 @@ void main() {
     );
   });
 
-  test('consecutiveNoShowCount blacklists after 3 streak', () async {
-    final repository = await repo();
-    final blacklist = SeekerNoShowBlacklistService(
-      await SharedPreferences.getInstance(),
-    );
-    const email = 'streak@test.com';
-
-    for (var i = 0; i < 3; i++) {
-      final app = await seedApplication(
-        repository: repository,
-        email: email,
-        workDate: DateTime(2020, 1, 10 - i),
-      );
-      await repository.markNoShowByEmployer(app.id);
-      await blacklist.recordEmployerNoShow(
-        seekerEmail: email,
-        hiringRepo: repository,
-      );
-    }
-
-    expect(await blacklist.isBlacklisted(email), isTrue);
-    expect(
-      await blacklist.consecutiveNoShowCount(email, repository),
-      3,
-    );
-  });
-
-  test('agreement-cancelled shifts are excluded from no-show streak', () async {
-    final repository = await repo();
-    const email = 'cancel@test.com';
-
-    final cancelled = await seedApplication(
-      repository: repository,
-      email: email,
-      workDate: DateTime(2020, 1, 5),
-    );
-    await _saveApplication(
-      cancelled.copyWith(
-        status: HiringApplicationStatus.noShow,
-        noShowMarkedAt: DateTime.now(),
-        agreementCancelledAt: DateTime.now(),
-      ),
-    );
-
-    final counted = await seedApplication(
-      repository: repository,
-      email: email,
-      workDate: DateTime(2020, 1, 4),
-    );
-    await repository.markNoShowByEmployer(counted.id);
-
-    final blacklist = SeekerNoShowBlacklistService(
-      await SharedPreferences.getInstance(),
-    );
-    expect(await blacklist.consecutiveNoShowCount(email, repository), 1);
-  });
-
   test('corporate attendance lists only work-agreement-complete records',
       () async {
     final repository = await repo();
@@ -196,20 +138,6 @@ void main() {
       ),
       isNotNull,
     );
-  });
-
-  test('blacklisted seeker map browse quota is 3 per day', () async {
-    const email = 'browse@test.com';
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('seeker_blacklist_${email.toLowerCase()}', true);
-    final blacklist = SeekerNoShowBlacklistService(prefs);
-
-    expect(await blacklist.remainingMapBrowsesToday(email), 3);
-    expect(await blacklist.consumeMapBrowse(email), isTrue);
-    expect(await blacklist.consumeMapBrowse(email), isTrue);
-    expect(await blacklist.consumeMapBrowse(email), isTrue);
-    expect(await blacklist.consumeMapBrowse(email), isFalse);
-    expect(await blacklist.remainingMapBrowsesToday(email), 0);
   });
 }
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
-import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/credential/domain/entities/credential_catalog.dart';
 import 'package:map/features/job_seeker/domain/utils/seeker_profile_credentials.dart';
@@ -72,10 +71,6 @@ Future<RequiredCredentialDialogResult> showRequiredCredentialsApplyDialog(
           onPressed: () => Navigator.of(context).pop('cancel'),
           child: const Text('취소'),
         ),
-        OutlinedButton(
-          onPressed: () => Navigator.of(context).pop('register'),
-          child: const Text('지금 등록하기'),
-        ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop('proceed'),
           style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
@@ -84,16 +79,6 @@ Future<RequiredCredentialDialogResult> showRequiredCredentialsApplyDialog(
       ],
     ),
   );
-
-  if (decision == 'register') {
-    if (context.mounted) {
-      await Navigator.of(context).pushNamed(AppRoutes.seekerMyCredentials);
-    }
-    return RequiredCredentialDialogResult(
-      proceed: false,
-      missingCredentialIds: missingIds,
-    );
-  }
 
   return RequiredCredentialDialogResult(
     proceed: decision == 'proceed',

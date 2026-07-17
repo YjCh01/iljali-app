@@ -136,6 +136,30 @@ class _SeekerResumeImportPageState extends State<SeekerResumeImportPage>
       profile.copyWith(resume: mergedResume),
     );
     if (!mounted) return;
+
+    final hasLicenseOrCertification =
+        preview.resume.licenses.isNotEmpty ||
+            preview.resume.certifications.isNotEmpty;
+    if (hasLicenseOrCertification) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('면허·자격증은 직접 확인해 주세요'),
+          content: const Text(
+            '불러온 면허·자격증 정보는 자동으로 등록되지 않습니다.\n'
+            '자격증 메뉴에서 목록을 다시 확인하고, 특히 자료(사진) 업로드까지 '
+            '직접 완료해 주세요.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('확인했어요'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (!mounted) return;
     Navigator.of(context).pop(true);
   }
 

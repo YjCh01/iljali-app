@@ -21,10 +21,42 @@ abstract final class WebLayoutBreakpoints {
 }
 
 class WebNavEntry {
-  const WebNavEntry({required this.icon, required this.label});
+  const WebNavEntry({required this.icon, required this.label, this.badgeCount = 0});
 
   final IconData icon;
   final String label;
+  final int badgeCount;
+}
+
+/// 아이콘 우측 상단 배지 — 미확인 건수 표시
+class NavBadgeDot extends StatelessWidget {
+  const NavBadgeDot({super.key, required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) return const SizedBox.shrink();
+    final label = count > 99 ? '99+' : '$count';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+      decoration: BoxDecoration(
+        color: Colors.redAccent,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          height: 1,
+        ),
+      ),
+    );
+  }
 }
 
 /// 넓은 웹 — 하단 탭 그리드를 **우측** 세로 네비로 배치
@@ -126,31 +158,42 @@ class _RailItem extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: selected
-                      ? AppColors.primaryLight.withValues(alpha: 0.28)
-                      : Colors.transparent,
-                  border: Border.all(
-                    color: selected
-                        ? AppColors.primary
-                        : AppColors.primaryLight.withValues(alpha: 0.75),
-                    width: selected ? 2 : 1.5,
-                  ),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: selected
+                            ? AppColors.primaryLight.withValues(alpha: 0.28)
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.primaryLight.withValues(alpha: 0.75),
+                          width: selected ? 2 : 1.5,
+                        ),
+                      ),
+                      child: Icon(
+                        item.icon,
+                        size: 22,
+                        color: selected
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                    if (item.badgeCount > 0)
+                      Positioned(
+                        top: -2,
+                        right: -2,
+                        child: NavBadgeDot(count: item.badgeCount),
+                      ),
+                  ],
                 ),
-                child: Icon(
-                  item.icon,
-                  size: 22,
-                  color: selected
-                      ? AppColors.primary
-                      : AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 6),
+                const SizedBox(height: 6),
               Text(
                 item.label,
                 maxLines: 1,

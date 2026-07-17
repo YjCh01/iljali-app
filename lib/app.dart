@@ -117,6 +117,7 @@ class MapApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       navigatorKey: navigatorKey,
+      scaffoldMessengerKey: scaffoldMessengerKey,
       initialRoute: initialRoute,
       onGenerateRoute: _onGenerateRoute,
       builder: (context, child) {

@@ -451,7 +451,7 @@ class _CorporateHomeNaverMapState extends State<CorporateHomeNaverMap> {
           showStopCaptions: false,
           onStopTap: widget.onShuttleStopTap == null
               ? null
-              : (route) {
+              : (route, stop) {
                   final overlay = _overlayForRoute(route.id);
                   if (overlay != null) {
                     widget.onShuttleStopTap!(overlay);

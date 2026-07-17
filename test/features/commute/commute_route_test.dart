@@ -12,8 +12,8 @@ import 'package:map/features/job_seeker/domain/entities/job_map_pin_display_tier
 
 void main() {
   group('CommuteRoute', () {
-    test('maxStopsPerRoute is 15', () {
-      expect(CommuteRoute.maxStopsPerRoute, 15);
+    test('maxStopsPerRoute is 16', () {
+      expect(CommuteRoute.maxStopsPerRoute, 16);
     });
 
     test('serializes and restores stops with coordinates', () {
@@ -100,7 +100,7 @@ void main() {
     );
 
     test('maxIntermediateStops is maxStopsPerRoute minus workplace', () {
-      expect(ShuttleRouteStopPolicy.maxIntermediateStops, 14);
+      expect(ShuttleRouteStopPolicy.maxIntermediateStops, 15);
       expect(
         ShuttleRouteStopPolicy.maxIntermediateStops,
         CommuteRoute.maxStopsPerRoute - 1,

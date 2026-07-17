@@ -75,6 +75,7 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   bool _hasApplied = false;
   bool _canWithdraw = false;
   bool _withdrawBusy = false;
+  bool _applyBusy = false;
 
   bool get isBookmarked => _isBookmarked;
   bool get vaultBusy => _vaultBusy;
@@ -223,16 +224,21 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
   }
 
   Future<void> _apply() async {
-    if (!_showSeekerActions) return;
-    await showJobApplyDialog(
-      context,
-      widget.pin,
-      onApplied: () async {
-        widget.onApply();
-        await _loadApplicationState();
-      },
-    );
-    await _loadApplicationState();
+    if (!_showSeekerActions || _applyBusy) return;
+    setState(() => _applyBusy = true);
+    try {
+      await showJobApplyDialog(
+        context,
+        widget.pin,
+        onApplied: () async {
+          widget.onApply();
+          await _loadApplicationState();
+        },
+      );
+      await _loadApplicationState();
+    } finally {
+      if (mounted) setState(() => _applyBusy = false);
+    }
   }
 
   Future<void> _withdrawApplication() async {
@@ -551,7 +557,7 @@ class JobPostDetailSheetState extends State<JobPostDetailSheet> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: FilledButton(
-                            onPressed: _hasApplied ? null : _apply,
+                            onPressed: (_hasApplied || _applyBusy) ? null : _apply,
                             style: FilledButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
@@ -778,29 +784,40 @@ Future<bool> showJobApplyDialog(
           .toList() ??
       const [];
 
-  await hiringRepo.submitApplication(
-    postId: pin.post.id,
-    postTitle: pin.post.title,
-    companyName: pin.companyName,
-    companyKey: pin.post.registeredBy?.companyKey,
-    recruiterEmail: pin.post.recruiterEmail,
-    branchId: pin.post.branchId,
-    branchName: pin.post.branchName,
-    workplaceLatitude: pin.latitude != 0 ? pin.latitude : null,
-    workplaceLongitude: pin.longitude != 0 ? pin.longitude : null,
-    seekerEmail: user.email,
-    seekerName: user.name,
-    seekerPhoneMasked: phone,
-    workSchedule: pin.post.workSchedule,
-    suggestedWorkDate: flowResult.primaryDate,
-    hourlyWageText: pin.post.hourlyWage,
-    employmentType: pin.post.employmentType,
-    selectedShiftDate: shiftDateIso,
-    shiftSlot: flowResult.shiftSlot,
-    disclosedResumeItems: disclosedItems,
-    requiredCredentialIds: pin.post.requiredCredentialIds,
-    heldCredentialIds: heldCredentialIds,
-  );
+  try {
+    await hiringRepo.submitApplication(
+      postId: pin.post.id,
+      postTitle: pin.post.title,
+      companyName: pin.companyName,
+      companyKey: pin.post.registeredBy?.companyKey,
+      recruiterEmail: pin.post.recruiterEmail,
+      branchId: pin.post.branchId,
+      branchName: pin.post.branchName,
+      workplaceLatitude: pin.latitude != 0 ? pin.latitude : null,
+      workplaceLongitude: pin.longitude != 0 ? pin.longitude : null,
+      seekerEmail: user.email,
+      seekerName: user.name,
+      seekerPhoneMasked: phone,
+      workSchedule: pin.post.workSchedule,
+      suggestedWorkDate: flowResult.primaryDate,
+      hourlyWageText: pin.post.hourlyWage,
+      employmentType: pin.post.employmentType,
+      selectedShiftDate: shiftDateIso,
+      shiftSlot: flowResult.shiftSlot,
+      disclosedResumeItems: disclosedItems,
+      requiredCredentialIds: pin.post.requiredCredentialIds,
+      heldCredentialIds: heldCredentialIds,
+    );
+  } on StateError catch (error) {
+    if (!context.mounted) return false;
+    final message = error.message == 'already_applied'
+        ? '이미 「${pin.post.title}」에 지원하셨습니다.'
+        : error.message;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+    return false;
+  }
 
   if (repo != null) {
     await repo.add(

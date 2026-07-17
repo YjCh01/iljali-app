@@ -228,7 +228,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
         note: _noteCtrl.text,
         workStartTime: _workStartTime,
       ),
-      successMessage: '셔틀위치담당자 승인 완료',
+      successMessage: '버스위치 공유 담당 승인 완료',
     );
     if (!mounted) return;
     setState(() {
@@ -254,7 +254,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
         note: _noteCtrl.text,
         workStartTime: _workStartTime,
       ),
-      successMessage: '셔틀위치담당자 승인 해제',
+      successMessage: '버스위치 공유 담당 승인 해제',
     );
     await _load();
   }
@@ -336,11 +336,20 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
     }
   }
 
+  Future<void> _confirmAndApproveRequest(Map<String, dynamic> request) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _OfficerRequestApprovalDialog(request: request),
+    );
+    if (confirmed != true) return;
+    await _approveRequest('${request['id']}');
+  }
+
   Future<void> _approveRequest(String requestId) async {
     final c = widget.controller;
     await c.run(
       () => c.client.approveOfficerRequest(requestId),
-      successMessage: '셔틀위치담당자 지정 요청 승인',
+      successMessage: '버스위치 공유 담당 지정 요청 승인',
     );
     await _loadPendingRequests();
     await _load();
@@ -350,7 +359,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
     final c = widget.controller;
     await c.run(
       () => c.client.rejectOfficerRequest(requestId),
-      successMessage: '셔틀위치담당자 지정 요청 반려',
+      successMessage: '버스위치 공유 담당 지정 요청 반려',
     );
     await _loadPendingRequests();
   }
@@ -378,7 +387,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AdminCard(
-            title: '기업 셔틀위치담당자 지정 요청',
+            title: '기업 버스위치 공유 담당 지정 요청',
             subtitle: '기업이 보낸 요청을 검토·승인·반려합니다.',
             child: _loadingRequests
                 ? const Padding(
@@ -398,7 +407,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
                                 request: request,
                                 busy: c.busy,
                                 onApprove: () =>
-                                    _approveRequest('${request['id']}'),
+                                    _confirmAndApproveRequest(request),
                                 onReject: () =>
                                     _rejectRequest('${request['id']}'),
                               ),
@@ -409,7 +418,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
           const SizedBox(height: 16),
           if (approved && approvedEmail.isNotEmpty) ...[
             AdminCard(
-              title: '현재 승인된 셔틀위치담당자',
+              title: '현재 승인된 버스위치 공유 담당',
               subtitle: '앱 더보기·채팅에 관제 메뉴가 표시됩니다.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -449,7 +458,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
             const SizedBox(height: 16),
           ],
           AdminCard(
-            title: '셔틀위치담당자 지정',
+            title: '버스위치 공유 담당 지정',
             subtitle:
                 '참여자 휴대폰 번호로 개인회원을 검색한 뒤, 본인 확인 후 승인합니다.',
             child: _loading
@@ -556,7 +565,7 @@ class _AdminPilotPanelState extends State<AdminPilotPanel> {
                       FilledButton.icon(
                         onPressed: _canApprove ? _approve : null,
                         icon: const Icon(Icons.verified_user_outlined),
-                        label: const Text('셔틀위치담당자 승인'),
+                        label: const Text('버스위치 공유 담당 승인'),
                       ),
                     ],
                   ),
@@ -823,6 +832,67 @@ class _OfficerRequestTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 기업 요청 승인도 직접 지정과 동일하게 본인 확인을 거치도록 — 관제 지정은
+/// 언제나 어드민의 명시적 확인을 통해서만 반영된다 (기업·구직자가 임의로 못 함).
+class _OfficerRequestApprovalDialog extends StatefulWidget {
+  const _OfficerRequestApprovalDialog({required this.request});
+
+  final Map<String, dynamic> request;
+
+  @override
+  State<_OfficerRequestApprovalDialog> createState() =>
+      _OfficerRequestApprovalDialogState();
+}
+
+class _OfficerRequestApprovalDialogState
+    extends State<_OfficerRequestApprovalDialog> {
+  var _identityVerified = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final request = widget.request;
+    return AlertDialog(
+      title: const Text('버스위치 공유 담당 승인'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${request['seeker_name'] ?? request['seeker_email'] ?? '-'}님을 '
+            '「${request['route_name'] ?? request['route_id'] ?? '-'}」 노선의 '
+            '버스위치 공유 담당으로 지정합니다.',
+          ),
+          const SizedBox(height: 12),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: _identityVerified,
+            onChanged: (v) => setState(() => _identityVerified = v ?? false),
+            title: const Text(
+              '본인 확인 및 사전 협의 완료',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: const Text(
+              '운영팀과 노선·일정 협의가 끝난 참여자인지 확인했습니다.',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed:
+              _identityVerified ? () => Navigator.of(context).pop(true) : null,
+          child: const Text('승인'),
+        ),
+      ],
     );
   }
 }

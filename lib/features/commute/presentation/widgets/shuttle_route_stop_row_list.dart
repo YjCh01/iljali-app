@@ -25,7 +25,7 @@ class ShuttleRouteStopRowList extends StatefulWidget {
     this.selectedForActivation = const {},
     this.onToggleActivationSelection,
     this.lockedStopIds = const {},
-    this.maxIntermediateStops = 14,
+    this.maxIntermediateStops = 15,
   });
 
   static const listViewportRows = 4;

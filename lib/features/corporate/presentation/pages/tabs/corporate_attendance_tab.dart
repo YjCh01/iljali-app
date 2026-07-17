@@ -7,7 +7,6 @@ import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/hiring/attendance_escalation_service.dart';
 import 'package:map/core/hiring/hiring_refresh.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
-import 'package:map/core/hiring/seeker_no_show_blacklist_service.dart';
 import 'package:map/features/attendance/presentation/widgets/attendance_month_calendar.dart';
 import 'package:map/features/corporate/data/datasources/corporate_attendance_local_data_source.dart';
 import 'package:map/features/corporate/domain/entities/corporate_attendance_record.dart';
@@ -352,7 +351,8 @@ class _CorporateAttendanceTabState extends State<CorporateAttendanceTab> {
         title: const Text('노쇼 처리'),
         content: Text(
           '${record.workerName}님을 노쇼로 처리하시겠습니까?\n'
-          '구인자 확인 즉시 확정되며, 3연속 노쇼 시 서비스 이용이 제한될 수 있습니다.',
+          '구인자 확인 즉시 확정되며, 다른 기업회원도 확인할 수 있는 '
+          '노쇼 기록으로 남습니다.',
         ),
         actions: [
           TextButton(
@@ -374,17 +374,13 @@ class _CorporateAttendanceTabState extends State<CorporateAttendanceTab> {
     try {
       final repo = await LocalHiringRepository.create();
       final updated = await repo.markNoShowByEmployer(record.applicationId!);
-      final blacklist = await SeekerNoShowBlacklistService.create();
-      final result = await blacklist.recordEmployerNoShow(
-        seekerEmail: updated.seekerEmail,
-        hiringRepo: repo,
-      );
       if (!mounted) return;
-      final suffix = result.blacklisted
-          ? ' (연속 ${result.consecutiveCount}회 — 블랙리스트 등록)'
-          : ' (연속 ${result.consecutiveCount}회)';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('노쇼로 처리되었습니다.$suffix')),
+        SnackBar(
+          content: Text(
+            '노쇼로 처리되었습니다. (누적 ${updated.seekerNoShowCount}회)',
+          ),
+        ),
       );
       await _load();
     } on StateError catch (e) {

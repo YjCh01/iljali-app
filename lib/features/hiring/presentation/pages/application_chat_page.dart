@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:map/core/config/product_feature_flags.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
@@ -156,9 +157,6 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     final chatRepo = await ApplicationChatMessageRepository.create();
     final stored = await chatRepo.loadSynced(
       applicationId: widget.applicationId,
-      companyName: app.companyName,
-      postTitle: app.postTitle,
-      seekerName: app.seekerName,
     );
 
     setState(() {
@@ -224,9 +222,6 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
     final chatRepo = await ApplicationChatMessageRepository.create();
     final stored = await chatRepo.loadSynced(
       applicationId: widget.applicationId,
-      companyName: app.companyName,
-      postTitle: app.postTitle,
-      seekerName: app.seekerName,
     );
     if (!mounted) return;
     setState(() {
@@ -296,6 +291,71 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('근무예정 합의를 처리할 수 없습니다.')),
+      );
+    }
+  }
+
+  Future<void> _proposeInterview() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 14, minute: 0),
+    );
+    if (time == null || !mounted) return;
+
+    final interviewAt = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+
+    final repo = await LocalHiringRepository.create();
+    final updated = await repo.proposeInterview(
+      applicationId: widget.applicationId,
+      interviewAt: interviewAt,
+    );
+    if (!mounted) return;
+    setState(() => _application = updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('면접 일정을 제안했습니다. 상대방 확인을 기다려 주세요.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _confirmInterview() async {
+    final repo = await LocalHiringRepository.create();
+    try {
+      final updated = await repo.confirmInterviewAgreement(
+        applicationId: widget.applicationId,
+        asEmployer: _isEmployer,
+      );
+      if (!mounted) return;
+      setState(() => _application = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            updated.isInterviewAgreementComplete
+                ? '면접 일정이 확정되었습니다.'
+                : '면접 일정을 확인했습니다.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on StateError catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('면접 일정을 처리할 수 없습니다.')),
       );
     }
   }
@@ -664,6 +724,31 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
         app.employerWorkAgreedAt == null;
   }
 
+  bool get _canProposeInterview {
+    final app = _application;
+    return _isEmployer && app != null && app.interviewAt == null;
+  }
+
+  bool get _canConfirmInterview {
+    final app = _application;
+    if (app == null || app.interviewAt == null) return false;
+    if (app.isInterviewAgreementComplete) return false;
+    if (_isEmployer) return app.employerInterviewAgreedAt == null;
+    return app.seekerInterviewAgreedAt == null;
+  }
+
+  bool get _awaitingPeerInterviewAgreement {
+    final app = _application;
+    if (app == null || app.interviewAt == null) return false;
+    if (app.isInterviewAgreementComplete) return false;
+    if (_isEmployer) {
+      return app.employerInterviewAgreedAt != null &&
+          app.seekerInterviewAgreedAt == null;
+    }
+    return app.seekerInterviewAgreedAt != null &&
+        app.employerInterviewAgreedAt == null;
+  }
+
   Future<void> _leaveChat() async {
     final app = _application;
     if (app == null) return;
@@ -701,6 +786,11 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
         automaticallyImplyLeading: false,
         title: Text(_isEmployer ? app.seekerName : app.companyName),
         actions: [
+          if (_canProposeInterview)
+            TextButton(
+              onPressed: _proposeInterview,
+              child: const Text('면접봅시다'),
+            ),
           if (_showsWorkAgreementUi && _canConfirmAgreement && !app.isPermanentEmployment)
             TextButton(
               onPressed: _confirmWorkSchedule,
@@ -773,6 +863,58 @@ class _ApplicationChatPageState extends State<ApplicationChatPage> {
               ),
             ),
           ),
+          if (app.interviewAt != null && !app.isInterviewAgreementComplete)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              color: AppColors.primaryLight.withValues(alpha: 0.18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '면접 일정',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    DateFormat('M월 d일 HH:mm').format(app.interviewAt!),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary.withValues(alpha: 0.95),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: _canConfirmInterview ? _confirmInterview : null,
+                    child: Text(
+                      _canConfirmInterview
+                          ? '면접 일정 확인'
+                          : _awaitingPeerInterviewAgreement
+                              ? '상대방 확인 대기 중'
+                              : '확인 완료 처리 중',
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (app.isInterviewAgreementComplete)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: const Color(0xFFE8F5E9),
+              child: Text(
+                '면접 일정 확정 · '
+                '${DateFormat('M월 d일 HH:mm').format(app.interviewAt!)}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2E7D32),
+                ),
+              ),
+            ),
           if (_showsWorkAgreementUi && !app.isWorkAgreementComplete)
             Container(
               width: double.infinity,

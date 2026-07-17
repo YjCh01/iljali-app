@@ -38,6 +38,9 @@ class HiringApplication {
     this.escalationLevel = 0,
     this.seekerWorkAgreedAt,
     this.employerWorkAgreedAt,
+    this.interviewAt,
+    this.seekerInterviewAgreedAt,
+    this.employerInterviewAgreedAt,
     this.noShowMarkedAt,
     this.agreementCancelledAt,
     this.scheduleChangedAt,
@@ -91,6 +94,11 @@ class HiringApplication {
   final int escalationLevel;
   final DateTime? seekerWorkAgreedAt;
   final DateTime? employerWorkAgreedAt;
+
+  /// 면접 제안 일시 — 근무예정 합의와 별개의 흐름 (면접봅시다 → 상호 확인).
+  final DateTime? interviewAt;
+  final DateTime? seekerInterviewAgreedAt;
+  final DateTime? employerInterviewAgreedAt;
   final DateTime? noShowMarkedAt;
   final DateTime? agreementCancelledAt;
   final DateTime? scheduleChangedAt;
@@ -134,6 +142,11 @@ class HiringApplication {
 
   bool get isWorkAgreementComplete =>
       seekerWorkAgreedAt != null && employerWorkAgreedAt != null;
+
+  bool get isInterviewAgreementComplete =>
+      interviewAt != null &&
+      seekerInterviewAgreedAt != null &&
+      employerInterviewAgreedAt != null;
 
   bool get isScheduled =>
       status == HiringApplicationStatus.scheduled ||
@@ -217,6 +230,9 @@ class HiringApplication {
     int? escalationLevel,
     DateTime? seekerWorkAgreedAt,
     DateTime? employerWorkAgreedAt,
+    DateTime? interviewAt,
+    DateTime? seekerInterviewAgreedAt,
+    DateTime? employerInterviewAgreedAt,
     DateTime? noShowMarkedAt,
     DateTime? agreementCancelledAt,
     DateTime? scheduleChangedAt,
@@ -239,6 +255,8 @@ class HiringApplication {
     int? seekerNoShowCount,
     bool clearSeekerWorkAgreedAt = false,
     bool clearEmployerWorkAgreedAt = false,
+    bool clearSeekerInterviewAgreedAt = false,
+    bool clearEmployerInterviewAgreedAt = false,
     bool clearNoShowMarkedAt = false,
     bool clearAgreementCancelledAt = false,
     bool clearScheduleChangedAt = false,
@@ -277,6 +295,13 @@ class HiringApplication {
       employerWorkAgreedAt: clearEmployerWorkAgreedAt
           ? null
           : (employerWorkAgreedAt ?? this.employerWorkAgreedAt),
+      interviewAt: interviewAt ?? this.interviewAt,
+      seekerInterviewAgreedAt: clearSeekerInterviewAgreedAt
+          ? null
+          : (seekerInterviewAgreedAt ?? this.seekerInterviewAgreedAt),
+      employerInterviewAgreedAt: clearEmployerInterviewAgreedAt
+          ? null
+          : (employerInterviewAgreedAt ?? this.employerInterviewAgreedAt),
       noShowMarkedAt:
           clearNoShowMarkedAt ? null : (noShowMarkedAt ?? this.noShowMarkedAt),
       agreementCancelledAt: clearAgreementCancelledAt
@@ -343,6 +368,12 @@ class HiringApplication {
         'escalationLevel': escalationLevel,
         'seekerWorkAgreedAt': seekerWorkAgreedAt?.toIso8601String(),
         'employerWorkAgreedAt': employerWorkAgreedAt?.toIso8601String(),
+        if (interviewAt != null) 'interviewAt': interviewAt!.toIso8601String(),
+        if (seekerInterviewAgreedAt != null)
+          'seekerInterviewAgreedAt': seekerInterviewAgreedAt!.toIso8601String(),
+        if (employerInterviewAgreedAt != null)
+          'employerInterviewAgreedAt':
+              employerInterviewAgreedAt!.toIso8601String(),
         'noShowMarkedAt': noShowMarkedAt?.toIso8601String(),
         'agreementCancelledAt': agreementCancelledAt?.toIso8601String(),
         'scheduleChangedAt': scheduleChangedAt?.toIso8601String(),
@@ -406,6 +437,13 @@ class HiringApplication {
           DateTime.tryParse(json['seekerWorkAgreedAt'] as String? ?? ''),
       employerWorkAgreedAt:
           DateTime.tryParse(json['employerWorkAgreedAt'] as String? ?? ''),
+      interviewAt: DateTime.tryParse(json['interviewAt'] as String? ?? ''),
+      seekerInterviewAgreedAt: DateTime.tryParse(
+        json['seekerInterviewAgreedAt'] as String? ?? '',
+      ),
+      employerInterviewAgreedAt: DateTime.tryParse(
+        json['employerInterviewAgreedAt'] as String? ?? '',
+      ),
       noShowMarkedAt: DateTime.tryParse(json['noShowMarkedAt'] as String? ?? ''),
       agreementCancelledAt:
           DateTime.tryParse(json['agreementCancelledAt'] as String? ?? ''),

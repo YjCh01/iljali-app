@@ -83,7 +83,7 @@ class _BusLocationTowerPilotEntryCardState
                           const SizedBox(height: 4),
                           Text(
                             status.isDesignated
-                                ? '셔틀위치담당자 · 오늘 위치 공유'
+                                ? '버스위치 공유 담당 · 오늘 위치 공유'
                                 : '오늘 탑승 셔틀 · 실시간 위치 확인',
                             style: TextStyle(
                               fontSize: 12,

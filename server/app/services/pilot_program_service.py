@@ -611,7 +611,7 @@ def update_bus_location_tower_position(
     normalized = _normalize_email(email)
     row = _designated_program_for_seeker(db, normalized)
     if not _configured(row):
-        raise ValueError("셔틀위치담당자만 위치를 공유할 수 있습니다.")
+        raise ValueError("버스위치 공유 담당만 위치를 공유할 수 있습니다.")
 
     service_date = _today_kst()
     session_id = _session_id(
@@ -687,6 +687,20 @@ def stop_bus_location_tower_today(db: Session, *, company_key: str, route_id: st
     return bus_location_tower_admin_view(db, company_key=company_key, route_id=route_id)
 
 
+def stop_bus_location_tower_sharing_for_seeker(db: Session, *, email: str) -> dict:
+    """버스위치 공유 담당 본인이 위치 공유를 직접 중지 — 관제의 핵심 기능."""
+    normalized = _normalize_email(email)
+    row = _designated_program_for_seeker(db, normalized)
+    if not _configured(row):
+        raise ValueError("버스위치 공유 담당만 위치 공유를 중지할 수 있습니다.")
+    session = _active_session_for_program(db, row, service_date=_today_kst())
+    if session is not None:
+        session.active = False
+        session.stopped_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.commit()
+    return bus_location_tower_status_for_seeker(db, email=normalized)
+
+
 def _request_to_dict(row: ShuttleOfficerRequestRow) -> dict:
     return {
         "id": row.id,
@@ -723,7 +737,7 @@ def create_officer_request(
     note: str = "",
     requested_by: str = "",
 ) -> dict:
-    """기업이 셔틀위치담당자 지정을 어드민에 승인요청 — 즉시 반영되지 않는다."""
+    """기업이 버스위치 공유 담당 지정을 어드민에 승인요청 — 즉시 반영되지 않는다."""
     normalized_company_key = _normalize_company_key(company_key)
     normalized_route_id = route_id.strip()
     email = _normalize_email(seeker_email)

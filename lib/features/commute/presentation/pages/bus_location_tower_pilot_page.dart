@@ -161,6 +161,34 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
     );
   }
 
+  Future<void> _stopSharing() async {
+    _shareTimer?.cancel();
+    _shareTimer = null;
+    if (_autoSharing) {
+      _autoSharing = false;
+      unawaited(WakelockPlus.disable());
+    }
+    try {
+      final updated = await BusLocationTowerPilotService.stopSharing();
+      if (!mounted) return;
+      setState(() => _future = Future.value(updated));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('위치 공유를 중지했습니다.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('위치 공유 중지에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   String _routeLabel(BusLocationTowerPilotStatus status) {
     final company = status.companyName.isNotEmpty
         ? status.companyName
@@ -246,7 +274,7 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            status.isDesignated ? '셔틀위치담당자' : '셔틀 위치 확인',
+                            status.isDesignated ? '버스위치 공유 담당' : '셔틀 위치 확인',
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
@@ -317,12 +345,15 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
                 _StepCard(
                   step: 2,
                   title: '오늘 위치 공유',
-                  subtitle:
-                      '${_routeLabel(status)} · 탑승자 ${status.authorizedRiderCount}명이 확인할 수 있습니다.',
+                  subtitle: status.hasLiveLocation
+                      ? '${_routeLabel(status)} · 탑승자 ${status.authorizedRiderCount}명이 확인할 수 있습니다. 언제든 직접 켜고 끌 수 있습니다.'
+                      : '${_routeLabel(status)} · 탑승자 ${status.authorizedRiderCount}명이 확인할 수 있습니다.',
                   done: status.hasLiveLocation,
                   actionLabel:
                       status.hasLiveLocation ? '현재 위치 다시 갱신' : '위치 공유 시작',
                   onAction: () => _shareCurrentLocation(),
+                  secondaryActionLabel: status.hasLiveLocation ? '위치 공유 중지' : null,
+                  onSecondaryAction: status.hasLiveLocation ? _stopSharing : null,
                 )
               else if (status.isDesignated)
                 _StepCard(
@@ -352,7 +383,7 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
                     ? '최신 위치: ${_locationLabel(status)} · ${_updatedLabel(status)}'
                     : status.isDesignated
                         ? '위치를 한 번 공유하면 같은 셔틀 탑승자가 확인할 수 있습니다.'
-                        : '셔틀위치담당자가 아직 오늘 위치를 공유하지 않았습니다.',
+                        : '버스위치 공유 담당이 아직 오늘 위치를 공유하지 않았습니다.',
                 done: status.hasLiveLocation,
                 actionLabel: '새로고침',
                 onAction: () => _reload(),
@@ -440,6 +471,8 @@ class _StepCard extends StatelessWidget {
     required this.done,
     this.actionLabel,
     this.onAction,
+    this.secondaryActionLabel,
+    this.onSecondaryAction,
   });
 
   final int step;
@@ -448,6 +481,8 @@ class _StepCard extends StatelessWidget {
   final bool done;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final String? secondaryActionLabel;
+  final VoidCallback? onSecondaryAction;
 
   @override
   Widget build(BuildContext context) {
@@ -494,12 +529,25 @@ class _StepCard extends StatelessWidget {
                   ),
                   if (actionLabel != null && onAction != null) ...[
                     const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton.tonal(
-                        onPressed: onAction,
-                        child: Text(actionLabel!),
-                      ),
+                    Row(
+                      children: [
+                        FilledButton.tonal(
+                          onPressed: onAction,
+                          child: Text(actionLabel!),
+                        ),
+                        if (secondaryActionLabel != null &&
+                            onSecondaryAction != null) ...[
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            onPressed: onSecondaryAction,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFC62828),
+                              side: const BorderSide(color: Color(0xFFC62828)),
+                            ),
+                            child: Text(secondaryActionLabel!),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ],

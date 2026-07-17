@@ -10,22 +10,30 @@ class IndividualBottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     this.isItemEnabled,
+    this.myJobsBadgeCount = 0,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
   final bool Function(int index)? isItemEnabled;
+  final int myJobsBadgeCount;
 
-  static const entries = <WebNavEntry>[
-    WebNavEntry(icon: Icons.map_outlined, label: '지도'),
-    WebNavEntry(icon: Icons.bookmark_outline_rounded, label: '보관함'),
-    WebNavEntry(icon: Icons.work_outline_rounded, label: '내일자리'),
-    WebNavEntry(icon: Icons.chat_bubble_outline_rounded, label: '채팅'),
-    WebNavEntry(icon: Icons.more_horiz_rounded, label: '더보기'),
-  ];
+  /// "내일자리" 탭(인덱스 2)에 미확인 배지를 얹은 네비 항목 목록.
+  static List<WebNavEntry> buildEntries({int myJobsBadgeCount = 0}) => [
+        const WebNavEntry(icon: Icons.map_outlined, label: '지도'),
+        const WebNavEntry(icon: Icons.bookmark_outline_rounded, label: '보관함'),
+        WebNavEntry(
+          icon: Icons.work_outline_rounded,
+          label: '내일자리',
+          badgeCount: myJobsBadgeCount,
+        ),
+        const WebNavEntry(icon: Icons.chat_bubble_outline_rounded, label: '채팅'),
+        const WebNavEntry(icon: Icons.more_horiz_rounded, label: '더보기'),
+      ];
 
   @override
   Widget build(BuildContext context) {
+    final entries = buildEntries(myJobsBadgeCount: myJobsBadgeCount);
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -60,30 +68,42 @@ class IndividualBottomNav extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: selected
-                                ? AppColors.primaryLight.withValues(alpha: 0.28)
-                                : Colors.transparent,
-                            border: Border.all(
-                              color: selected
-                                  ? AppColors.primary
-                                  : AppColors.primaryLight
-                                      .withValues(alpha: 0.75),
-                              width: selected ? 2 : 1.5,
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: selected
+                                    ? AppColors.primaryLight
+                                        .withValues(alpha: 0.28)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: selected
+                                      ? AppColors.primary
+                                      : AppColors.primaryLight
+                                          .withValues(alpha: 0.75),
+                                  width: selected ? 2 : 1.5,
+                                ),
+                              ),
+                              child: Icon(
+                                item.icon,
+                                size: 22,
+                                color: selected
+                                    ? AppColors.primary
+                                    : AppColors.textSecondary,
+                              ),
                             ),
-                          ),
-                          child: Icon(
-                            item.icon,
-                            size: 22,
-                            color: selected
-                                ? AppColors.primary
-                                : AppColors.textSecondary,
-                          ),
+                            if (item.badgeCount > 0)
+                              Positioned(
+                                top: -2,
+                                right: -2,
+                                child: NavBadgeDot(count: item.badgeCount),
+                              ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(

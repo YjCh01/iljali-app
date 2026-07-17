@@ -55,6 +55,235 @@ def push_chat_message(
     return {"sent": result["sent"], "failed": result["failed"]}
 
 
+def push_shift_reminder(
+    db: Session,
+    *,
+    application_id: str,
+    kind: str,
+    start_at,
+) -> dict:
+    """근무 시작 1시간 전 리마인더 — 구직자·기업 양쪽에 발송."""
+    app = db.get(JobApplicationRow, application_id)
+    if app is None:
+        return {"seeker_sent": 0, "employer_sent": 0, "skipped": "application_not_found"}
+
+    post_title = app.post_title or "근무"
+    seeker_name = app.seeker_name or "지원자"
+    time_label = start_at.strftime("%H:%M")
+    title = "곧 근무 시작입니다"
+    body = f"「{post_title}」 {time_label} 출근 예정입니다."
+
+    result = {"seeker_sent": 0, "employer_sent": 0}
+
+    seeker_tokens = tokens_for_emails(db, [app.seeker_email], category="application")
+    if seeker_tokens:
+        sent = fcm_service.send_to_tokens(
+            seeker_tokens,
+            title=title,
+            body=body,
+            data={
+                "type": "shift_reminder",
+                "application_id": application_id,
+                "kind": kind,
+            },
+        )
+        result["seeker_sent"] = sent["sent"]
+
+    employer_tokens = tokens_for_company(db, app.company_key or "", category="application")
+    if employer_tokens:
+        sent = fcm_service.send_to_tokens(
+            employer_tokens,
+            title=title,
+            body=f"{seeker_name}님 · {body}",
+            data={
+                "type": "shift_reminder",
+                "application_id": application_id,
+                "kind": kind,
+            },
+        )
+        result["employer_sent"] = sent["sent"]
+
+    return result
+
+
+def push_interview_reminder(db: Session, *, application_id: str, interview_at) -> dict:
+    """면접 1시간 전 리마인더 — 구직자·기업 양쪽에 발송."""
+    app = db.get(JobApplicationRow, application_id)
+    if app is None:
+        return {"seeker_sent": 0, "employer_sent": 0, "skipped": "application_not_found"}
+
+    post_title = app.post_title or "채용"
+    seeker_name = app.seeker_name or "지원자"
+    time_label = interview_at.strftime("%H:%M")
+    title = "곧 면접 시작입니다"
+    body = f"「{post_title}」 {time_label} 면접 예정입니다."
+
+    result = {"seeker_sent": 0, "employer_sent": 0}
+
+    seeker_tokens = tokens_for_emails(db, [app.seeker_email], category="application")
+    if seeker_tokens:
+        sent = fcm_service.send_to_tokens(
+            seeker_tokens,
+            title=title,
+            body=body,
+            data={
+                "type": "interview_reminder",
+                "application_id": application_id,
+            },
+        )
+        result["seeker_sent"] = sent["sent"]
+
+    employer_tokens = tokens_for_company(db, app.company_key or "", category="application")
+    if employer_tokens:
+        sent = fcm_service.send_to_tokens(
+            employer_tokens,
+            title=title,
+            body=f"{seeker_name}님 · {body}",
+            data={
+                "type": "interview_reminder",
+                "application_id": application_id,
+            },
+        )
+        result["employer_sent"] = sent["sent"]
+
+    return result
+
+
+def push_shuttle_boarding_reminder(
+    db: Session, *, application_id: str, pickup_at
+) -> dict:
+    """셔틀 탑승 30분 전 리마인더 — 구직자에게만 발송."""
+    app = db.get(JobApplicationRow, application_id)
+    if app is None:
+        return {"sent": 0, "skipped": "application_not_found"}
+
+    tokens = tokens_for_emails(db, [app.seeker_email], category="application")
+    if not tokens:
+        return {"sent": 0, "skipped": "no_tokens"}
+
+    stop_label = app.shuttle_stop_label or "정류장"
+    result = fcm_service.send_to_tokens(
+        tokens,
+        title="탑승 30분 전입니다",
+        body=f"{stop_label}에서 {pickup_at.strftime('%H:%M')} 셔틀 탑승 예정입니다.",
+        data={
+            "type": "shuttle_boarding_reminder",
+            "application_id": application_id,
+        },
+    )
+    return {"sent": result["sent"], "failed": result["failed"]}
+
+
+def push_work_schedule_confirmed(db: Session, *, application_id: str) -> dict:
+    """근무예정 합의(양측 확인) 완료 즉시 — 구직자·기업 양쪽에 발송."""
+    app = db.get(JobApplicationRow, application_id)
+    if app is None:
+        return {"seeker_sent": 0, "employer_sent": 0, "skipped": "application_not_found"}
+
+    post_title = app.post_title or "근무"
+    seeker_name = app.seeker_name or "지원자"
+    title = "근무 일정이 확정되었습니다"
+    body = f"「{post_title}」 근무 일정이 확정되었습니다."
+
+    result = {"seeker_sent": 0, "employer_sent": 0}
+
+    seeker_tokens = tokens_for_emails(db, [app.seeker_email], category="application")
+    if seeker_tokens:
+        sent = fcm_service.send_to_tokens(
+            seeker_tokens,
+            title=title,
+            body=body,
+            data={
+                "type": "work_schedule_confirmed",
+                "application_id": application_id,
+            },
+        )
+        result["seeker_sent"] = sent["sent"]
+
+    employer_tokens = tokens_for_company(db, app.company_key or "", category="application")
+    if employer_tokens:
+        sent = fcm_service.send_to_tokens(
+            employer_tokens,
+            title=title,
+            body=f"{seeker_name}님 · {body}",
+            data={
+                "type": "work_schedule_confirmed",
+                "application_id": application_id,
+            },
+        )
+        result["employer_sent"] = sent["sent"]
+
+    return result
+
+
+def push_interview_confirmed(db: Session, *, application_id: str) -> dict:
+    """면접 일정 상호 확인 완료 즉시 — 구직자·기업 양쪽에 발송."""
+    app = db.get(JobApplicationRow, application_id)
+    if app is None:
+        return {"seeker_sent": 0, "employer_sent": 0, "skipped": "application_not_found"}
+
+    post_title = app.post_title or "채용"
+    seeker_name = app.seeker_name or "지원자"
+    title = "면접 일정이 확정되었습니다"
+    body = f"「{post_title}」 면접 일정이 확정되었습니다."
+
+    result = {"seeker_sent": 0, "employer_sent": 0}
+
+    seeker_tokens = tokens_for_emails(db, [app.seeker_email], category="application")
+    if seeker_tokens:
+        sent = fcm_service.send_to_tokens(
+            seeker_tokens,
+            title=title,
+            body=body,
+            data={
+                "type": "interview_confirmed",
+                "application_id": application_id,
+            },
+        )
+        result["seeker_sent"] = sent["sent"]
+
+    employer_tokens = tokens_for_company(db, app.company_key or "", category="application")
+    if employer_tokens:
+        sent = fcm_service.send_to_tokens(
+            employer_tokens,
+            title=title,
+            body=f"{seeker_name}님 · {body}",
+            data={
+                "type": "interview_confirmed",
+                "application_id": application_id,
+            },
+        )
+        result["employer_sent"] = sent["sent"]
+
+    return result
+
+
+def push_new_applicant(db: Session, *, application_id: str) -> dict:
+    """지원 접수 즉시 기업회원에게 알림 — 지원자 탭을 직접 열어봐야만 알 수 있던 공백을 메움."""
+    app = db.get(JobApplicationRow, application_id)
+    if app is None:
+        return {"sent": 0, "skipped": "application_not_found"}
+
+    tokens = tokens_for_company(db, app.company_key or "", category="application")
+    if not tokens:
+        return {"sent": 0, "skipped": "no_tokens"}
+
+    post_title = app.post_title or "채용 공고"
+    seeker_name = app.seeker_name or "지원자"
+    result = fcm_service.send_to_tokens(
+        tokens,
+        title="새 지원자가 도착했습니다",
+        body=f"{seeker_name}님이 「{post_title}」에 지원했습니다.",
+        data={
+            "type": "new_applicant",
+            "application_id": application_id,
+            "post_id": app.post_id,
+            "post_title": post_title,
+        },
+    )
+    return {"sent": result["sent"], "failed": result["failed"]}
+
+
 def _normalize_audience(audience: str | None) -> str:
     value = (audience or "all").strip().lower()
     if value not in {"all", "seeker", "corporate"}:

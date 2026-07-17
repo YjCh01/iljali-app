@@ -14,8 +14,14 @@ import 'package:map/features/auth/presentation/widgets/auth_primary_button.dart'
 import 'package:map/features/auth/presentation/widgets/auth_scaffold.dart';
 
 /// 소셜 OAuth 콜백 — iljari.app/auth/social-complete
+///
+/// 웹에서는 브라우저가 이 URL로 직접 이동해 [Uri.base]의 쿼리파라미터를 읽는다.
+/// 네이티브(모바일)에서는 앱 내 WebView가 이 URL로의 이동을 가로채 쿼리파라미터를
+/// [initialParams]로 직접 전달한다(실제로 이 페이지를 웹뷰에 로드하지 않음).
 class SocialAuthCompletePage extends StatefulWidget {
-  const SocialAuthCompletePage({super.key});
+  const SocialAuthCompletePage({super.key, this.initialParams});
+
+  final Map<String, String>? initialParams;
 
   @override
   State<SocialAuthCompletePage> createState() => _SocialAuthCompletePageState();
@@ -32,15 +38,14 @@ class _SocialAuthCompletePageState extends State<SocialAuthCompletePage> {
   }
 
   Future<void> _handleCallback() async {
-    if (!kIsWeb) {
+    final params = widget.initialParams ?? (kIsWeb ? Uri.base.queryParameters : null);
+    if (params == null) {
       setState(() {
-        _message = '소셜 로그인 콜백은 웹에서 이용해 주세요.';
+        _message = '소셜 로그인 콜백 정보를 찾을 수 없습니다. 다시 시도해 주세요.';
         _done = true;
       });
       return;
     }
-
-    final params = Uri.base.queryParameters;
     final status = params['status'] ?? '';
     final error = params['error'] ?? '';
 

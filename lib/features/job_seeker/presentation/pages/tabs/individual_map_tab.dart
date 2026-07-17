@@ -3,18 +3,20 @@ import 'package:map/core/sync/qc_sync_bootstrap.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
-import 'package:map/core/hiring/seeker_no_show_blacklist_service.dart';
+import 'package:map/core/geo/geo_distance.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/features/job_seeker/data/repositories/job_bookmark_vault_repository.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin.dart';
 import 'package:map/features/job_seeker/domain/entities/job_map_pin_ranking_context.dart';
+import 'package:map/features/job_seeker/domain/entities/map_callout_item.dart';
 import 'package:map/features/job_seeker/presentation/pages/job_post_detail_page.dart';
 import 'package:map/features/job_seeker/presentation/widgets/closed_ghost_pin_callout_card.dart';
 import 'package:map/features/job_seeker/presentation/widgets/event_pin_callout_card.dart';
-import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_callout_card.dart';
+import 'package:map/features/job_seeker/presentation/widgets/job_map_pin_swipe_carousel.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_map_cluster_list_sheet.dart';
 import 'package:map/features/commute/data/repositories/commute_route_repository.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
+import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/domain/utils/shuttle_route_visibility.dart';
 import 'package:map/features/job_seeker/data/datasources/job_map_pins_data_source.dart';
 import 'package:map/features/job_seeker/domain/usecases/get_job_map_pins_usecase.dart';
@@ -52,7 +54,15 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   _MapScreenMode _screenMode = _MapScreenMode.map;
   List<JobMapPin> _allPins = [];
   final _getPins = GetJobMapPinsUseCase(const JobMapPinsLocalDataSource());
+  var _mapViewKey = GlobalKey<JobSeekerMapViewState>();
+
+  /// 고스트/이벤트 핀 전용 — 일반 공고핀·정류장핀 캐러셀은 _calloutPins로 관리
   JobMapPin? _calloutPin;
+
+  /// 스와이프 캐러셀 대상 인근 핀 (탭한 지점 기준 거리순, 화면에 보이는 공고핀 + 활성 노선 정류장핀)
+  List<MapCalloutItem> _calloutPins = const [];
+  int _calloutIndex = 0;
+  GeoCoordinate? _calloutAnchor;
   JobRecruitmentMapPin? _selectedRecruitmentPin;
   List<JobMapPin>? _clusterPins;
   CommuteRoute? _activeShuttleRoute;
@@ -96,12 +106,12 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   void didUpdateWidget(covariant IndividualMapTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.reloadToken != widget.reloadToken) {
+      // 스와이프 캐러셀이 열려있는 동안 백그라운드 리로드가 오면 안내 없이
+      // 사라지지 않도록 캐러셀 상태(_calloutPin/_calloutPins 등)는 유지한다.
       setState(() {
-        _calloutPin = null;
+        _mapViewKey = GlobalKey<JobSeekerMapViewState>();
         _selectedRecruitmentPin = null;
         _clusterPins = null;
-        _activeShuttleRoute = null;
-        _activeShuttleWorkplace = null;
       });
       _loadPins();
     }
@@ -112,6 +122,9 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
       setState(() {
         _clusterPins = null;
         _calloutPin = pin;
+        _calloutPins = const [];
+        _calloutIndex = 0;
+        _calloutAnchor = null;
         _selectedRecruitmentPin = null;
         _activeShuttleRoute = null;
         _activeShuttleWorkplace = GeoCoordinate(
@@ -133,51 +146,182 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
       return;
     }
 
-    final email = AuthSession.instance.currentUser?.email;
-    if (email != null) {
-      final blacklist = await SeekerNoShowBlacklistService.create();
-      final allowed = await blacklist.consumeMapBrowse(email);
-      if (!allowed && mounted) {
-        final remaining = await blacklist.remainingMapBrowsesToday(email);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              remaining <= 0
-                  ? '노쇼 제한으로 오늘 지도 공고 열람 한도(${SeekerNoShowBlacklistService.mapBrowseDailyLimit}회)를 모두 사용했습니다.'
-                  : '노쇼 제한으로 지도 공고 열람이 제한됩니다. (오늘 ${remaining}회 남음)',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-    }
-
-    _vaultRepo?.recordViewed(pin);
-    CommuteRoute? shuttleRoute;
-    final routeId = pin.post.commuteRouteId?.trim();
-    if (routeId != null && routeId.isNotEmpty) {
-      final repo = await CommuteRouteRepository.create();
-      final loaded = await repo.findById(routeId);
-      if (loaded != null && ShuttleRouteVisibility.hasSeekerVisibleStops(loaded)) {
-        shuttleRoute = ShuttleRouteVisibility.forSeekerDisplay(loaded);
-      }
-    }
-    if (!mounted) return;
+    final anchor = GeoCoordinate(latitude: pin.latitude, longitude: pin.longitude);
+    final anchorItem = JobPinCalloutItem(pin);
+    final items = _buildNeighborItems(anchor: anchor, anchorItem: anchorItem);
+    final index = items.indexWhere((i) => i.calloutId == anchorItem.calloutId);
     setState(() {
       _clusterPins = null;
-      _calloutPin = pin;
+      _calloutPin = null;
       _selectedRecruitmentPin = null;
-      _activeShuttleRoute = shuttleRoute;
-      _activeShuttleWorkplace = GeoCoordinate(
-        latitude: pin.latitude,
-        longitude: pin.longitude,
-      );
+      _calloutAnchor = anchor;
+      _calloutPins = items;
+      _calloutIndex = index < 0 ? 0 : index;
     });
-    await MapCameraHolder.instance.focusPin(
-      latitude: pin.latitude,
-      longitude: pin.longitude,
+    await _focusItem(items.isEmpty ? anchorItem : items[_calloutIndex]);
+  }
+
+  /// 셔틀 정류장핀 탭 — 공고핀과 동일하게 인근 핀 스와이프 캐러셀을 연다.
+  Future<void> _selectStop(CommuteRoute route, CommuteRouteStop stop) async {
+    final anchor = GeoCoordinate(
+      latitude: stop.coordinate.latitude,
+      longitude: stop.coordinate.longitude,
     );
+    final anchorItem = ShuttleStopCalloutItem(route: route, stop: stop);
+    final items = _buildNeighborItems(anchor: anchor, anchorItem: anchorItem, route: route);
+    final index = items.indexWhere((i) => i.calloutId == anchorItem.calloutId);
+    setState(() {
+      _clusterPins = null;
+      _calloutPin = null;
+      _selectedRecruitmentPin = null;
+      _calloutAnchor = anchor;
+      _calloutPins = items;
+      _calloutIndex = index < 0 ? 0 : index;
+    });
+    await _focusItem(items.isEmpty ? anchorItem : items[_calloutIndex]);
+  }
+
+  /// 탭한 지점 기준, 화면에 보이는 공고핀 + (있다면) 활성 노선 정류장핀을 거리순으로 정렬
+  /// — 당근마켓 동네지도처럼 스와이프로 인근 핀을 넘겨보는 캐러셀에 사용.
+  List<MapCalloutItem> _buildNeighborItems({
+    required GeoCoordinate anchor,
+    required MapCalloutItem anchorItem,
+    CommuteRoute? route,
+  }) {
+    final visible = _mapViewKey.currentState?.visiblePins ?? const [];
+    final items = <MapCalloutItem>[
+      for (final p in visible.where((p) => !p.isClosedGhost && !p.isEvent))
+        JobPinCalloutItem(p),
+      if (route != null)
+        for (final stop in route.stops)
+          ShuttleStopCalloutItem(route: route, stop: stop),
+    ];
+    if (!items.any((i) => i.calloutId == anchorItem.calloutId)) {
+      items.insert(0, anchorItem);
+    }
+    items.sort((a, b) {
+      final da = GeoDistance.metersBetween(
+        anchor,
+        GeoCoordinate(latitude: a.latitude, longitude: a.longitude),
+      );
+      final db = GeoDistance.metersBetween(
+        anchor,
+        GeoCoordinate(latitude: b.latitude, longitude: b.longitude),
+      );
+      return da.compareTo(db);
+    });
+    return items;
+  }
+
+  /// 이미 계산된 캐러셀 목록에 (아직 없다면) 활성 노선의 정류장핀을 병합한다.
+  List<MapCalloutItem> _withMergedRouteStops(
+    List<MapCalloutItem> current,
+    GeoCoordinate? anchor,
+    CommuteRoute route,
+  ) {
+    if (anchor == null) return current;
+    final alreadyMerged = current.any(
+      (i) => i is ShuttleStopCalloutItem && i.route.id == route.id,
+    );
+    if (alreadyMerged) return current;
+    final merged = <MapCalloutItem>[
+      ...current,
+      for (final stop in route.stops) ShuttleStopCalloutItem(route: route, stop: stop),
+    ];
+    merged.sort((a, b) {
+      final da = GeoDistance.metersBetween(
+        anchor,
+        GeoCoordinate(latitude: a.latitude, longitude: a.longitude),
+      );
+      final db = GeoDistance.metersBetween(
+        anchor,
+        GeoCoordinate(latitude: b.latitude, longitude: b.longitude),
+      );
+      return da.compareTo(db);
+    });
+    return merged;
+  }
+
+  /// 스와이프 캐러셀에서 다른 항목으로 넘어갔을 때 — 지도 카메라·셔틀 노선 갱신.
+  Future<void> _focusItem(MapCalloutItem item) async {
+    switch (item) {
+      case JobPinCalloutItem(:final pin):
+        _vaultRepo?.recordViewed(pin);
+        CommuteRoute? shuttleRoute;
+        final routeId = pin.post.commuteRouteId?.trim();
+        if (routeId != null && routeId.isNotEmpty) {
+          final repo = await CommuteRouteRepository.create();
+          final loaded = await repo.findById(routeId);
+          if (loaded != null &&
+              ShuttleRouteVisibility.hasSeekerVisibleStops(loaded)) {
+            shuttleRoute = ShuttleRouteVisibility.forSeekerDisplay(loaded);
+          }
+        }
+        if (!mounted) return;
+        setState(() {
+          _activeShuttleRoute = shuttleRoute;
+          _activeShuttleWorkplace = GeoCoordinate(
+            latitude: pin.latitude,
+            longitude: pin.longitude,
+          );
+          if (shuttleRoute != null) {
+            final merged =
+                _withMergedRouteStops(_calloutPins, _calloutAnchor, shuttleRoute);
+            _calloutPins = merged;
+            final newIndex =
+                merged.indexWhere((i) => i.calloutId == item.calloutId);
+            if (newIndex >= 0) _calloutIndex = newIndex;
+          }
+        });
+        await MapCameraHolder.instance.focusPin(
+          latitude: pin.latitude,
+          longitude: pin.longitude,
+        );
+      case ShuttleStopCalloutItem(:final stop):
+        if (!mounted) return;
+        setState(() {
+          _activeShuttleWorkplace = GeoCoordinate(
+            latitude: stop.coordinate.latitude,
+            longitude: stop.coordinate.longitude,
+          );
+        });
+        await MapCameraHolder.instance.focusPin(
+          latitude: stop.coordinate.latitude,
+          longitude: stop.coordinate.longitude,
+        );
+    }
+  }
+
+  Future<void> _onCalloutPageChanged(MapCalloutItem item) async {
+    final index = _calloutPins.indexWhere((i) => i.calloutId == item.calloutId);
+    setState(() => _calloutIndex = index < 0 ? _calloutIndex : index);
+    await _focusItem(item);
+  }
+
+  void _onViewDetail(MapCalloutItem item) {
+    switch (item) {
+      case JobPinCalloutItem(:final pin):
+        _openDetail(pin);
+      case ShuttleStopCalloutItem(:final route):
+        final linked = _findLinkedJobPin(route.id);
+        if (linked == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('연결된 공고를 찾을 수 없습니다.')),
+          );
+          return;
+        }
+        _openDetail(linked);
+    }
+  }
+
+  JobMapPin? _findLinkedJobPin(String routeId) {
+    for (final p in _allPins) {
+      if (p.post.commuteRouteId == routeId ||
+          p.post.linkedCommuteRouteIds.contains(routeId)) {
+        return p;
+      }
+    }
+    return null;
   }
 
   void _openDetail(JobMapPin pin) {
@@ -200,6 +344,9 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   void _openCluster(JobMapCluster cluster) {
     setState(() {
       _calloutPin = null;
+      _calloutPins = const [];
+      _calloutIndex = 0;
+      _calloutAnchor = null;
       _clusterPins = cluster.rankedPins(context: _rankingContext);
     });
   }
@@ -213,6 +360,9 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
   void _closeSheet() {
     setState(() {
       _calloutPin = null;
+      _calloutPins = const [];
+      _calloutIndex = 0;
+      _calloutAnchor = null;
       _clusterPins = null;
       _selectedRecruitmentPin = null;
       _activeShuttleRoute = null;
@@ -236,6 +386,9 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
     setState(() {
       _searchFilter = filter;
       _calloutPin = null;
+      _calloutPins = const [];
+      _calloutIndex = 0;
+      _calloutAnchor = null;
       _screenMode = _MapScreenMode.map;
     });
   }
@@ -263,10 +416,10 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
 
   @override
   Widget build(BuildContext context) {
-    final callout = _calloutPin;
+    final ghostOrEventCallout = _calloutPin;
     final clusterPins = _clusterPins;
     final showCluster = clusterPins != null && clusterPins.length > 1;
-    final showCallout = callout != null;
+    final showCallout = ghostOrEventCallout != null || _calloutPins.isNotEmpty;
     final showOverlay = showCluster || showCallout;
     final shuttleActive = _activeShuttleRoute != null;
     final showMap = _screenMode == _MapScreenMode.map;
@@ -287,13 +440,14 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
         if (showMap)
           Positioned.fill(
             child: JobSeekerMapView(
-            key: ValueKey(widget.reloadToken),
+            key: _mapViewKey,
             searchFilter: _searchFilter,
             shuttleOnlyFilter: _shuttleOnlyFilter,
             minHourlyWage: _minHourlyWage,
             workerCategoryFilter: _workerCategoryFilter,
             shuttleRoute: _activeShuttleRoute,
             shuttleWorkplace: _activeShuttleWorkplace,
+            onStopTap: _selectStop,
             recruitmentPins: recruitmentPins,
             selectedRecruitmentPin: _selectedRecruitmentPin,
             recruitmentLinkPolylines: recruitmentLinks,
@@ -301,6 +455,9 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
               setState(() {
                 _selectedRecruitmentPin = pin;
                 _calloutPin = null;
+                _calloutPins = const [];
+                _calloutIndex = 0;
+                _calloutAnchor = null;
                 _clusterPins = null;
               });
               await MapCameraHolder.instance.focusPin(
@@ -485,23 +642,26 @@ class _IndividualMapTabState extends State<IndividualMapTab> {
                         onClose: _closeCluster,
                         onPinSelected: _selectPinFromCluster,
                       )
-                        : callout == null
-                        ? const SizedBox.shrink()
-                        : callout.isClosedGhost
+                    : ghostOrEventCallout != null
+                        ? (ghostOrEventCallout.isClosedGhost
                             ? ClosedGhostPinCalloutCard(
-                                pin: callout,
+                                pin: ghostOrEventCallout,
                                 onClose: _closeSheet,
                               )
-                            : callout.isEvent
-                                ? EventPinCalloutCard(
-                                    pin: callout,
-                                    onClose: _closeSheet,
-                                  )
-                                : JobMapPinCalloutCard(
-                                    pin: callout,
-                                    onClose: _closeSheet,
-                                    onViewDetail: () => _openDetail(callout),
-                                  ),
+                            : EventPinCalloutCard(
+                                pin: ghostOrEventCallout,
+                                onClose: _closeSheet,
+                              ))
+                        : _calloutPins.isEmpty
+                            ? const SizedBox.shrink()
+                            : JobMapPinSwipeCarousel(
+                                key: ValueKey(_calloutPins.first.calloutId),
+                                items: _calloutPins,
+                                initialIndex: _calloutIndex,
+                                onClose: _closeSheet,
+                                onViewDetail: _onViewDetail,
+                                onPageChanged: _onCalloutPageChanged,
+                              ),
               ),
             ),
           ),

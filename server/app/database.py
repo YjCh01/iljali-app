@@ -96,6 +96,17 @@ _JOB_APPLICATION_COLUMNS_SQLITE = {
         "ALTER TABLE job_applications ADD COLUMN "
         "held_credential_ids_json TEXT DEFAULT '[]'"
     ),
+    "work_date": "ALTER TABLE job_applications ADD COLUMN work_date VARCHAR(10) DEFAULT ''",
+    "work_reminder_sent_at": (
+        "ALTER TABLE job_applications ADD COLUMN work_reminder_sent_at DATETIME"
+    ),
+    "interview_at": "ALTER TABLE job_applications ADD COLUMN interview_at VARCHAR(32) DEFAULT ''",
+    "interview_reminder_sent_at": (
+        "ALTER TABLE job_applications ADD COLUMN interview_reminder_sent_at DATETIME"
+    ),
+    "shuttle_reminder_sent_at": (
+        "ALTER TABLE job_applications ADD COLUMN shuttle_reminder_sent_at DATETIME"
+    ),
 }
 
 _JOB_APPLICATION_COLUMNS_POSTGRES = {
@@ -112,6 +123,26 @@ _JOB_APPLICATION_COLUMNS_POSTGRES = {
     "held_credential_ids_json": (
         "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS "
         "held_credential_ids_json TEXT DEFAULT '[]'"
+    ),
+    "work_date": (
+        "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS "
+        "work_date VARCHAR(10) DEFAULT ''"
+    ),
+    "work_reminder_sent_at": (
+        "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS "
+        "work_reminder_sent_at TIMESTAMP"
+    ),
+    "interview_at": (
+        "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS "
+        "interview_at VARCHAR(32) DEFAULT ''"
+    ),
+    "interview_reminder_sent_at": (
+        "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS "
+        "interview_reminder_sent_at TIMESTAMP"
+    ),
+    "shuttle_reminder_sent_at": (
+        "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS "
+        "shuttle_reminder_sent_at TIMESTAMP"
     ),
 }
 

@@ -1,4 +1,4 @@
-"""셔틀위치담당자 — 회사·노선별 독립 슬롯(멀티테넌트) 검증."""
+"""버스위치 공유 담당 — 회사·노선별 독립 슬롯(멀티테넌트) 검증."""
 
 from datetime import datetime
 from zoneinfo import ZoneInfo

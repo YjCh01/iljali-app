@@ -70,7 +70,6 @@ from app.services.push_wallet_service import get_or_create_wallet, wallet_to_res
 from app.services.sanction_policy import policy_catalog
 from app.services.sanction_service import (
     apply_policy_sanction,
-    auto_seeker_noshow_sanction,
     lift_sanction,
     list_sanction_history,
     sanction_status,
@@ -132,11 +131,6 @@ class PolicySanctionBody(BaseModel):
     days: int | None = Field(default=None, ge=1, le=3650)
     permanent: bool = False
     company_key: str | None = None
-
-
-class AutoNoShowBody(BaseModel):
-    email: str
-    streak: int = Field(ge=1, le=20)
 
 
 class JobPinEntitlementBody(BaseModel):
@@ -445,20 +439,6 @@ def ops_lift_sanction(
         return lift_sanction(db, email=body.email, reason=body.reason)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-
-
-@router.post("/sanction/auto/no-show")
-def ops_auto_noshow_sanction(
-    body: AutoNoShowBody,
-    db: Session = Depends(get_db),
-    _: str = Depends(require_admin_api_key),
-):
-    result = auto_seeker_noshow_sanction(
-        db, email=body.email, streak=body.streak
-    )
-    if result is None:
-        return {"applied": False}
-    return {"applied": True, **result}
 
 
 @router.post("/members/sanction")

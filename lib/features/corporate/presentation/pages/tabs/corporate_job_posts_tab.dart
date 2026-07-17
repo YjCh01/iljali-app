@@ -320,7 +320,10 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
   Future<void> _repostJob(CorporateJobPost post) async {
     if (post.status == CorporateJobPostStatus.closed) return;
 
-    final result = await _duplicateJobPost(post);
+    final result = await _duplicateJobPost(
+      post,
+      currentProfile: AuthSession.instance.currentUser?.corporateProfile,
+    );
     if (!mounted) return;
     if (!result.isSuccess) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -443,7 +446,10 @@ class _CorporateJobPostsTabState extends State<CorporateJobPostsTab> {
     );
     if (confirmed != true || !mounted) return;
 
-    final result = await _reactivateJobPost(post);
+    final result = await _reactivateJobPost(
+      post,
+      currentProfile: AuthSession.instance.currentUser?.corporateProfile,
+    );
     if (!mounted) return;
 
     if (!result.isSuccess) {

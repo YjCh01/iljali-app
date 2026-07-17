@@ -72,6 +72,20 @@ class JobApplicationRow(Base):
     required_credential_ids_json: Mapped[str] = mapped_column(Text, default="[]")
     held_credential_ids_json: Mapped[str] = mapped_column(Text, default="[]")
     applied_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # 근무예정 합의 완료 시 확정된 근무일(YYYY-MM-DD) — 출근 1시간 전 리마인더 발송 기준.
+    work_date: Mapped[str] = mapped_column(String(10), default="")
+    work_reminder_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    # 면접 일정 상호 확인 완료 시에만 채워짐(ISO datetime) — 면접 1시간 전 리마인더 발송 기준.
+    interview_at: Mapped[str] = mapped_column(String(32), default="")
+    interview_reminder_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    # 셔틀 탑승 30분 전 리마인더 발송 기준(shuttle_pickup_time + shuttle_shift_date).
+    shuttle_reminder_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
 
 
 class ChatMessageRow(Base):

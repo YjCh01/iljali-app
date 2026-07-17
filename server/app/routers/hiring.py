@@ -10,15 +10,13 @@ from app.job_sync_models import JobApplicationRow
 from app.qc_models import QcMemberRow
 from app.routers.job_board import _assert_employer_company, _resolve_bearer
 from app.services.chat_message_service import clear_messages
-
-from app.services.sanction_service import auto_seeker_noshow_sanction
+from app.services.push_dispatch_hooks import (
+    push_interview_confirmed,
+    push_new_applicant,
+    push_work_schedule_confirmed,
+)
 
 router = APIRouter(prefix="/v1/hiring", tags=["hiring"])
-
-
-class NoShowSanctionBody(BaseModel):
-    seeker_email: str
-    streak: int = 1
 
 
 class ApplicationBody(BaseModel):
@@ -38,6 +36,21 @@ class ApplicationBody(BaseModel):
     shuttle_shift_date: str = ""
     required_credential_ids_json: str = "[]"
     held_credential_ids_json: str = "[]"
+    work_date: str = ""
+    interview_at: str = ""
+
+
+def _assert_self_email(payload: dict, email: str) -> None:
+    token_email = str(payload.get("sub", "")).strip().lower()
+    if not token_email or token_email != email.strip().lower():
+        raise HTTPException(status_code=403, detail="본인 정보만 조회할 수 있습니다.")
+
+
+def _assert_seeker_identity(payload: dict, seeker_email: str) -> None:
+    member_type = str(payload.get("member_type", ""))
+    if member_type != "seeker":
+        raise HTTPException(status_code=403, detail="구직자 본인만 조회할 수 있습니다.")
+    _assert_self_email(payload, seeker_email)
 
 
 def _seeker_no_show_count(db: Session, seeker_email: str) -> int:
@@ -69,6 +82,8 @@ def _row_to_dict(row: JobApplicationRow, db: Session) -> dict:
         "shuttle_shift_date": row.shuttle_shift_date,
         "required_credential_ids_json": row.required_credential_ids_json or "[]",
         "held_credential_ids_json": row.held_credential_ids_json or "[]",
+        "work_date": row.work_date or "",
+        "interview_at": row.interview_at or "",
         "seeker_no_show_count": _seeker_no_show_count(db, row.seeker_email),
         "applied_at": row.applied_at.replace(tzinfo=timezone.utc).isoformat()
         if row.applied_at
@@ -80,8 +95,19 @@ def _row_to_dict(row: JobApplicationRow, db: Session) -> dict:
 def list_applications(
     seeker_email: str | None = Query(default=None),
     company_key: str | None = Query(default=None),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
+    if not seeker_email and not company_key:
+        raise HTTPException(
+            status_code=400, detail="seeker_email 또는 company_key가 필요합니다."
+        )
+    payload = _resolve_bearer(authorization)
+    if company_key:
+        _assert_employer_company(payload, company_key)
+    else:
+        _assert_seeker_identity(payload, seeker_email)  # type: ignore[arg-type]
+
     query = db.query(JobApplicationRow)
     if seeker_email:
         query = query.filter(JobApplicationRow.seeker_email == seeker_email)
@@ -105,6 +131,9 @@ def create_application(body: ApplicationBody, db: Session = Depends(get_db)):
         .first()
     )
     if existing is not None:
+        was_scheduled = existing.status == "scheduled"
+        had_interview_before = bool(existing.interview_at)
+
         existing.status = body.status
         existing.work_schedule = body.work_schedule
         existing.company_key = body.company_key or existing.company_key
@@ -117,8 +146,23 @@ def create_application(body: ApplicationBody, db: Session = Depends(get_db)):
         existing.shuttle_shift_date = body.shuttle_shift_date.strip()
         existing.required_credential_ids_json = body.required_credential_ids_json or "[]"
         existing.held_credential_ids_json = body.held_credential_ids_json or "[]"
+        new_work_date = body.work_date.strip()
+        if new_work_date and new_work_date != existing.work_date:
+            existing.work_date = new_work_date
+            # 근무일이 바뀌면(재협의 등) 이전 근무일 기준으로 보낸 리마인더 상태를 초기화.
+            existing.work_reminder_sent_at = None
+        new_interview_at = body.interview_at.strip()
+        if new_interview_at and new_interview_at != existing.interview_at:
+            existing.interview_at = new_interview_at
+            existing.interview_reminder_sent_at = None
         db.commit()
         db.refresh(existing)
+
+        if not was_scheduled and existing.status == "scheduled":
+            push_work_schedule_confirmed(db, application_id=existing.id)
+        if new_interview_at and not had_interview_before:
+            push_interview_confirmed(db, application_id=existing.id)
+
         return _row_to_dict(existing, db)
 
     row = JobApplicationRow(
@@ -139,11 +183,14 @@ def create_application(body: ApplicationBody, db: Session = Depends(get_db)):
         shuttle_shift_date=body.shuttle_shift_date.strip(),
         required_credential_ids_json=body.required_credential_ids_json or "[]",
         held_credential_ids_json=body.held_credential_ids_json or "[]",
+        work_date=body.work_date.strip(),
+        interview_at=body.interview_at.strip(),
         applied_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(row)
     db.commit()
     db.refresh(row)
+    push_new_applicant(db, application_id=row.id)
     return _row_to_dict(row, db)
 
 
@@ -151,9 +198,12 @@ def create_application(body: ApplicationBody, db: Session = Depends(get_db)):
 def withdraw_application(
     post_id: str = Query(..., min_length=1),
     seeker_email: str = Query(..., min_length=3),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """구직자 지원 취소 — 동일 공고·이메일 지원 건 전부 삭제 (sync 재유입 방지)."""
+    payload = _resolve_bearer(authorization)
+    _assert_seeker_identity(payload, seeker_email)
     email = seeker_email.strip().lower()
     rows = (
         db.query(JobApplicationRow)
@@ -210,16 +260,3 @@ def mark_no_show(
     db.commit()
     db.refresh(application)
     return _row_to_dict(application, db)
-
-
-@router.post("/seeker/no-show/sync")
-def sync_seeker_noshow_sanction(
-    body: NoShowSanctionBody, db: Session = Depends(get_db)
-):
-    """No-show 누적 → 구직자 자동 주의/경고 (셔틀·근무 연동)."""
-    result = auto_seeker_noshow_sanction(
-        db, email=body.seeker_email, streak=body.streak
-    )
-    if result is None:
-        return {"applied": False}
-    return {"applied": True, "sanction": result}

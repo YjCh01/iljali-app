@@ -1,10 +1,12 @@
 """Auth router tests."""
 
 import json
+from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.qc_models import QcMemberRow
@@ -102,6 +104,20 @@ def test_phone_send_allowed_immediately_after_verify():
     again = client.post("/v1/auth/phone/send", json={"phone": phone})
     assert again.status_code == 200
     assert again.json()["sms_sent"] is True
+
+
+def test_phone_send_rejects_misconfigured_provider_instead_of_faking_success():
+    """SMS_PROVIDER 오타·대소문자 불일치 시, 문자를 보내지 않고도 발송 성공으로
+    응답하던 조용한 실패를 막는다 — 명확한 400 에러여야 한다."""
+    phone = "01055559999"
+    phone_svc._store.clear()
+    phone_svc._last_sent.clear()
+    with patch.object(settings, "sms_provider", "Aligo"), patch.object(
+        settings, "sms_api_key", "dummy-key"
+    ):
+        res = client.post("/v1/auth/phone/send", json={"phone": phone})
+    assert res.status_code == 400
+    assert phone_svc._normalize(phone) not in phone_svc._store
 
 
 def test_signup_login_find_email_reset_password():

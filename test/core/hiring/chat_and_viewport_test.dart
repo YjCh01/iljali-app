@@ -16,11 +16,13 @@ void main() {
     final repo = await ApplicationChatMessageRepository.create();
     const appId = 'chat_persist_test';
 
-    await repo.ensureWelcomeMessages(
-      applicationId: appId,
-      companyName: '테스트기업',
-      postTitle: '테스트 공고',
-      seekerName: '홍길동',
+    await repo.append(
+      appId,
+      ApplicationChatMessage(
+        fromEmployer: true,
+        text: '안녕하세요, 근무 일정 확인 부탁드립니다.',
+        sentAt: DateTime.now().subtract(const Duration(minutes: 1)),
+      ),
     );
     await repo.append(
       appId,
@@ -32,11 +34,11 @@ void main() {
     );
 
     final first = await repo.load(appId);
-    expect(first.length, 3);
+    expect(first.length, 2);
 
     final reloaded = await ApplicationChatMessageRepository.create();
     final second = await reloaded.load(appId);
-    expect(second.length, 3);
+    expect(second.length, 2);
     expect(second.last.text, '내일 몇 시에 출근하면 될까요?');
   });
 

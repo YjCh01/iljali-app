@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/member_type.dart';
 import 'package:map/features/auth/domain/entities/social_provider.dart';
 import 'package:map/features/auth/domain/services/social_auth_service.dart';
+import 'package:map/features/auth/presentation/pages/auth/social_auth_complete_page.dart';
+import 'package:map/features/auth/presentation/pages/auth/social_oauth_webview_page.dart';
 
 /// 카카오 · 네이버 · Google 소셜 로그인 버튼
 class SocialLoginButtons extends StatelessWidget {
@@ -15,7 +18,7 @@ class SocialLoginButtons extends StatelessWidget {
   final MemberType memberType;
   final String action;
 
-  void _start(BuildContext context, SocialProvider provider) {
+  Future<void> _start(BuildContext context, SocialProvider provider) async {
     final service = SocialAuthService();
     if (!service.isEnabled) {
       ScaffoldMessenger.of(context)
@@ -28,23 +31,48 @@ class SocialLoginButtons extends StatelessWidget {
         );
       return;
     }
-    try {
-      service.startLogin(
-        provider: provider,
-        memberType: memberType,
-        action: action,
-      );
-    } on Object catch (error) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(error.toString()),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppColors.authBackground,
-          ),
+
+    if (kIsWeb) {
+      try {
+        service.startLogin(
+          provider: provider,
+          memberType: memberType,
+          action: action,
         );
+      } on Object catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(error.toString()),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: AppColors.authBackground,
+            ),
+          );
+      }
+      return;
     }
+
+    // 네이티브(모바일) — 앱 내 WebView로 OAuth 진행 후 콜백 파라미터를 직접 전달.
+    final params = await Navigator.of(context).push<Map<String, String>>(
+      MaterialPageRoute<Map<String, String>>(
+        builder: (_) => SocialOAuthWebviewPage(
+          startUrl: service.startUrl(
+            provider: provider,
+            memberType: memberType,
+            action: action,
+          ),
+          provider: provider,
+        ),
+      ),
+    );
+    if (params == null || !context.mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => SocialAuthCompletePage(initialParams: params),
+      ),
+    );
   }
 
   @override

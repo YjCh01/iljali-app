@@ -566,6 +566,10 @@ class LocalHiringRepository {
         'required_credential_ids_json':
             jsonEncode(application.requiredCredentialIds),
         'held_credential_ids_json': jsonEncode(application.heldCredentialIds),
+        if (application.workDate != null)
+          'work_date': DateFormat('yyyy-MM-dd').format(application.workDate!),
+        if (application.isInterviewAgreementComplete)
+          'interview_at': application.interviewAt!.toIso8601String(),
         if (booking != null) ...{
           'commute_route_id': booking.routeId,
           'commute_route_name': route?.routeName ?? '',
@@ -690,6 +694,75 @@ class LocalHiringRepository {
       await _handleScheduledHire(updated);
     }
     return updated;
+  }
+
+  /// 채팅 — 면접 제안 (기업 전용). 근무예정 합의와 별개의 흐름.
+  Future<HiringApplication> proposeInterview({
+    required String applicationId,
+    required DateTime interviewAt,
+  }) async {
+    final existing = await findById(applicationId);
+    if (existing == null) throw StateError('not_found');
+
+    final now = DateTime.now();
+    final updated = existing.copyWith(
+      interviewAt: interviewAt,
+      employerInterviewAgreedAt: now,
+      clearSeekerInterviewAgreedAt: true,
+    );
+    await _upsert(updated);
+    HiringRefresh.markUpdated();
+
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    await chatRepo.appendSystemMessage(
+      applicationId: applicationId,
+      text: '📅 면접 제안: ${DateFormat('M월 d일 HH:mm').format(interviewAt)}\n'
+          '구직자 확인을 기다리는 중입니다.',
+    );
+    return updated;
+  }
+
+  /// 채팅 — 면접 일정 확인 (쌍방)
+  Future<HiringApplication> confirmInterviewAgreement({
+    required String applicationId,
+    required bool asEmployer,
+  }) async {
+    final existing = await findById(applicationId);
+    if (existing == null) throw StateError('not_found');
+    if (existing.interviewAt == null) throw StateError('no_interview_proposed');
+
+    final now = DateTime.now();
+    final wasComplete = existing.isInterviewAgreementComplete;
+    final updated = existing.copyWith(
+      seekerInterviewAgreedAt: asEmployer
+          ? existing.seekerInterviewAgreedAt
+          : (existing.seekerInterviewAgreedAt ?? now),
+      employerInterviewAgreedAt: asEmployer
+          ? (existing.employerInterviewAgreedAt ?? now)
+          : existing.employerInterviewAgreedAt,
+    );
+    await _upsert(updated);
+    HiringRefresh.markUpdated();
+
+    if (!wasComplete && updated.isInterviewAgreementComplete) {
+      await _announceInterviewConfirmed(updated);
+      await _syncApplicationToServer(updated);
+    }
+    return updated;
+  }
+
+  static Future<void> _announceInterviewConfirmed(
+    HiringApplication application,
+  ) async {
+    final interviewAt = application.interviewAt;
+    if (interviewAt == null) return;
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    await chatRepo.appendSystemMessage(
+      applicationId: application.id,
+      text: '✅ 면접 일정이 확정되었습니다.\n'
+          '· 일시: ${DateFormat('M월 d일 HH:mm').format(interviewAt)}\n\n'
+          '면접 1시간 전에 알림을 보내드립니다.',
+    );
   }
 
   /// 구인자 노쇼 확정 — 즉시 처리
@@ -1005,7 +1078,34 @@ class LocalHiringRepository {
   }
 
   static Future<void> _handleScheduledHire(HiringApplication application) async {
+    await _announceWorkScheduleConfirmed(application);
     await ShuttleRouteShareOnHireSideEffects.handle(application);
+  }
+
+  /// 근무예정 합의(양측 확인) 완료 시 — 실제 문자로 면접·근무 일정을 통보하던
+  /// 관행을 대신해, 앱 채팅에 짧은 확정 안내를 자동 발송한다.
+  static Future<void> _announceWorkScheduleConfirmed(
+    HiringApplication application,
+  ) async {
+    final workDate = application.workDate;
+    final dateLabel =
+        workDate == null ? '' : DateFormat('M월 d일').format(workDate);
+    final scheduleLabel = application.workSchedule.trim();
+
+    final lines = StringBuffer()
+      ..writeln('✅ 근무 일정이 확정되었습니다.')
+      ..writeln()
+      ..writeln('· 공고: ${application.postTitle}');
+    if (dateLabel.isNotEmpty) lines.writeln('· 근무일: $dateLabel');
+    if (scheduleLabel.isNotEmpty) lines.writeln('· 근무시간: $scheduleLabel');
+    lines.writeln();
+    lines.writeln('출근 시 GPS 출근 체크를 잊지 마세요.');
+
+    final chatRepo = await ApplicationChatMessageRepository.create();
+    await chatRepo.appendSystemMessage(
+      applicationId: application.id,
+      text: lines.toString().trim(),
+    );
   }
 
   /// Dev/test — idempotent insert (skips if same id exists).

@@ -40,9 +40,6 @@ class ApplicationChatMessageRepository {
 
   Future<List<ApplicationChatMessage>> loadSynced({
     required String applicationId,
-    required String companyName,
-    required String postTitle,
-    required String seekerName,
   }) async {
     if (EnvConfig.isComplianceApiEnabled) {
       final client = IljariApiClient();
@@ -60,12 +57,7 @@ class ApplicationChatMessageRepository {
       }
     }
 
-    return ensureWelcomeMessages(
-      applicationId: applicationId,
-      companyName: companyName,
-      postTitle: postTitle,
-      seekerName: seekerName,
-    );
+    return load(applicationId);
   }
 
   /// 지원 ID 불일치 시 로컬·서버 채팅 키 통합
@@ -149,35 +141,6 @@ class ApplicationChatMessageRepository {
         isSystem: true,
       ),
     );
-  }
-
-  Future<List<ApplicationChatMessage>> ensureWelcomeMessages({
-    required String applicationId,
-    required String companyName,
-    required String postTitle,
-    required String seekerName,
-  }) async {
-    final existing = await load(applicationId);
-    if (existing.isNotEmpty) return existing;
-
-    final seeded = [
-      ApplicationChatMessage(
-        fromEmployer: true,
-        text:
-            '안녕하세요, $companyName 채용 담당입니다.\n「$postTitle」 지원 감사합니다.',
-        sentAt: DateTime.now().subtract(const Duration(minutes: 2)),
-      ),
-      ApplicationChatMessage(
-        fromEmployer: false,
-        text: '안녕하세요, $seekerName입니다. 근무 일정 확인 부탁드립니다.',
-        sentAt: DateTime.now().subtract(const Duration(minutes: 1)),
-      ),
-    ];
-    await saveAll(applicationId, seeded);
-    for (final message in seeded) {
-      await _pushToServer(applicationId, message);
-    }
-    return seeded;
   }
 
   Future<Map<String, dynamic>?> _pushToServer(

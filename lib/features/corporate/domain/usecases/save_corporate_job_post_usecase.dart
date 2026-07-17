@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:map/core/address/address_geocoder.dart';
 import 'package:map/core/address/services/workplace_address_mismatch_service.dart';
+import 'package:map/core/compliance/corporate_verification_access_policy.dart';
 import 'package:map/core/compliance/services/abuse_detection_service.dart';
+import 'package:map/core/compliance/services/unverified_employer_trial_post_policy.dart';
 import 'package:map/core/session/auth_session.dart';
 import 'package:map/core/sync/job_post_sync_service.dart';
 import 'package:map/features/corporate/data/datasources/corporate_job_post_local_data_source.dart';
@@ -143,6 +145,34 @@ CorporateJobPostResult? _validateDescriptionBody(JobPostDescriptionBody body) {
   return null;
 }
 
+Future<CorporateJobPostResult?> _blockedByUnverifiedTrialLimit(
+  CorporateMemberProfile? profile,
+) async {
+  if (profile == null) return null;
+  if (!CorporateVerificationAccessPolicy.isProvisionalMember(profile)) {
+    return null;
+  }
+  final alreadyUsed = await UnverifiedEmployerTrialPostPolicy.hasUsedTrialPost(
+    profile.companyKey,
+  );
+  if (!alreadyUsed) return null;
+  return const CorporateJobPostResult.failure(
+    '미인증 회원은 무료 공고를 1회(24시간)만 등록할 수 있습니다.\n'
+    '사업자등록증을 인증하면 공고를 자유롭게 등록할 수 있어요.',
+  );
+}
+
+DateTime _expiresAtForNewPost({
+  required DateTime postedAt,
+  required CorporateMemberProfile? profile,
+}) {
+  if (profile != null &&
+      CorporateVerificationAccessPolicy.isProvisionalMember(profile)) {
+    return UnverifiedEmployerTrialPostPolicy.trialExpiresAt(postedAt);
+  }
+  return JobPostValidity.expiresAtFromRegistration(postedAt);
+}
+
 class CreateCorporateJobPostUseCase {
   const CreateCorporateJobPostUseCase(this._dataSource);
 
@@ -172,6 +202,8 @@ class CreateCorporateJobPostUseCase {
     List<ResumeItemKind> requiredResumeItems = const [],
     List<String> requiredCredentialIds = const [],
   }) async {
+    final trialBlocked = await _blockedByUnverifiedTrialLimit(registeredBy);
+    if (trialBlocked != null) return trialBlocked;
     if (title.trim().isEmpty) {
       return const CorporateJobPostResult.failure('공고 제목을 입력해 주세요.');
     }
@@ -276,11 +308,17 @@ class CreateCorporateJobPostUseCase {
       status: CorporateJobPostStatus.recruiting,
       applicantCount: 0,
       postedAt: postedAt,
-      expiresAt: JobPostValidity.expiresAtFromRegistration(postedAt),
+      expiresAt: _expiresAtForNewPost(postedAt: postedAt, profile: registeredBy),
     );
 
     return _dataSource.createJobPost(post).then((_) async {
       await JobPostSyncService().pushPost(post);
+      if (registeredBy != null &&
+          CorporateVerificationAccessPolicy.isProvisionalMember(registeredBy)) {
+        await UnverifiedEmployerTrialPostPolicy.markTrialPostUsed(
+          registeredBy.companyKey,
+        );
+      }
       if (notifyAdminMismatch) {
         await _reportWorkplaceMismatchForAdmin(
           profile: registeredBy!,
@@ -298,11 +336,18 @@ class ReactivateCorporateJobPostUseCase {
 
   final CorporateJobPostLocalDataSource _dataSource;
 
-  Future<CorporateJobPostResult> call(CorporateJobPost original) {
+  Future<CorporateJobPostResult> call(
+    CorporateJobPost original, {
+    CorporateMemberProfile? currentProfile,
+  }) async {
+    final profile = currentProfile ?? original.registeredBy;
+    final blocked = await _blockedByUnverifiedTrialLimit(profile);
+    if (blocked != null) return blocked;
+
     final postedAt = DateTime.now();
     final reactivated = original.copyWith(
       postedAt: postedAt,
-      expiresAt: JobPostValidity.expiresAtFromRegistration(postedAt),
+      expiresAt: _expiresAtForNewPost(postedAt: postedAt, profile: profile),
       status: CorporateJobPostStatus.recruiting,
     );
 
@@ -313,6 +358,12 @@ class ReactivateCorporateJobPostUseCase {
         )
         .then((_) async {
       await JobPostSyncService().pushPostUpdate(reactivated);
+      if (profile != null &&
+          CorporateVerificationAccessPolicy.isProvisionalMember(profile)) {
+        await UnverifiedEmployerTrialPostPolicy.markTrialPostUsed(
+          profile.companyKey,
+        );
+      }
       return CorporateJobPostResult.success(reactivated);
     });
   }
@@ -345,7 +396,14 @@ class DuplicateCorporateJobPostUseCase {
 
   final CorporateJobPostLocalDataSource _dataSource;
 
-  Future<CorporateJobPostResult> call(CorporateJobPost original) {
+  Future<CorporateJobPostResult> call(
+    CorporateJobPost original, {
+    CorporateMemberProfile? currentProfile,
+  }) async {
+    final profile = currentProfile ?? original.registeredBy;
+    final blocked = await _blockedByUnverifiedTrialLimit(profile);
+    if (blocked != null) return blocked;
+
     final postedAt = DateTime.now();
     final duplicate = CorporateJobPost(
       id: 'post_${postedAt.millisecondsSinceEpoch}',
@@ -383,11 +441,17 @@ class DuplicateCorporateJobPostUseCase {
       status: CorporateJobPostStatus.recruiting,
       applicantCount: 0,
       postedAt: postedAt,
-      expiresAt: JobPostValidity.expiresAtFromRegistration(postedAt),
+      expiresAt: _expiresAtForNewPost(postedAt: postedAt, profile: profile),
     );
 
     return _dataSource.createJobPost(duplicate).then((_) async {
       await JobPostSyncService().pushPost(duplicate);
+      if (profile != null &&
+          CorporateVerificationAccessPolicy.isProvisionalMember(profile)) {
+        await UnverifiedEmployerTrialPostPolicy.markTrialPostUsed(
+          profile.companyKey,
+        );
+      }
       return CorporateJobPostResult.success(duplicate);
     });
   }

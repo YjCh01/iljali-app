@@ -26,7 +26,7 @@ class AppPilotProgramRow(Base):
 
 
 class ShuttleOfficerRequestRow(Base):
-    """기업의 셔틀위치담당자 지정 요청 — 어드민 승인 후에만 실제 반영."""
+    """기업의 버스위치 공유 담당 지정 요청 — 어드민 승인 후에만 실제 반영."""
 
     __tablename__ = "shuttle_officer_requests"
 

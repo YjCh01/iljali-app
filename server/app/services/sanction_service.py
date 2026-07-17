@@ -505,21 +505,3 @@ def member_sanction_self_view(db: Session, *, email: str) -> dict:
             for h in history
         ],
     }
-
-
-def auto_seeker_noshow_sanction(db: Session, *, email: str, streak: int) -> dict | None:
-    """No-show 누적 시 자동 주의/경고."""
-    if streak <= 0:
-        return None
-    if streak <= 2:
-        code = "noshow_1_2"
-    else:
-        code = "repeat_noshow"
-    return apply_policy_sanction(
-        db,
-        email=email,
-        member_kind="seeker",
-        violation_code=code,
-        reason=f"자동: No-show {streak}회 (셔틀·근무 연동)",
-        source="auto_noshow",
-    )

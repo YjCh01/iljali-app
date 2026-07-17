@@ -14,12 +14,14 @@ class IndividualWebScaffold extends StatelessWidget {
     required this.onSectionChanged,
     required this.body,
     this.isItemEnabled,
+    this.myJobsBadgeCount = 0,
   });
 
   final int currentIndex;
   final ValueChanged<int> onSectionChanged;
   final Widget body;
   final bool Function(int index)? isItemEnabled;
+  final int myJobsBadgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +48,9 @@ class IndividualWebScaffold extends StatelessWidget {
               ),
             ),
             WebRightNavigationRail(
-              items: IndividualBottomNav.entries,
+              items: IndividualBottomNav.buildEntries(
+                myJobsBadgeCount: myJobsBadgeCount,
+              ),
               currentIndex: currentIndex,
               onTap: onSectionChanged,
               isItemEnabled: isItemEnabled,
@@ -104,6 +108,7 @@ class IndividualWebScaffold extends StatelessWidget {
         currentIndex: currentIndex,
         onTap: onSectionChanged,
         isItemEnabled: isItemEnabled,
+        myJobsBadgeCount: myJobsBadgeCount,
       ),
     );
   }

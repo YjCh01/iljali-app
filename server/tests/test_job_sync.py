@@ -24,6 +24,11 @@ def _corp_auth_headers(company_key: str = "1234567890") -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _seeker_auth_headers(email: str) -> dict[str, str]:
+    token = issue_token({"sub": email, "member_type": "seeker"})
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_job_board_crud():
     headers = _corp_auth_headers()
     created = client.post(
@@ -130,6 +135,7 @@ def test_chat_websocket_broadcast():
 def test_withdraw_application_removes_from_bootstrap():
     email = "withdraw@test.iljari.co.kr"
     post_id = "post_withdraw_line"
+    headers = _seeker_auth_headers(email)
     created = client.post(
         "/v1/hiring/applications",
         json={
@@ -144,6 +150,7 @@ def test_withdraw_application_removes_from_bootstrap():
     boot_before = client.get(
         "/v1/sync/bootstrap",
         params={"seeker_email": email},
+        headers=headers,
     )
     assert boot_before.status_code == 200
     assert boot_before.json()["counts"]["applications"] >= 1
@@ -151,6 +158,7 @@ def test_withdraw_application_removes_from_bootstrap():
     withdrawn = client.delete(
         "/v1/hiring/applications",
         params={"post_id": post_id, "seeker_email": email},
+        headers=headers,
     )
     assert withdrawn.status_code == 200
     assert withdrawn.json()["withdrawn"] is True
@@ -159,7 +167,100 @@ def test_withdraw_application_removes_from_bootstrap():
     boot_after = client.get(
         "/v1/sync/bootstrap",
         params={"seeker_email": email},
+        headers=headers,
     )
     assert boot_after.status_code == 200
     apps = boot_after.json()["applications"]
     assert not any(a["post_id"] == post_id for a in apps)
+
+
+def test_list_applications_requires_auth():
+    resp = client.get(
+        "/v1/hiring/applications", params={"seeker_email": "leak@test.iljari.co.kr"}
+    )
+    assert resp.status_code == 401
+
+
+def test_list_applications_requires_at_least_one_filter():
+    resp = client.get(
+        "/v1/hiring/applications",
+        headers=_seeker_auth_headers("someone@test.iljari.co.kr"),
+    )
+    assert resp.status_code == 400
+
+
+def test_list_applications_rejects_other_seekers_email():
+    email = "victim@test.iljari.co.kr"
+    client.post(
+        "/v1/hiring/applications",
+        json={
+            "post_id": "post_leak_check",
+            "post_title": "테스트 공고",
+            "seeker_email": email,
+            "seeker_name": "피해자",
+        },
+    )
+    resp = client.get(
+        "/v1/hiring/applications",
+        params={"seeker_email": email},
+        headers=_seeker_auth_headers("attacker@test.iljari.co.kr"),
+    )
+    assert resp.status_code == 403
+
+
+def test_list_applications_allows_the_seeker_themself():
+    email = "self-view@test.iljari.co.kr"
+    client.post(
+        "/v1/hiring/applications",
+        json={
+            "post_id": "post_self_view",
+            "post_title": "테스트 공고",
+            "seeker_email": email,
+            "seeker_name": "본인",
+        },
+    )
+    resp = client.get(
+        "/v1/hiring/applications",
+        params={"seeker_email": email},
+        headers=_seeker_auth_headers(email),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["count"] >= 1
+
+
+def test_sync_bootstrap_requires_auth_when_seeker_email_given():
+    resp = client.get(
+        "/v1/sync/bootstrap", params={"seeker_email": "leak2@test.iljari.co.kr"}
+    )
+    assert resp.status_code == 401
+
+
+def test_sync_bootstrap_works_without_auth_for_guest_browsing():
+    resp = client.get("/v1/sync/bootstrap")
+    assert resp.status_code == 200
+    assert "posts" in resp.json()
+
+
+def test_withdraw_application_requires_auth():
+    resp = client.delete(
+        "/v1/hiring/applications",
+        params={"post_id": "post_x", "seeker_email": "victim2@test.iljari.co.kr"},
+    )
+    assert resp.status_code == 401
+
+
+def test_sync_member_sanction_requires_matching_email():
+    email = "sanction-self@test.iljari.co.kr"
+    resp = client.get(
+        "/v1/sync/member/sanction",
+        params={"email": email},
+        headers=_seeker_auth_headers("other@test.iljari.co.kr"),
+    )
+    assert resp.status_code == 403
+
+    resp_ok = client.get(
+        "/v1/sync/member/sanction",
+        params={"email": email},
+        headers=_seeker_auth_headers(email),
+    )
+    assert resp_ok.status_code == 200

@@ -9,7 +9,7 @@ import 'package:map/features/corporate/data/datasources/corporate_applicant_loca
 import 'package:map/features/corporate/domain/entities/corporate_applicant.dart';
 import 'package:map/features/corporate/presentation/widgets/corporate_surface_card.dart';
 
-/// 고용주 — 셔틀위치담당자 지정을 어드민에 승인요청 (직접 지정은 어드민 전용).
+/// 고용주 — 버스위치 공유 담당 지정을 어드민에 승인요청 (직접 지정은 어드민 전용).
 class CorporateShuttleLocationOfficerPage extends StatefulWidget {
   const CorporateShuttleLocationOfficerPage({super.key});
 
@@ -139,7 +139,7 @@ class _CorporateShuttleLocationOfficerPageState
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('어드민에 셔틀위치담당자 지정을 요청했습니다.')),
+        const SnackBar(content: Text('어드민에 버스위치 공유 담당 지정을 요청했습니다.')),
       );
       setState(() => _selectedApplicant = null);
       await _loadStatus();
@@ -163,7 +163,7 @@ class _CorporateShuttleLocationOfficerPageState
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         leading: const AppBackButton(),
-        title: const Text('셔틀위치담당자 지정 요청'),
+        title: const Text('버스위치 공유 담당 지정 요청'),
       ),
       body: _loadingRoutes
           ? const Center(child: CircularProgressIndicator())
@@ -173,7 +173,7 @@ class _CorporateShuttleLocationOfficerPageState
                   padding: const EdgeInsets.all(16),
                   children: [
                     Text(
-                      '위치 공유 담당자 지정은 어드민 승인이 필요합니다. '
+                      '버스위치 공유 담당 지정은 어드민 승인이 필요합니다. '
                       '아래에서 노선과 담당자를 골라 요청을 보내면, '
                       '어드민이 검토 후 승인해야 실제로 반영됩니다.',
                       style: TextStyle(

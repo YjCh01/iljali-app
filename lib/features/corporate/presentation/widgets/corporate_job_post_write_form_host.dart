@@ -445,9 +445,45 @@ class CorporateJobPostWriteFormHostState
 
   @override
   Widget build(BuildContext context) {
+    final isProvisionalMember =
+        AuthSession.instance.currentUser?.corporateProfile?.isProvisionalMember ??
+            false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (isProvisionalMember) ...[
+          Material(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.orange.shade800,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '미인증 회원은 무료 공고를 1건, 24시간만 등록할 수 있어요.\n'
+                      '사업자등록증을 인증하면 자유롭게 등록할 수 있습니다.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.4,
+                        color: Colors.orange.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
         if (_importSourceLabel != null) ...[
           Material(
             color: AppColors.primaryLight.withValues(alpha: 0.15),

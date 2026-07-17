@@ -317,7 +317,7 @@ class IljariApiClient {
     if (companyKey != null) query['company_key'] = companyKey;
     final uri = Uri.parse('$_baseUrl/v1/hiring/applications')
         .replace(queryParameters: query.isEmpty ? null : query);
-    final response = await _client.get(uri);
+    final response = await _client.get(uri, headers: _headers);
     _ensureOk(response);
     final map = jsonDecode(response.body) as Map<String, dynamic>;
     final list = map['applications'] as List<dynamic>? ?? [];
@@ -485,6 +485,10 @@ class IljariApiClient {
         if (accuracyMeters != null) 'accuracy_m': accuracyMeters,
       });
 
+  /// 버스위치 공유 담당 본인이 위치 공유를 직접 중지
+  Future<Map<String, dynamic>> stopBusLocationTowerSharing() async =>
+      _post('/v1/pilot/bus-location-tower/stop', {});
+
   Future<Map<String, dynamic>> offerShuttleRouteShare({
     required String applicationId,
     required String companyKey,
@@ -576,7 +580,7 @@ class IljariApiClient {
     _ensureOk(response);
   }
 
-  /// 고용주 자기 회사 셔틀위치담당자 조회 (어드민 지정과 동일 데이터 공유)
+  /// 고용주 자기 회사 버스위치 공유 담당 조회 (어드민 지정과 동일 데이터 공유)
   Future<Map<String, dynamic>> fetchShuttleLocationOfficer({
     required String routeId,
   }) async {
@@ -588,7 +592,7 @@ class IljariApiClient {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  /// 고용주 — 셔틀위치담당자 지정을 어드민에 승인요청 (즉시 반영되지 않음)
+  /// 고용주 — 버스위치 공유 담당 지정을 어드민에 승인요청 (즉시 반영되지 않음)
   Future<Map<String, dynamic>> requestShuttleLocationOfficer({
     required String routeId,
     required String seekerEmail,
@@ -608,7 +612,7 @@ class IljariApiClient {
         'work_start_time': workStartTime,
       });
 
-  /// 고용주 — 자기 회사가 보낸 셔틀위치담당자 지정 요청 목록·처리 상태
+  /// 고용주 — 자기 회사가 보낸 버스위치 공유 담당 지정 요청 목록·처리 상태
   Future<List<Map<String, dynamic>>> fetchShuttleLocationOfficerRequests() async {
     final raw = await _get('/v1/shuttle/location-officer/requests');
     final items = raw['items'];
@@ -771,7 +775,7 @@ class IljariApiClient {
     if (memberType != null) query['member_type'] = memberType;
     final uri = Uri.parse('$_baseUrl/v1/sync/bootstrap')
         .replace(queryParameters: query.isEmpty ? null : query);
-    final response = await _client.get(uri);
+    final response = await _client.get(uri, headers: _headers);
     _ensureOk(response);
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
@@ -780,7 +784,7 @@ class IljariApiClient {
     final uri = Uri.parse('$_baseUrl/v1/sync/member/sanction').replace(
       queryParameters: {'email': email},
     );
-    final response = await _client.get(uri);
+    final response = await _client.get(uri, headers: _headers);
     _ensureOk(response);
     return jsonDecode(response.body) as Map<String, dynamic>;
   }

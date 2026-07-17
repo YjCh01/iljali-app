@@ -51,6 +51,7 @@ class ShuttleRouteVerticalTracker extends StatelessWidget {
     final busOnTimeline = ShuttleBusTimelinePosition.resolve(
       stops: stops,
       busPosition: busPosition,
+      polylinePoints: route.effectivePolylinePoints,
     );
     final schedule = ShuttleBusTimelinePosition.formatScheduleRange(stops);
     final firstLabel = stops.isNotEmpty ? stops.first.label : '';

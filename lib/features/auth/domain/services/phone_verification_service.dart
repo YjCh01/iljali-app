@@ -17,10 +17,14 @@ class PhoneVerifyResult {
   const PhoneVerifyResult({
     required this.verified,
     this.phoneVerifiedToken,
+    this.errorMessage,
   });
 
   final bool verified;
   final String? phoneVerifiedToken;
+
+  /// 실패 시 서버가 내려준 구체적인 사유 (없으면 호출부의 기본 문구 사용)
+  final String? errorMessage;
 }
 
 /// 휴대폰 인증 — API 연동 또는 로컬 mock
@@ -131,6 +135,8 @@ class RemotePhoneVerificationService implements PhoneVerificationService {
       final token = result['phone_verified_token'] as String?;
       _lastToken = token;
       return PhoneVerifyResult(verified: true, phoneVerifiedToken: token);
+    } on IljariApiException catch (error) {
+      return PhoneVerifyResult(verified: false, errorMessage: error.message);
     } on Object {
       return const PhoneVerifyResult(verified: false);
     }

@@ -1,4 +1,4 @@
-"""셔틀위치담당자 — 기업 승인요청 → 어드민 승인/반려 (/v1/shuttle/location-officer/*)."""
+"""버스위치 공유 담당 — 기업 승인요청 → 어드민 승인/반려 (/v1/shuttle/location-officer/*)."""
 
 from fastapi.testclient import TestClient
 

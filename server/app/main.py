@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -49,6 +50,7 @@ from app.qc_models import (  # noqa: F401
     QcMemberRow,
 )
 from app.services.credential_service import seed_credential_catalog_if_empty
+from app.services.shift_reminder_service import run_reminder_sweep
 from app.services.social_auth_service import social_mock_enabled
 from app.services.workplace_service import backfill_missing_workplace_ids
 from app.routers import (
@@ -160,6 +162,27 @@ app.mount(
     StaticFiles(directory=str(_business_cert_media_dir)),
     name="business-cert-media",
 )
+
+
+def _run_reminder_sweep_job() -> None:
+    with SessionLocal() as db:
+        run_reminder_sweep(db)
+
+
+# pytest 프로세스에서는 스케줄러를 켜지 않음 — 테스트는 run_reminder_sweep()을
+# 직접 호출해 검증하고, 백그라운드 스레드가 테스트 실행을 방해하지 않도록 함.
+if "pytest" not in sys.modules:
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+    _scheduler = BackgroundScheduler(timezone="UTC")
+    _scheduler.add_job(
+        _run_reminder_sweep_job,
+        "interval",
+        minutes=15,
+        id="shift_reminder_sweep",
+        replace_existing=True,
+    )
+    _scheduler.start()
 
 
 @app.get("/")

@@ -31,6 +31,7 @@ class CorporateWebScaffold extends StatelessWidget {
     required this.body,
     this.actions,
     this.isItemEnabled,
+    this.applicantsBadgeCount = 0,
   });
 
   final int sectionIndex;
@@ -38,6 +39,7 @@ class CorporateWebScaffold extends StatelessWidget {
   final Widget body;
   final List<Widget>? actions;
   final bool Function(int index)? isItemEnabled;
+  final int applicantsBadgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +68,9 @@ class CorporateWebScaffold extends StatelessWidget {
               ),
             ),
             WebRightNavigationRail(
-              items: CorporateBottomNav.entries,
+              items: CorporateBottomNav.buildEntries(
+                applicantsBadgeCount: applicantsBadgeCount,
+              ),
               currentIndex: sectionIndex,
               onTap: onSectionChanged,
               isItemEnabled: isItemEnabled,
@@ -150,6 +154,7 @@ class CorporateWebScaffold extends StatelessWidget {
         currentIndex: sectionIndex,
         onTap: onSectionChanged,
         isItemEnabled: isItemEnabled,
+        applicantsBadgeCount: applicantsBadgeCount,
       ),
     );
   }

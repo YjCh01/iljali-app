@@ -39,6 +39,7 @@ import 'package:map/features/job_seeker/domain/utils/mock_map_viewport.dart';
 import 'package:map/features/job_seeker/presentation/map/job_map_marker_factory.dart';
 
 import 'package:map/features/commute/domain/entities/commute_route.dart';
+import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/presentation/map/shuttle_route_overlay_factory.dart';
 import 'package:map/features/job_seeker/presentation/map/job_recruitment_map_pin.dart';
 import 'package:map/features/job_seeker/presentation/widgets/job_seeker_mock_map.dart';
@@ -77,6 +78,7 @@ class JobSeekerMapView extends StatefulWidget {
     this.overlay,
     this.shuttleRoute,
     this.shuttleWorkplace,
+    this.onStopTap,
     this.recruitmentPins = const [],
     this.selectedRecruitmentPin,
     this.onRecruitmentPinTap,
@@ -110,6 +112,8 @@ class JobSeekerMapView extends StatefulWidget {
   final CommuteRoute? shuttleRoute;
 
   final GeoCoordinate? shuttleWorkplace;
+
+  final void Function(CommuteRoute route, CommuteRouteStop stop)? onStopTap;
 
   final List<JobRecruitmentMapPin> recruitmentPins;
 
@@ -148,6 +152,9 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
     setState(() => _overrideShuttleRoute = null);
     _syncMapOverlays();
   }
+
+  /// 현재 필터·뷰포트 기준으로 화면에 보이는 핀 (인근 핀 스와이프 캐러셀용)
+  List<JobMapPin> get visiblePins => List.unmodifiable(_visiblePins);
 
   late final GetJobMapPinsUseCase _getPins = widget._getPins ??
 
@@ -473,6 +480,7 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
         await ShuttleRouteOverlayFactory.build(
           route,
           workplace: widget.shuttleWorkplace,
+          onStopTap: widget.onStopTap,
         ),
       );
     }
@@ -789,6 +797,14 @@ class JobSeekerMapViewState extends State<JobSeekerMapView> {
               if (pin.mapMarkerId == id || pin.post.id == id) {
                 widget.onPinTap(pin);
                 return;
+              }
+            }
+            if (shuttle != null) {
+              for (final stop in shuttle.stops) {
+                if (id == 'shuttle_stop_${shuttle.id}_${stop.id}') {
+                  widget.onStopTap?.call(shuttle, stop);
+                  return;
+                }
               }
             }
             for (final pin in widget.recruitmentPins) {

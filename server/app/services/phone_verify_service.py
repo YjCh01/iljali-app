@@ -39,8 +39,15 @@ def normalize_phone(phone: str) -> str:
     return _normalize(phone)
 
 
+_SUPPORTED_PROVIDERS = {"aligo"}
+
+
+def _normalized_provider() -> str:
+    return (settings.sms_provider or "mock").strip().lower()
+
+
 def _mock_mode() -> bool:
-    return settings.sms_provider == "mock" or not settings.sms_api_key
+    return _normalized_provider() == "mock" or not settings.sms_api_key
 
 
 def send_code(phone: str) -> PhoneSendResult:
@@ -67,12 +74,17 @@ def send_code(phone: str) -> PhoneSendResult:
         code = settings.sms_mock_code or "123456"
     else:
         code = f"{random.randint(100000, 999999)}"
-        if settings.sms_provider == "aligo":
+        provider = _normalized_provider()
+        if provider == "aligo":
             message = f"[일자리] 본인인증 [{code}] 를 입력해주세요."
             try:
                 send_aligo_sms_sync(phone=normalized, message=message)
             except AligoSmsError as exc:
                 raise ValueError(f"sms_failed:{exc}") from exc
+        else:
+            # 알 수 없는(오타 포함) SMS_PROVIDER 값 — 문자를 실제로 보내지 않고
+            # "발송 성공"으로 응답하는 조용한 실패를 막기 위해 명시적으로 막는다.
+            raise ValueError(f"sms_provider_unsupported:{provider}")
 
     _store[normalized] = PhoneVerifyEntry(
         phone=normalized,

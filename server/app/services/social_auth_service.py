@@ -126,7 +126,7 @@ def build_authorize_url(*, provider: str, state: str) -> str:
 def exchange_code_for_profile(
     *, provider: str, code: str, state: str = ""
 ) -> SocialProfile:
-    if code.startswith("mock_") or social_mock_enabled() and code.startswith("mock"):
+    if social_mock_enabled() and code.startswith("mock_"):
         mock_provider = code.removeprefix("mock_")
         suffix = secrets.token_hex(4)
         return SocialProfile(

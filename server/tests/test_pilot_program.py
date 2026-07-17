@@ -303,3 +303,43 @@ def test_bus_location_tower_driver_updates_rider_tracks_location():
         json={"latitude": 36.6, "longitude": 127.3},
     )
     assert forbidden.status_code == 403
+
+
+def test_bus_location_tower_officer_can_stop_own_sharing():
+    _prepare_pilot_test(work_start_time="23:59")
+    driver_token = _seeker_token(SEEKER_EMAIL)
+    client.post(
+        "/v1/pilot/bus-location-tower/location",
+        headers={"Authorization": f"Bearer {driver_token}"},
+        json={"latitude": 36.5, "longitude": 127.25},
+    )
+
+    rider_token = _seeker_token(OTHER_EMAIL)
+    before = client.get(
+        "/v1/pilot/bus-location-tower/me",
+        headers={"Authorization": f"Bearer {rider_token}"},
+    )
+    assert before.json()["today_session"]["active"] is True
+
+    stopped = client.post(
+        "/v1/pilot/bus-location-tower/stop",
+        headers={"Authorization": f"Bearer {driver_token}"},
+    )
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()["today_session"]["active"] is False
+
+    after = client.get(
+        "/v1/pilot/bus-location-tower/me",
+        headers={"Authorization": f"Bearer {rider_token}"},
+    )
+    assert after.json()["today_session"]["active"] is False
+
+
+def test_bus_location_tower_stop_rejects_non_officer():
+    _prepare_pilot_test(work_start_time="23:59")
+    rider_token = _seeker_token(OTHER_EMAIL)
+    stopped = client.post(
+        "/v1/pilot/bus-location-tower/stop",
+        headers={"Authorization": f"Bearer {rider_token}"},
+    )
+    assert stopped.status_code == 403

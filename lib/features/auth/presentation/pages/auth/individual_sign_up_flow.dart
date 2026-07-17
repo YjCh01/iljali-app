@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/legal/legal_consent_catalog.dart';
@@ -116,8 +117,16 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
       final code = await _phoneVerification.sendCode(_phoneController.text);
       if (!mounted) return;
       setState(() => _sendingCode = false);
-      _snack('인증번호가 발송되었습니다. (개발: $code)');
+      _snack(
+        code == '******'
+            ? '인증번호가 발송되었습니다.'
+            : '인증번호가 발송되었습니다. (개발: $code)',
+      );
       _goNext(_IndividualSignUpStep.phoneVerify);
+    } on IljariApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _sendingCode = false);
+      _snack(error.message);
     } on Object {
       if (!mounted) return;
       setState(() => _sendingCode = false);
@@ -138,8 +147,9 @@ class _IndividualSignUpFlowState extends State<IndividualSignUpFlow> {
       purpose: PhoneVerificationPurpose.signup,
     );
     if (!result.verified || result.phoneVerifiedToken == null) {
-      setState(() => _codeError = '인증번호가 올바르지 않습니다.');
-      _snack('인증번호를 다시 확인해 주세요.');
+      final message = result.errorMessage ?? '인증번호가 올바르지 않습니다.';
+      setState(() => _codeError = message);
+      _snack(message);
       return;
     }
     setState(() {

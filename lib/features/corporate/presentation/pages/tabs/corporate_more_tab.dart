@@ -242,8 +242,8 @@ class _CorporateMoreTabState extends State<CorporateMoreTab> {
           ),
           _MenuTile(
             icon: Icons.directions_bus_filled_outlined,
-            title: '셔틀위치담당자 지정 요청',
-            subtitle: '실시간 버스 위치 공유 담당자 지정 어드민 승인요청',
+            title: '버스위치 공유 담당 지정 요청',
+            subtitle: '실시간 위치 공유를 담당할 인원 지정을 어드민에 승인요청',
             onTap: () => Navigator.of(context)
                 .pushNamed(AppRoutes.corporateShuttleLocationOfficer),
           ),

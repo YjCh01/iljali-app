@@ -7,6 +7,7 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
 import 'package:map/core/map/pins/teardrop_map_pin_art.dart';
 import 'package:map/features/commute/domain/entities/commute_route.dart';
+import 'package:map/features/commute/domain/entities/commute_route_stop.dart';
 import 'package:map/features/commute/domain/utils/commute_route_polyline.dart';
 
 /// Naver Map 셔틀 경로·정류장 오버레이 생성
@@ -18,7 +19,7 @@ abstract final class ShuttleRouteOverlayFactory {
   static Future<Set<NAddableOverlay>> build(
     CommuteRoute route, {
     GeoCoordinate? workplace,
-    void Function(CommuteRoute route)? onStopTap,
+    void Function(CommuteRoute route, CommuteRouteStop stop)? onStopTap,
     bool showStopCaptions = true,
   }) async {
     final points = CommuteRoutePolyline.pathIncludingWorkplace(
@@ -87,7 +88,7 @@ abstract final class ShuttleRouteOverlayFactory {
         isHideCollidedCaptions: true,
       );
       if (onStopTap != null) {
-        marker.setOnTapListener((_) => onStopTap(route));
+        marker.setOnTapListener((_) => onStopTap(route, stop));
       }
       overlays.add(marker);
     }
