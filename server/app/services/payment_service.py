@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.job_sync_models import PaymentOrderRow
-from app.services.push_wallet_service import grant_credit_lot
+from app.services.push_wallet_service import grant_credit_lot, revoke_credit_lot_for_order
 
 
 def toss_basic_auth_header() -> str:
@@ -152,4 +152,52 @@ async def confirm_toss_payment(
     db.commit()
     db.refresh(row)
     grant_pending_credit_for_order(db, row)
+    return row
+
+
+async def cancel_toss_payment(
+    db: Session,
+    *,
+    order_id: str,
+    cancel_reason: str,
+) -> PaymentOrderRow:
+    """결제취소(환불) — 확정된 주문만 취소 가능. 아직 쓰지 않은 크레딧 잔여분은 회수하고,
+    이미 소비한 만큼은 되돌리지 않는다."""
+    row = db.get(PaymentOrderRow, order_id)
+    if row is None:
+        raise ValueError("주문을 찾을 수 없습니다.")
+    if row.status == "refunded":
+        return row
+    if row.status != "confirmed":
+        raise ValueError("확정된 결제만 환불할 수 있습니다.")
+
+    if row.mock or not settings.toss_secret_key:
+        row.status = "refunded"
+        row.refunded_at = datetime.utcnow()
+        db.commit()
+        revoke_credit_lot_for_order(db, order_id)
+        return row
+
+    payment_key = row.payment_key or row.transaction_id
+    if not payment_key:
+        raise ValueError("결제 키가 없어 환불할 수 없습니다.")
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(
+            f"https://api.tosspayments.com/v1/payments/{payment_key}/cancel",
+            headers={
+                "Authorization": toss_basic_auth_header(),
+                "Content-Type": "application/json",
+            },
+            json={"cancelReason": cancel_reason},
+        )
+
+    if response.status_code >= 400:
+        raise ValueError("토스 결제 취소 실패")
+
+    row.status = "refunded"
+    row.refunded_at = datetime.utcnow()
+    db.commit()
+    db.refresh(row)
+    revoke_credit_lot_for_order(db, order_id)
     return row

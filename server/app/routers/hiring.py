@@ -53,6 +53,18 @@ def _assert_seeker_identity(payload: dict, seeker_email: str) -> None:
     _assert_self_email(payload, seeker_email)
 
 
+def _assert_application_participant(payload: dict, row: JobApplicationRow) -> None:
+    """지원건의 구직자 본인이거나, 지원건이 속한 기업의 담당자만 허용."""
+    member_type = str(payload.get("member_type", ""))
+    if member_type == "seeker":
+        _assert_self_email(payload, row.seeker_email)
+        return
+    if member_type in ("employer", "corporate"):
+        _assert_employer_company(payload, row.company_key or "")
+        return
+    raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+
+
 def _seeker_no_show_count(db: Session, seeker_email: str) -> int:
     seeker = (
         db.query(QcMemberRow)
@@ -119,7 +131,12 @@ def list_applications(
 
 
 @router.post("/applications")
-def create_application(body: ApplicationBody, db: Session = Depends(get_db)):
+def create_application(
+    body: ApplicationBody,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
     email = body.seeker_email.strip().lower()
     existing = (
         db.query(JobApplicationRow)
@@ -130,6 +147,19 @@ def create_application(body: ApplicationBody, db: Session = Depends(get_db)):
         .order_by(JobApplicationRow.applied_at.desc())
         .first()
     )
+    member_type = str(payload.get("member_type", ""))
+    if member_type == "seeker":
+        _assert_self_email(payload, body.seeker_email)
+    elif member_type in ("employer", "corporate"):
+        target_company_key = body.company_key or (
+            existing.company_key if existing else ""
+        )
+        _assert_employer_company(payload, target_company_key)
+    else:
+        raise HTTPException(
+            status_code=403, detail="구직자 또는 기업회원만 이용할 수 있습니다."
+        )
+
     if existing is not None:
         was_scheduled = existing.status == "scheduled"
         had_interview_before = bool(existing.interview_at)
@@ -226,10 +256,16 @@ def withdraw_application(
 
 
 @router.get("/applications/{application_id}")
-def get_application(application_id: str, db: Session = Depends(get_db)):
+def get_application(
+    application_id: str,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
     row = db.get(JobApplicationRow, application_id)
     if row is None:
         raise HTTPException(status_code=404, detail="지원 내역을 찾을 수 없습니다.")
+    _assert_application_participant(payload, row)
     return _row_to_dict(row, db)
 
 

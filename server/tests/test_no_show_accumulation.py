@@ -54,6 +54,7 @@ def _submit_application(*, post_id: str, company_key: str) -> str:
             "seeker_email": SEEKER_EMAIL,
             "status": "scheduled",
         },
+        headers=_employer_headers(company_key),
     )
     assert created.status_code == 200
     return created.json()["id"]
@@ -76,7 +77,10 @@ def test_other_company_sees_accumulated_no_show_count():
     # 회사 B는 별도 지원 건에 대해 같은 구직자의 노쇼 누적치를 조회만 함(자기 마킹 없이도 보임).
     application_id = _submit_application(post_id="post-ns-2", company_key=COMPANY_B)
 
-    fetched = client.get(f"/v1/hiring/applications/{application_id}")
+    fetched = client.get(
+        f"/v1/hiring/applications/{application_id}",
+        headers=_employer_headers(COMPANY_B),
+    )
     assert fetched.status_code == 200
     assert fetched.json()["seeker_no_show_count"] == 1
 

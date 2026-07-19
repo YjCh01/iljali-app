@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.qc_models import QcMemberRow
+from app.services.auth_token_service import issue_token
 from app.services.push_dispatch_hooks import push_new_applicant
 from app.services.push_notification_service import register_device_token
 
@@ -10,6 +11,11 @@ client = TestClient(app)
 
 COMPANY_KEY = "7020001111"
 EMPLOYER_EMAIL = "employer-newapp@qc.iljari.co.kr"
+
+
+def _seeker_headers(seeker_email: str) -> dict[str, str]:
+    token = issue_token({"sub": seeker_email, "member_type": "seeker"})
+    return {"Authorization": f"Bearer {token}"}
 
 
 def setup_module():
@@ -43,6 +49,7 @@ def test_push_new_applicant_skips_when_no_employer_token():
             "seeker_email": "seeker-newapp-2@qc.iljari.co.kr",
             "seeker_name": "지원자2",
         },
+        headers=_seeker_headers("seeker-newapp-2@qc.iljari.co.kr"),
     )
     assert resp.status_code == 200, resp.text
     db = SessionLocal()
@@ -76,6 +83,7 @@ def test_push_new_applicant_attempts_delivery_when_employer_has_token():
             "seeker_email": "seeker-newapp-1@qc.iljari.co.kr",
             "seeker_name": "지원자",
         },
+        headers=_seeker_headers("seeker-newapp-1@qc.iljari.co.kr"),
     )
     assert resp.status_code == 200, resp.text
     application_id = resp.json()["id"]
@@ -101,12 +109,13 @@ def test_updating_existing_application_does_not_error():
         "seeker_name": "지원자3",
         "status": "applied",
     }
-    first = client.post("/v1/hiring/applications", json=body)
+    headers = _seeker_headers("seeker-newapp-3@qc.iljari.co.kr")
+    first = client.post("/v1/hiring/applications", json=body, headers=headers)
     assert first.status_code == 200, first.text
     first_id = first.json()["id"]
 
     body["status"] = "scheduled"
-    second = client.post("/v1/hiring/applications", json=body)
+    second = client.post("/v1/hiring/applications", json=body, headers=headers)
     assert second.status_code == 200, second.text
     assert second.json()["id"] == first_id
     assert second.json()["status"] == "scheduled"

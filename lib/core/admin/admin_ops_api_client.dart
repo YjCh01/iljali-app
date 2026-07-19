@@ -74,6 +74,43 @@ class AdminOpsApiClient {
         {if (reason != null && reason.isNotEmpty) 'reason': reason},
       );
 
+  /// 레거시 검토 API — 사업자등록 승인/거부(신규 verification API가 404일 때 fallback)
+  Future<Map<String, dynamic>> reviewCompanyLegacy(
+    String companyKey, {
+    required bool approved,
+    String? reason,
+  }) async =>
+      _patch(
+        '/v1/admin/companies/${Uri.encodeComponent(companyKey)}/review',
+        {'approved': approved, if (reason != null) 'reason': reason},
+      );
+
+  Future<Map<String, dynamic>> suspendCompanyLegacy(String companyKey) async =>
+      _patch(
+        '/v1/admin/companies/${Uri.encodeComponent(companyKey)}/suspend',
+        const {},
+      );
+
+  /// companies 테이블 기록 조회 (검증 ops API 미배포 시 fallback)
+  Future<Map<String, dynamic>?> findBusinessRecordLegacy(
+    String companyKey,
+  ) async {
+    final brn = companyKey.replaceAll(RegExp(r'[^0-9]'), '');
+    if (brn.isEmpty) return null;
+    final response = await _client.get(
+      Uri.parse('$_baseUrl/v1/admin/compliance/business-records'),
+      headers: _headers,
+    );
+    if (response.statusCode >= 400) return null;
+    final list = jsonDecode(response.body) as List<dynamic>;
+    for (final raw in list) {
+      final map = Map<String, dynamic>.from(raw as Map);
+      final key = '${map['company_key'] ?? ''}'.replaceAll(RegExp(r'[^0-9]'), '');
+      if (key == brn) return map;
+    }
+    return null;
+  }
+
   Future<Map<String, dynamic>> sanctionMember({
     required String email,
     required String action,
@@ -575,6 +612,18 @@ class AdminOpsApiClient {
     Map<String, dynamic> body,
   ) async {
     final response = await _client.put(
+      Uri.parse('$_baseUrl$path'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> _patch(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _client.patch(
       Uri.parse('$_baseUrl$path'),
       headers: _headers,
       body: jsonEncode(body),

@@ -68,6 +68,7 @@ def _submit_application(*, status: str, post_id: str) -> str:
             "seeker_email": SEEKER_EMAIL,
             "status": status,
         },
+        headers=_employer_headers(COMPANY_KEY),
     )
     assert created.status_code == 200
     return created.json()["id"]

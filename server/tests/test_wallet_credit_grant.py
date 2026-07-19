@@ -2,20 +2,36 @@ from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.push_wallet_models import PushWalletCreditLotRow
+from app.services.auth_token_service import issue_token
 from app.services.push_wallet_service import get_or_create_wallet, grant_credit_lot
 
 client = TestClient(app)
+
+_ADMIN_HEADERS = {"X-Admin-Api-Key": settings.admin_api_key}
 
 
 def setup_module():
     Base.metadata.create_all(bind=engine)
 
 
+def _employer_headers(company_key: str) -> dict[str, str]:
+    token = issue_token(
+        {
+            "sub": "corp-grant@test.iljari.co.kr",
+            "member_type": "corporate",
+            "company_key": company_key,
+        }
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_charge_then_confirm_grants_credit_once():
     company_key = "1111111111"
+    headers = _employer_headers(company_key)
     order_id = "PKG-grant-001"
     client.post(
         "/v1/payments/charge",
@@ -28,21 +44,24 @@ def test_charge_then_confirm_grants_credit_once():
             "credit_count": 10,
             "credit_location_slots": 10,
         },
+        headers=headers,
     )
 
     confirm = client.post(
         "/v1/payments/confirm",
         json={"payment_key": "pk-1", "order_id": order_id, "amount_krw": 179100},
+        headers=headers,
     )
     assert confirm.status_code == 200
 
-    wallet = client.get(f"/v1/wallet/{company_key}").json()
+    wallet = client.get(f"/v1/wallet/{company_key}", headers=headers).json()
     assert wallet["package_credits"] == 10
     assert wallet["location_slots_from_packages"] == 10
 
 
 def test_duplicate_confirm_does_not_double_credit():
     company_key = "2222222222"
+    headers = _employer_headers(company_key)
     order_id = "PKG-grant-002"
     client.post(
         "/v1/payments/charge",
@@ -54,16 +73,17 @@ def test_duplicate_confirm_does_not_double_credit():
             "credit_type": "push_ticket",
             "credit_count": 1,
         },
+        headers=headers,
     )
 
     confirm_body = {"payment_key": "pk-2", "order_id": order_id, "amount_krw": 19900}
-    first = client.post("/v1/payments/confirm", json=confirm_body)
+    first = client.post("/v1/payments/confirm", json=confirm_body, headers=headers)
     assert first.status_code == 200
     # 네트워크 재시도로 인한 동일 confirm 재호출
-    second = client.post("/v1/payments/confirm", json=confirm_body)
+    second = client.post("/v1/payments/confirm", json=confirm_body, headers=headers)
     assert second.status_code == 200
 
-    wallet = client.get(f"/v1/wallet/{company_key}").json()
+    wallet = client.get(f"/v1/wallet/{company_key}", headers=headers).json()
     assert wallet["push_ticket_credits"] == 1
 
     lots = (
@@ -78,6 +98,7 @@ def test_duplicate_confirm_does_not_double_credit():
 def test_webhook_grants_credit_when_confirm_never_called():
     """클라이언트의 confirm 호출이 유실돼도 웹훅이 도착하면 크레딧이 지급된다."""
     company_key = "3333333333"
+    headers = _employer_headers(company_key)
     order_id = "PKG-grant-003"
     client.post(
         "/v1/payments/charge",
@@ -89,6 +110,7 @@ def test_webhook_grants_credit_when_confirm_never_called():
             "credit_type": "exposure_bundle",
             "credit_count": 1,
         },
+        headers=headers,
     )
 
     webhook_body = (
@@ -101,12 +123,13 @@ def test_webhook_grants_credit_when_confirm_never_called():
     )
     assert response.status_code == 200
 
-    wallet = client.get(f"/v1/wallet/{company_key}").json()
+    wallet = client.get(f"/v1/wallet/{company_key}", headers=headers).json()
     assert wallet["exposure_push_bundle_credits"] == 1
 
 
 def test_webhook_after_client_confirm_does_not_double_credit():
     company_key = "3939393939"
+    headers = _employer_headers(company_key)
     order_id = "PKG-grant-004"
     client.post(
         "/v1/payments/charge",
@@ -119,10 +142,12 @@ def test_webhook_after_client_confirm_does_not_double_credit():
             "credit_count": 1,
             "credit_location_slots": 1,
         },
+        headers=headers,
     )
     client.post(
         "/v1/payments/confirm",
         json={"payment_key": "pk-4", "order_id": order_id, "amount_krw": 19900},
+        headers=headers,
     )
     webhook_body = (
         '{"eventType": "DONE", "orderId": "%s", "paymentKey": "pk-4"}' % order_id
@@ -133,15 +158,19 @@ def test_webhook_after_client_confirm_does_not_double_credit():
         headers={"Content-Type": "application/json"},
     )
 
-    wallet = client.get(f"/v1/wallet/{company_key}").json()
+    wallet = client.get(f"/v1/wallet/{company_key}", headers=headers).json()
     assert wallet["package_credits"] == 1
 
 
 def test_wallet_credits_endpoint_idempotent_on_order_id():
     company_key = "4444444444"
     body = {"count": 5, "location_slots": 5, "order_id": "ADMIN-ORDER-1"}
-    first = client.post(f"/v1/wallet/{company_key}/credits", json=body)
-    second = client.post(f"/v1/wallet/{company_key}/credits", json=body)
+    first = client.post(
+        f"/v1/wallet/{company_key}/credits", json=body, headers=_ADMIN_HEADERS
+    )
+    second = client.post(
+        f"/v1/wallet/{company_key}/credits", json=body, headers=_ADMIN_HEADERS
+    )
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json()["package_credits"] == 5
@@ -166,7 +195,9 @@ def test_expired_lot_is_swept_from_balance():
     db.commit()
     db.close()
 
-    wallet_json = client.get(f"/v1/wallet/{company_key}").json()
+    wallet_json = client.get(
+        f"/v1/wallet/{company_key}", headers=_employer_headers(company_key)
+    ).json()
     assert wallet_json["package_credits"] == 0
     assert wallet_json["location_slots_from_packages"] == 0
 
@@ -185,5 +216,7 @@ def test_legacy_lot_without_expiry_is_never_swept():
     )
     db.close()
 
-    wallet_json = client.get(f"/v1/wallet/{company_key}").json()
+    wallet_json = client.get(
+        f"/v1/wallet/{company_key}", headers=_employer_headers(company_key)
+    ).json()
     assert wallet_json["package_credits"] == 7

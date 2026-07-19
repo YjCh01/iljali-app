@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:map/core/config/env_config.dart';
+import 'package:map/core/session/auth_session.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// 지원 건 채팅 WebSocket — REST 저장 후 서버가 즉시 push
@@ -31,13 +32,17 @@ class ApplicationChatRealtimeClient {
     required String httpBaseUrl,
     required String applicationId,
     required String senderRole,
+    String? token,
   }) {
     final trimmed = httpBaseUrl.replaceAll(RegExp(r'/$'), '');
     final wsBase = trimmed
         .replaceFirst(RegExp(r'^https://', caseSensitive: false), 'wss://')
         .replaceFirst(RegExp(r'^http://', caseSensitive: false), 'ws://');
     final uri = Uri.parse('$wsBase/v1/chat-sync/ws/$applicationId').replace(
-      queryParameters: {'role': senderRole},
+      queryParameters: {
+        'role': senderRole,
+        if (token != null && token.isNotEmpty) 'token': token,
+      },
     );
     return uri.toString();
   }
@@ -54,6 +59,7 @@ class ApplicationChatRealtimeClient {
       httpBaseUrl: base,
       applicationId: applicationId,
       senderRole: senderRole,
+      token: AuthSession.instance.accessToken,
     );
 
     try {

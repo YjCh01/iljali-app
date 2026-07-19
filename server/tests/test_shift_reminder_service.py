@@ -4,6 +4,7 @@ from unittest.mock import patch
 from app.database import Base, SessionLocal, engine
 from app.job_sync_models import JobApplicationRow
 from app.main import app  # noqa: F401 — 임포트 시점에 job_applications 컬럼 마이그레이션 실행
+from app.services.auth_token_service import issue_token
 from app.services.shift_reminder_service import (
     REMINDER_LEAD,
     SHUTTLE_REMINDER_LEAD,
@@ -11,6 +12,11 @@ from app.services.shift_reminder_service import (
 )
 
 Base.metadata.create_all(bind=engine)
+
+
+def _seeker_headers(seeker_email: str) -> dict[str, str]:
+    token = issue_token({"sub": seeker_email, "member_type": "seeker"})
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _make_application(db, key: str, **overrides) -> JobApplicationRow:
@@ -208,6 +214,7 @@ def test_changing_work_date_resets_work_reminder_flag_via_update_endpoint():
             "status": "scheduled",
             "work_date": "2026-08-01",
         },
+        headers=_seeker_headers("seeker-reminder-reset@qc.iljari.co.kr"),
     )
     assert resp.status_code == 200, resp.text
     application_id = resp.json()["id"]
@@ -228,6 +235,7 @@ def test_changing_work_date_resets_work_reminder_flag_via_update_endpoint():
             "status": "scheduled",
             "work_date": "2026-08-02",
         },
+        headers=_seeker_headers("seeker-reminder-reset@qc.iljari.co.kr"),
     )
     assert resp.status_code == 200, resp.text
 
@@ -254,6 +262,7 @@ def test_changing_interview_at_resets_interview_reminder_flag_via_update_endpoin
             "status": "scheduled",
             "interview_at": "2026-08-01T10:00:00",
         },
+        headers=_seeker_headers("seeker-interview-reset@qc.iljari.co.kr"),
     )
     assert resp.status_code == 200, resp.text
     application_id = resp.json()["id"]
@@ -274,6 +283,7 @@ def test_changing_interview_at_resets_interview_reminder_flag_via_update_endpoin
             "status": "scheduled",
             "interview_at": "2026-08-02T11:00:00",
         },
+        headers=_seeker_headers("seeker-interview-reset@qc.iljari.co.kr"),
     )
     assert resp.status_code == 200, resp.text
 

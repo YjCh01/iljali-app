@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import sys
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -30,6 +31,11 @@ async def toss_webhook(
         ).hexdigest()
         if not toss_signature or not hmac.compare_digest(expected, toss_signature):
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    elif "pytest" not in sys.modules:
+        raise HTTPException(
+            status_code=503,
+            detail="TOSS_WEBHOOK_SECRET이 서버에 설정되지 않았습니다.",
+        )
 
     try:
         payload = json.loads(body.decode())

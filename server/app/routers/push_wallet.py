@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.deps.admin_auth import require_admin_api_key
+from app.routers.job_board import _assert_employer_company, _resolve_bearer
 from app.push_wallet_schemas import (
     AddPackageCreditsRequest,
     ClaimSignupBonusResponse,
@@ -28,7 +30,13 @@ router = APIRouter(prefix="/v1/wallet", tags=["wallet"])
 
 
 @router.get("/{company_key}", response_model=EmployerPushWalletResponse)
-def get_wallet(company_key: str, db: Session = Depends(get_db)):
+def get_wallet(
+    company_key: str,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, company_key)
     brn = normalize_brn(company_key)
     if len(brn) != 10:
         raise HTTPException(status_code=400, detail="사업자등록번호 10자리가 필요합니다.")
@@ -42,6 +50,7 @@ def upsert_wallet(
     company_key: str,
     body: EmployerPushWalletUpsert,
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_api_key),
 ):
     brn = normalize_brn(company_key)
     if len(brn) != 10:
@@ -69,6 +78,7 @@ def add_package_credits(
     company_key: str,
     body: AddPackageCreditsRequest,
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_api_key),
 ):
     """관리자 수동 지급 등 구매 플로우 밖에서 크레딧을 넣을 때 사용. 실제 구매는
     `/v1/payments/confirm`이 confirmed 전환 시 자동으로 크레딧을 지급하므로 이 경로를
@@ -89,9 +99,12 @@ def add_package_credits(
 def consume_wallet_credit(
     company_key: str,
     body: ConsumeCreditRequest,
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """알림핀·PUSH 이용권 등 실사용(소비) — 잔액 부족 시 402."""
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, company_key)
     brn = normalize_brn(company_key)
     ok = consume_credit(db, brn, body.credit_type, body.count)
     if not ok:
@@ -101,7 +114,13 @@ def consume_wallet_credit(
 
 
 @router.get("/{company_key}/lots", response_model=WalletCreditLotListResponse)
-def list_wallet_lots(company_key: str, db: Session = Depends(get_db)):
+def list_wallet_lots(
+    company_key: str,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, company_key)
     brn = normalize_brn(company_key)
     lots = list_active_lots(db, brn)
     return WalletCreditLotListResponse(
@@ -120,7 +139,13 @@ def list_wallet_lots(company_key: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{company_key}/bonus", response_model=CompanyBonusLedgerResponse)
-def get_bonus_ledger_status(company_key: str, db: Session = Depends(get_db)):
+def get_bonus_ledger_status(
+    company_key: str,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, company_key)
     brn = normalize_brn(company_key)
     ledger = get_bonus_ledger(db, brn)
     db.commit()
@@ -133,7 +158,13 @@ def get_bonus_ledger_status(company_key: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{company_key}/bonus/claim", response_model=ClaimSignupBonusResponse)
-def claim_signup_bonus(company_key: str, db: Session = Depends(get_db)):
+def claim_signup_bonus(
+    company_key: str,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, company_key)
     brn = normalize_brn(company_key)
     if len(brn) != 10:
         raise HTTPException(status_code=400, detail="사업자등록번호 10자리가 필요합니다.")

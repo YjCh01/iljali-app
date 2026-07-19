@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:map/core/admin/admin_ops_api_client.dart';
 import 'package:map/core/api/iljari_api_client.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
-import 'package:map/core/compliance/data/compliance_api_client.dart';
 import 'package:map/core/compliance/data/compliance_repository.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/session/auth_session.dart';
@@ -42,7 +41,6 @@ class _AdminCompanyVerificationCardState
   String? _certificateImageRef;
 
   AdminOpsApiClient get _admin => widget.adminClient ?? AdminOpsApiClient();
-  ComplianceApiClient get _compliance => ComplianceApiClient();
 
   @override
   void initState() {
@@ -96,8 +94,8 @@ class _AdminCompanyVerificationCardState
   }
 
   Future<void> _loadFromComplianceRecords() async {
-    if (!_compliance.isEnabled) return;
-    final record = await _compliance.findBusinessRecord(widget.companyKey);
+    if (!_admin.isEnabled) return;
+    final record = await _admin.findBusinessRecordLegacy(widget.companyKey);
     if (record == null || !mounted) return;
     final status = _statusFromApi(record['verification_status'] as String?);
     final needsReview = _recordNeedsReview(record);
@@ -163,7 +161,7 @@ class _AdminCompanyVerificationCardState
       }
     }
 
-    if (_compliance.isEnabled && !_loadedFromServer) {
+    if (_admin.isEnabled && !_loadedFromServer) {
       await _loadFromComplianceRecords();
       if (!mounted || _loadedFromServer) return;
     }
@@ -191,8 +189,8 @@ class _AdminCompanyVerificationCardState
   }
 
   Future<void> _approveViaLegacyReview() async {
-    await _compliance.adminReviewCompany(
-      companyKey: _normalizeBrn(widget.companyKey),
+    await _admin.reviewCompanyLegacy(
+      _normalizeBrn(widget.companyKey),
       approved: true,
       reason: '관리자 승인 완료',
     );
@@ -207,16 +205,13 @@ class _AdminCompanyVerificationCardState
           await _admin.approveCompanyVerification(widget.companyKey);
         } on IljariApiException catch (e) {
           final msg = e.toString();
-          if (msg.contains('404') && _compliance.isEnabled) {
+          if (msg.contains('404')) {
             await _approveViaLegacyReview();
             usedLegacy = true;
           } else {
             rethrow;
           }
         }
-      } else if (_compliance.isEnabled) {
-        await _approveViaLegacyReview();
-        usedLegacy = true;
       } else {
         final repo = await ComplianceRepository.create();
         await repo.approveAdminReview(widget.companyKey);

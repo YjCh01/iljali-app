@@ -1,6 +1,7 @@
 """Auth router tests."""
 
 import json
+from datetime import datetime
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -168,6 +169,26 @@ def test_signup_login_find_email_reset_password():
     body = patch.json()
     assert body["display_name"] == "최영진"
     assert body["seeker_profile"]["homeRoadAddress"] == "경기 용인시 수지구"
+
+    too_young_birth_date = (
+        datetime.utcnow().replace(year=datetime.utcnow().year - 10)
+    ).isoformat()
+    rejected = client.patch(
+        "/v1/auth/me/seeker-profile",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"seeker_profile": {"dateOfBirth": too_young_birth_date}},
+    )
+    assert rejected.status_code == 403
+
+    adult_birth_date = (
+        datetime.utcnow().replace(year=datetime.utcnow().year - 20)
+    ).isoformat()
+    accepted = client.patch(
+        "/v1/auth/me/seeker-profile",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"seeker_profile": {"dateOfBirth": adult_birth_date}},
+    )
+    assert accepted.status_code == 200, accepted.text
 
     find_token = _verify_phone(phone, purpose="find_email")
     found = client.post(

@@ -6,6 +6,7 @@ import 'package:map/core/compliance/business_verification_status.dart';
 import 'package:map/core/compliance/contact_entitlement.dart';
 import 'package:map/core/compliance/verified_business_record.dart';
 import 'package:map/core/config/env_config.dart';
+import 'package:map/core/session/auth_session.dart';
 
 /// FastAPI 컴플라이언스 백엔드 클라이언트
 class ComplianceApiClient {
@@ -134,9 +135,13 @@ class ComplianceApiClient {
     required String action,
     required String tier,
   }) async {
+    final token = AuthSession.instance.accessToken;
     final response = await _client.post(
       Uri.parse('$_baseUrl/v1/compliance/contact-events'),
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      },
       body: jsonEncode({
         'company_key': companyKey,
         'application_id': applicationId,
@@ -157,90 +162,6 @@ class ComplianceApiClient {
     );
   }
 
-  Future<void> subscribePartnership({
-    required String companyKey,
-    required String tier,
-    required int amountKrw,
-    String? transactionId,
-  }) async {
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/v1/subscriptions/subscribe'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'company_key': companyKey,
-        'tier': tier,
-        'amount_krw': amountKrw,
-        'transaction_id': transactionId,
-      }),
-    );
-    if (response.statusCode >= 400) {
-      final body = jsonDecode(response.body);
-      final detail = body is Map ? body['detail'] : null;
-      throw ComplianceApiException(
-        detail?.toString() ?? '구독 API 오류 (${response.statusCode})',
-      );
-    }
-  }
-
-  Future<void> adminReviewCompany({
-    required String companyKey,
-    required bool approved,
-    String? reason,
-  }) async {
-    final response = await _client.patch(
-      Uri.parse('$_baseUrl/v1/admin/companies/$companyKey/review'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'approved': approved, 'reason': reason}),
-    );
-    if (response.statusCode >= 400) {
-      throw ComplianceApiException('관리자 검토 API 오류');
-    }
-  }
-
-  /// companies 테이블 기록 조회 (검증 ops API 미배포 시 fallback)
-  Future<Map<String, dynamic>?> findBusinessRecord(String companyKey) async {
-    final brn = companyKey.replaceAll(RegExp(r'[^0-9]'), '');
-    if (brn.isEmpty) return null;
-    final response = await _client.get(
-      Uri.parse('$_baseUrl/v1/admin/compliance/business-records'),
-    );
-    if (response.statusCode >= 400) return null;
-    final list = jsonDecode(response.body) as List<dynamic>;
-    for (final raw in list) {
-      final map = Map<String, dynamic>.from(raw as Map);
-      final key = '${map['company_key'] ?? ''}'.replaceAll(RegExp(r'[^0-9]'), '');
-      if (key == brn) return map;
-    }
-    return null;
-  }
-
-  Future<void> adminSuspendCompany(String companyKey) async {
-    final response = await _client.patch(
-      Uri.parse('$_baseUrl/v1/admin/companies/$companyKey/suspend'),
-    );
-    if (response.statusCode >= 400) {
-      throw ComplianceApiException('계정 정지 API 오류');
-    }
-  }
-
-  Future<void> submitEnterpriseInquiry({
-    required String companyKey,
-    required String companyName,
-    String? contactPerson,
-  }) async {
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/v1/subscriptions/enterprise-inquiry'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'company_key': companyKey,
-        'company_name': companyName,
-        'contact_person': contactPerson,
-      }),
-    );
-    if (response.statusCode >= 400) {
-      throw ComplianceApiException('Enterprise 견적 요청 API 오류');
-    }
-  }
 }
 
 class ComplianceApiException implements Exception {

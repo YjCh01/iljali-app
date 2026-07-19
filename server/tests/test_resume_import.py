@@ -33,13 +33,34 @@ def test_resume_import_url_requires_login_message():
     from fastapi.testclient import TestClient
 
     from app.main import app
+    from app.services.auth_token_service import issue_token
+
+    client = TestClient(app)
+    seeker_headers = {
+        "Authorization": "Bearer "
+        + issue_token(
+            {"sub": "seeker-resume-import@test.iljari.co.kr", "member_type": "seeker"}
+        )
+    }
+    response = client.post(
+        "/v1/resume-import/parse",
+        json={"url": "https://www.jobkorea.co.kr/", "text": ""},
+        headers=seeker_headers,
+    )
+    assert response.status_code == 400 or response.status_code == 200
+    if response.status_code == 200:
+        body = response.json()
+        assert body.get("confidence", 1) <= 0.1 or body.get("message")
+
+
+def test_resume_import_requires_auth():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
 
     client = TestClient(app)
     response = client.post(
         "/v1/resume-import/parse",
         json={"url": "https://www.jobkorea.co.kr/", "text": ""},
     )
-    assert response.status_code == 400 or response.status_code == 200
-    if response.status_code == 200:
-        body = response.json()
-        assert body.get("confidence", 1) <= 0.1 or body.get("message")
+    assert response.status_code == 401

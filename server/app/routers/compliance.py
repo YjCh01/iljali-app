@@ -197,7 +197,13 @@ def contact_entitlement(company_key: str, db: Session = Depends(get_db)):
 
 
 @router.post("/contact-events", response_model=ContactEntitlementResponse)
-def log_contact_event(body: ContactEventRequest, db: Session = Depends(get_db)):
+def log_contact_event(
+    body: ContactEventRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, body.company_key)
     brn = normalize_brn(body.company_key)
     company = db.query(Company).filter(Company.company_key == brn).first()
     if not company:

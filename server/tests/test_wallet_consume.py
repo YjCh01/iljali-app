@@ -2,16 +2,31 @@ from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.push_wallet_models import PushWalletCreditLotRow
+from app.services.auth_token_service import issue_token
 from app.services.push_wallet_service import get_or_create_wallet, grant_credit_lot
 
 client = TestClient(app)
 
+_ADMIN_HEADERS = {"X-Admin-Api-Key": settings.admin_api_key}
+
 
 def setup_module():
     Base.metadata.create_all(bind=engine)
+
+
+def _employer_headers(company_key: str) -> dict[str, str]:
+    token = issue_token(
+        {
+            "sub": "corp-consume@test.iljari.co.kr",
+            "member_type": "corporate",
+            "company_key": company_key,
+        }
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_consume_decrements_balance():
@@ -19,10 +34,12 @@ def test_consume_decrements_balance():
     client.post(
         f"/v1/wallet/{company_key}/credits",
         json={"count": 5, "location_slots": 5, "credit_type": "package"},
+        headers=_ADMIN_HEADERS,
     )
     response = client.post(
         f"/v1/wallet/{company_key}/consume",
         json={"credit_type": "package", "count": 2},
+        headers=_employer_headers(company_key),
     )
     assert response.status_code == 200
     assert response.json()["package_credits"] == 3
@@ -34,14 +51,18 @@ def test_consume_rejects_insufficient_balance():
     client.post(
         f"/v1/wallet/{company_key}/credits",
         json={"count": 1, "credit_type": "push_ticket"},
+        headers=_ADMIN_HEADERS,
     )
     response = client.post(
         f"/v1/wallet/{company_key}/consume",
         json={"credit_type": "push_ticket", "count": 5},
+        headers=_employer_headers(company_key),
     )
     assert response.status_code == 402
 
-    wallet = client.get(f"/v1/wallet/{company_key}").json()
+    wallet = client.get(
+        f"/v1/wallet/{company_key}", headers=_employer_headers(company_key)
+    ).json()
     assert wallet["push_ticket_credits"] == 1
 
 
@@ -80,6 +101,7 @@ def test_consume_is_fifo_across_lots_and_spares_newer_lot_from_expiry():
     response = client.post(
         f"/v1/wallet/{company_key}/consume",
         json={"credit_type": "package", "count": 6},
+        headers=_employer_headers(company_key),
     )
     assert response.status_code == 200
     assert response.json()["package_credits"] == 4
@@ -98,7 +120,9 @@ def test_consume_is_fifo_across_lots_and_spares_newer_lot_from_expiry():
     db.commit()
     db.close()
 
-    wallet_after_sweep = client.get(f"/v1/wallet/{company_key}").json()
+    wallet_after_sweep = client.get(
+        f"/v1/wallet/{company_key}", headers=_employer_headers(company_key)
+    ).json()
     assert wallet_after_sweep["package_credits"] == 4
 
 
@@ -115,6 +139,7 @@ def test_consume_falls_back_to_legacy_balance_without_lots():
     response = client.post(
         f"/v1/wallet/{company_key}/consume",
         json={"credit_type": "package", "count": 3},
+        headers=_employer_headers(company_key),
     )
     assert response.status_code == 200
     assert response.json()["package_credits"] == 1

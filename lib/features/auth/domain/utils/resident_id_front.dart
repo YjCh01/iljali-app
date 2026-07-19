@@ -4,7 +4,20 @@ import 'package:map/features/job_seeker/domain/entities/seeker_member_profile.da
 
 /// 주민등록번호 앞 7자리 (YYMMDD + 성별·세기 구분자리)
 abstract final class ResidentIdFront {
+  /// 개인정보보호법 제22조의2 — 만 14세 미만은 법정대리인 동의 없이 가입 불가.
+  static const minimumAgeYears = 14;
+
   static final RegExp _digitsOnly = RegExp(r'[^0-9]');
+
+  static int ageInYears(DateTime birthDate, {DateTime? asOf}) {
+    final now = asOf ?? DateTime.now();
+    var age = now.year - birthDate.year;
+    if (now.month < birthDate.month ||
+        (now.month == birthDate.month && now.day < birthDate.day)) {
+      age -= 1;
+    }
+    return age;
+  }
 
   static String digitsOnly(String value) =>
       value.replaceAll(_digitsOnly, '');
@@ -30,6 +43,11 @@ abstract final class ResidentIdFront {
     if (parsed == null) {
       return const ValidationResult.invalid(
         '형식이 올바르지 않습니다. (예: 900101-1)',
+      );
+    }
+    if (ageInYears(parsed.birthDate) < minimumAgeYears) {
+      return const ValidationResult.invalid(
+        '만 14세 미만은 법정대리인 동의 없이 가입할 수 없습니다.',
       );
     }
     return const ValidationResult.valid();

@@ -4,14 +4,20 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from app.routers.job_board import _resolve_bearer
 from app.services.resume_document_service import extract_resume_document_text
 from app.services.resume_text_parser import parse_resume_text
 from app.services.resume_url_fetcher import detect_resume_platform, fetch_resume_url_text
 
 router = APIRouter(prefix="/v1/resume-import", tags=["resume-import"])
+
+
+def _assert_seeker(payload: dict) -> None:
+    if str(payload.get("member_type", "")) != "seeker":
+        raise HTTPException(status_code=403, detail="구직자 본인만 이용할 수 있습니다.")
 
 
 class ResumeImportRequest(BaseModel):
@@ -37,7 +43,12 @@ def _response_from_text(
 
 
 @router.post("/parse")
-async def parse_resume_import(body: ResumeImportRequest):
+async def parse_resume_import(
+    body: ResumeImportRequest,
+    authorization: str | None = Header(default=None),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_seeker(payload)
     raw_text = (body.text or "").strip()
     platform = body.platform or "unknown"
 
@@ -82,7 +93,10 @@ async def parse_resume_import(body: ResumeImportRequest):
 async def parse_resume_import_file(
     file: UploadFile = File(...),
     platform: str = Form(default="unknown"),
+    authorization: str | None = Header(default=None),
 ):
+    payload = _resolve_bearer(authorization)
+    _assert_seeker(payload)
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="파일이 비어 있습니다.")

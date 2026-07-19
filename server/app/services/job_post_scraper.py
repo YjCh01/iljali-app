@@ -13,11 +13,6 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import settings
-from app.services.albamon_bff_scraper import (
-    extract_albamon_recruit_no,
-    fetch_albamon_bff_detail,
-    fields_from_albamon_view,
-)
 from app.services.job_post_image_extractor import (
     extract_image_job_body,
     images_to_html,
@@ -221,12 +216,6 @@ async def fetch_job_post(url: str, *, platform: str | None = None) -> ScrapeResu
     detected = platform or detect_platform(trimmed)
     _rate_limit_wait()
 
-    # 알바몬: 셸 HTML의 기업로고(C-Photo-View)가 아닌 BFF 모집요강 content 사용
-    if detected == "albamon":
-        bff = await _fetch_albamon_via_bff(trimmed)
-        if bff is not None:
-            return bff
-
     try:
         async with httpx.AsyncClient(
             timeout=settings.job_scrape_timeout_sec,
@@ -250,7 +239,7 @@ async def fetch_job_post(url: str, *, platform: str | None = None) -> ScrapeResu
             job_description = (fields.get("job_description") or "").strip()
             description_html = ""
             description_images: list[str] = []
-            # 알바몬 셸 HTML 이미지 추출은 로고 오탐이 많아 BFF 실패 시에만 시도하지 않음
+            # 알바몬 공개 페이지는 기업로고를 본문 이미지로 오탐하는 경우가 많아 제외
             if detected != "albamon" and should_try_image_extract(
                 job_description, platform=detected
             ):
@@ -293,56 +282,6 @@ async def fetch_job_post(url: str, *, platform: str | None = None) -> ScrapeResu
             source_url=trimmed,
             error=f"페이지를 가져오지 못했습니다: {exc}",
         )
-
-
-async def _fetch_albamon_via_bff(url: str) -> ScrapeResult | None:
-    recruit_no = extract_albamon_recruit_no(url)
-    if not recruit_no:
-        return None
-
-    detail = await fetch_albamon_bff_detail(recruit_no, page_url=url)
-    if detail.get("error"):
-        return None
-
-    view = detail.get("view") or {}
-    fields = fields_from_albamon_view(view)
-    body_images: list[str] = list(detail.get("body_images") or [])
-    content_html = (detail.get("content_html") or "").strip()
-
-    # 회사 로고 URL은 본문에 절대 넣지 않음
-    company_logo = (detail.get("company_logo") or fields.get("company_logo") or "").strip()
-    if company_logo:
-        body_images = [u for u in body_images if u != company_logo]
-
-    if body_images:
-        body_images = await mirror_image_urls(body_images, referer=url)
-        description_html = images_to_html(body_images)
-        job_description = "이미지 공고"
-        confidence = 0.9
-    else:
-        # 텍스트 모집요강
-        from bs4 import BeautifulSoup as _BS
-
-        text = _BS(content_html, "lxml").get_text("\n", strip=True) if content_html else ""
-        description_html = content_html if content_html and "<" in content_html else ""
-        job_description = (text or fields.get("title") or "")[:4000]
-        body_images = []
-        confidence = 0.85 if job_description else 0.55
-
-    workplace = fields.get("workplace") or None
-    return ScrapeResult(
-        platform="albamon",
-        raw_text=(job_description or fields.get("title") or "")[:8000],
-        title=fields.get("title") or "",
-        hourly_wage=fields.get("hourly_wage") or None,
-        work_schedule=fields.get("work_schedule") or "",
-        workplace=workplace,
-        job_description=job_description,
-        description_html=description_html,
-        description_images=body_images,
-        confidence=confidence,
-        source_url=url,
-    )
 
 
 _ALBAMON_DETAIL_PATTERNS = (

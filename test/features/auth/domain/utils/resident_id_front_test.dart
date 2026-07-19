@@ -17,6 +17,28 @@ void main() {
       expect(ResidentIdFront.validate('9002311').isValid, isFalse);
     });
 
+    test('validate rejects under-14 birth dates', () {
+      final now = DateTime.now();
+      final tooYoungYy = ((now.year - 10) % 100).toString().padLeft(2, '0');
+      final centuryDigit = now.year - 10 >= 2000 ? '3' : '1';
+      expect(
+        ResidentIdFront.validate('${tooYoungYy}0101$centuryDigit').isValid,
+        isFalse,
+      );
+    });
+
+    test('ageInYears accounts for whether the birthday has passed this year', () {
+      final asOf = DateTime(2026, 6, 15);
+      expect(
+        ResidentIdFront.ageInYears(DateTime(2012, 6, 14), asOf: asOf),
+        14,
+      );
+      expect(
+        ResidentIdFront.ageInYears(DateTime(2012, 6, 16), asOf: asOf),
+        13,
+      );
+    });
+
     test('parse derives birth date gender and nationality', () {
       final domesticMale = ResidentIdFront.tryParse('9001011');
       expect(domesticMale?.birthDate, DateTime(1990, 1, 1));

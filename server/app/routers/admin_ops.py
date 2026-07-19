@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps.admin_auth import require_admin_api_key
+from app.job_sync_models import PaymentOrderRow
 from app.qc_models import QcMemberRow
 from app.services.admin_bulk_shuttle_import_service import bulk_import_shuttle_routes_from_excel
 from app.services.admin_bulk_url_import_service import (
@@ -66,6 +67,7 @@ from app.services.map_content_purge_service import (
 from app.services.qc_data_purge_service import purge_qc_data
 from app.models import Company
 from app.services.entitlement_service import get_or_create_company, normalize_brn
+from app.services.payment_service import cancel_toss_payment
 from app.services.push_wallet_service import get_or_create_wallet, wallet_to_response
 from app.services.sanction_policy import policy_catalog
 from app.services.sanction_service import (
@@ -305,6 +307,67 @@ def ops_wallet_get(
     wallet = get_or_create_wallet(db, brn)
     db.commit()
     return wallet_to_response(brn, wallet, db)
+
+
+class RefundPaymentBody(BaseModel):
+    reason: str = "관리자 환불 처리"
+
+
+def _order_to_dict(row: PaymentOrderRow) -> dict:
+    return {
+        "order_id": row.order_id,
+        "company_key": row.company_key,
+        "order_name": row.order_name,
+        "amount_krw": row.amount_krw,
+        "status": row.status,
+        "mock": row.mock,
+        "created_at": row.created_at,
+        "confirmed_at": row.confirmed_at,
+        "refunded_at": row.refunded_at,
+    }
+
+
+@router.get("/payments")
+def ops_list_payments(
+    company_key: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    limit: int = Query(default=50, le=200),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    query = db.query(PaymentOrderRow)
+    if company_key:
+        query = query.filter(PaymentOrderRow.company_key == normalize_brn(company_key))
+    if status:
+        query = query.filter(PaymentOrderRow.status == status)
+    rows = query.order_by(PaymentOrderRow.created_at.desc()).limit(limit).all()
+    return {"orders": [_order_to_dict(r) for r in rows], "count": len(rows)}
+
+
+@router.get("/payments/{order_id}")
+def ops_get_payment(
+    order_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    row = db.get(PaymentOrderRow, order_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="주문을 찾을 수 없습니다.")
+    return _order_to_dict(row)
+
+
+@router.post("/payments/{order_id}/refund")
+async def ops_refund_payment(
+    order_id: str,
+    body: RefundPaymentBody,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    try:
+        row = await cancel_toss_payment(db, order_id=order_id, cancel_reason=body.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _order_to_dict(row)
 
 
 @router.get("/companies/{company_key}/verification")

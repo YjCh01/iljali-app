@@ -50,6 +50,8 @@ class JobPostWriteDraft {
 
     this.importSourceLabel,
 
+    this.importSourceUrl,
+
     this.workCategoryId,
 
     this.requiredResumeItems = const [],
@@ -93,6 +95,9 @@ class JobPostWriteDraft {
   /// 외부 플랫폼 가져오기 출처 (예: 알바몬에서 가져옴)
   final String? importSourceLabel;
 
+  /// 가져온 원본 URL — 본인 회사 공고 확인(체크박스) 대상 판별용
+  final String? importSourceUrl;
+
   final String? workCategoryId;
 
   final List<ResumeItemKind> requiredResumeItems;
@@ -131,6 +136,8 @@ class JobPostWriteDraft {
     WorkerCategory? workerCategory,
 
     String? importSourceLabel,
+
+    String? importSourceUrl,
 
     String? workCategoryId,
 
@@ -171,6 +178,8 @@ class JobPostWriteDraft {
       notificationSettings: notificationSettings ?? this.notificationSettings,
 
       importSourceLabel: importSourceLabel ?? this.importSourceLabel,
+
+      importSourceUrl: importSourceUrl ?? this.importSourceUrl,
 
       workCategoryId: workCategoryId ?? this.workCategoryId,
 

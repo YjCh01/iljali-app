@@ -1,4 +1,4 @@
-"""공고 본문 이미지 재미러 — 알바몬은 BFF 재수집, 로고 오탐은 제거."""
+"""공고 본문 이미지 재미러 — 알바몬은 공개 페이지 재수집, 로고 오탐은 제거."""
 
 from __future__ import annotations
 
@@ -14,16 +14,13 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.job_sync_models import JobPostRow
-from app.services.albamon_bff_scraper import (
-    extract_albamon_recruit_no,
-    fetch_albamon_bff_detail,
-)
 from app.services.job_post_image_extractor import images_to_html
 from app.services.job_post_image_mirror import (
     is_external_job_cdn,
     is_our_job_media_url,
     mirror_image_urls,
 )
+from app.services.job_post_scraper import fetch_job_post
 
 logger = logging.getLogger(__name__)
 
@@ -289,35 +286,24 @@ async def remirror_job_post_images(
 
 
 async def _rescrape_albamon(row: JobPostRow, body: dict, source_url: str) -> dict:
-    recruit_no = extract_albamon_recruit_no(source_url)
-    if not recruit_no:
+    """알바몬 공개 페이지를 일반 스크레이퍼로 다시 가져와 본문 이미지를 재수집한다
+    (다른 플랫폼과 동일한 경로 — 비공개 내부 API는 쓰지 않음)."""
+    result = await fetch_job_post(source_url, platform="albamon")
+    if result.error:
         return {
             "id": row.id,
             "ok": False,
-            "reason": "recruitNo missing",
+            "reason": result.error,
             "source_url": source_url,
         }
-    detail = await fetch_albamon_bff_detail(recruit_no, page_url=source_url)
-    if detail.get("error"):
-        return {
-            "id": row.id,
-            "ok": False,
-            "reason": detail["error"],
-            "source_url": source_url,
-        }
-    images = list(detail.get("body_images") or [])
-    company_logo = (detail.get("company_logo") or "").strip()
-    if company_logo:
-        images = [u for u in images if u != company_logo]
+    images = list(result.description_images or [])
     if images:
-        images = await mirror_image_urls(images, referer=source_url)
         body["images"] = images
-        body["html"] = images_to_html(images)
+        body["html"] = result.description_html or images_to_html(images)
     else:
         body.pop("images", None)
-        content = (detail.get("content_html") or "").strip()
-        if content:
-            body["html"] = content
+        if result.description_html:
+            body["html"] = result.description_html
         else:
             body.pop("html", None)
     body["source_url"] = source_url
@@ -333,6 +319,5 @@ async def _rescrape_albamon(row: JobPostRow, body: dict, source_url: str) -> dic
         "ok": True,
         "changed": True,
         "image_count": len(images),
-        "action": "rescrape_bff",
-        "recruit_no": recruit_no,
+        "action": "rescrape_public_page",
     }

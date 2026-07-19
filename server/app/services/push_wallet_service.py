@@ -134,6 +134,23 @@ def consume_credit(db: Session, company_key: str, credit_type: str, count: int) 
     return True
 
 
+def revoke_credit_lot_for_order(db: Session, order_id: str) -> None:
+    """환불된 주문의 크레딧 배치 중 아직 쓰지 않은 잔여분만 회수한다(이미 소비한 만큼은
+    되돌리지 않음). 배치가 없거나 이미 회수됐으면 아무 것도 하지 않는다."""
+    lot = (
+        db.query(PushWalletCreditLotRow)
+        .filter(PushWalletCreditLotRow.source_order_id == order_id)
+        .first()
+    )
+    if lot is None or lot.swept or lot.remaining <= 0:
+        return
+    wallet = get_or_create_wallet(db, lot.company_key)
+    _apply_credit_delta(wallet, lot.credit_type, -lot.remaining)
+    lot.remaining = 0
+    lot.swept = True
+    db.commit()
+
+
 def grant_credit_lot(
     db: Session,
     company_key: str,

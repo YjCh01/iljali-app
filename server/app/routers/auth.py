@@ -44,6 +44,7 @@ from app.services.password_service import (
 )
 from app.services.entitlement_service import normalize_brn
 from app.services.phone_verify_service import normalize_phone, send_code, verify_code
+from app.services.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -267,7 +268,36 @@ def _ensure_active_member(row: QcMemberRow) -> None:
         raise HTTPException(status_code=403, detail="이용 제한된 계정입니다.")
 
 
-@router.post("/login", response_model=LoginResponse)
+_MINIMUM_AGE_YEARS = 14
+
+
+def _assert_minimum_age(seeker_profile: dict | None) -> None:
+    """개인정보보호법 제22조의2 — 만 14세 미만은 법정대리인 동의 없이 가입할 수 없다."""
+    if not seeker_profile:
+        return
+    raw = seeker_profile.get("dateOfBirth")
+    if not raw:
+        return
+    try:
+        birth_date = datetime.fromisoformat(str(raw).replace("Z", "+00:00")).date()
+    except ValueError:
+        return
+    today = datetime.utcnow().date()
+    age = today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+    if age < _MINIMUM_AGE_YEARS:
+        raise HTTPException(
+            status_code=403,
+            detail="만 14세 미만은 법정대리인 동의 없이 가입할 수 없습니다.",
+        )
+
+
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    dependencies=[Depends(rate_limit("login", max_calls=10, window_sec=60))],
+)
 def login(body: LoginBody, db: Session = Depends(get_db)):
     email = body.email.strip().lower()
     row = db.query(QcMemberRow).filter(QcMemberRow.email == email).first()
@@ -497,7 +527,11 @@ def find_email_corporate(
     return FindEmailResponse(found=len(masked) > 0, masked_emails=masked)
 
 
-@router.post("/password/reset", response_model=PasswordResetResponse)
+@router.post(
+    "/password/reset",
+    response_model=PasswordResetResponse,
+    dependencies=[Depends(rate_limit("password_reset", max_calls=5, window_sec=300))],
+)
 def reset_password(body: PasswordResetBody, db: Session = Depends(get_db)):
     email = body.email.strip().lower()
     member_type = (body.member_type or "seeker").strip().lower()
@@ -609,7 +643,11 @@ def reset_password(body: PasswordResetBody, db: Session = Depends(get_db)):
     return PasswordResetResponse(ok=True)
 
 
-@router.post("/email/send", response_model=EmailSendResponse)
+@router.post(
+    "/email/send",
+    response_model=EmailSendResponse,
+    dependencies=[Depends(rate_limit("email_send", max_calls=5, window_sec=60))],
+)
 def email_send(body: EmailSendBody):
     try:
         hint, mock = send_email_code(body.email)
@@ -623,7 +661,11 @@ def email_send(body: EmailSendBody):
     )
 
 
-@router.post("/email/verify", response_model=EmailVerifyResponse)
+@router.post(
+    "/email/verify",
+    response_model=EmailVerifyResponse,
+    dependencies=[Depends(rate_limit("email_verify", max_calls=10, window_sec=300))],
+)
 def email_verify(body: EmailVerifyBody):
     ok = verify_email_code(body.email, body.code)
     if not ok:
@@ -681,6 +723,7 @@ def patch_seeker_profile(
     if row.member_type != "seeker":
         raise HTTPException(status_code=400, detail="개인회원만 프로필을 저장할 수 있습니다.")
     _ensure_active_member(row)
+    _assert_minimum_age(body.seeker_profile)
 
     row.seeker_profile_json = json.dumps(
         body.seeker_profile or {},
@@ -693,7 +736,11 @@ def patch_seeker_profile(
     return _member_to_me(row)
 
 
-@router.post("/phone/send", response_model=PhoneSendResponse)
+@router.post(
+    "/phone/send",
+    response_model=PhoneSendResponse,
+    dependencies=[Depends(rate_limit("phone_send", max_calls=5, window_sec=60))],
+)
 def phone_send(body: PhoneSendBody):
     try:
         result = send_code(body.phone)
@@ -709,7 +756,11 @@ def phone_send(body: PhoneSendBody):
     )
 
 
-@router.post("/phone/verify", response_model=PhoneVerifyResponse)
+@router.post(
+    "/phone/verify",
+    response_model=PhoneVerifyResponse,
+    dependencies=[Depends(rate_limit("phone_verify", max_calls=10, window_sec=300))],
+)
 def phone_verify(body: PhoneVerifyBody):
     ok = verify_code(body.phone, body.code)
     if not ok:

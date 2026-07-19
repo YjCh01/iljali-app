@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app.database import Base, SessionLocal, engine
 from app.main import app
 from app.push_wallet_models import PushWalletCreditLotRow
+from app.services.auth_token_service import issue_token
 from app.services.push_wallet_service import get_or_create_wallet, grant_credit_lot
 
 client = TestClient(app)
@@ -12,6 +13,17 @@ client = TestClient(app)
 
 def setup_module():
     Base.metadata.create_all(bind=engine)
+
+
+def _employer_headers(company_key: str) -> dict[str, str]:
+    token = issue_token(
+        {
+            "sub": "corp-lots@test.iljari.co.kr",
+            "member_type": "corporate",
+            "company_key": company_key,
+        }
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_lots_endpoint_lists_active_lots_soonest_expiry_first():
@@ -42,7 +54,9 @@ def test_lots_endpoint_lists_active_lots_soonest_expiry_first():
     db.commit()
     db.close()
 
-    resp = client.get(f"/v1/wallet/{company_key}/lots")
+    resp = client.get(
+        f"/v1/wallet/{company_key}/lots", headers=_employer_headers(company_key)
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["company_key"] == company_key
@@ -71,12 +85,17 @@ def test_lots_endpoint_excludes_swept_expired_lots():
     db.commit()
     db.close()
 
-    resp = client.get(f"/v1/wallet/{company_key}/lots")
+    resp = client.get(
+        f"/v1/wallet/{company_key}/lots", headers=_employer_headers(company_key)
+    )
     assert resp.status_code == 200
     assert resp.json()["lots"] == []
 
 
 def test_lots_endpoint_empty_for_new_company():
-    resp = client.get("/v1/wallet/7010003333/lots")
+    company_key = "7010003333"
+    resp = client.get(
+        f"/v1/wallet/{company_key}/lots", headers=_employer_headers(company_key)
+    )
     assert resp.status_code == 200
     assert resp.json()["lots"] == []

@@ -1,11 +1,13 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.deps.admin_auth import require_admin_api_key
 from app.models import AbuseFlag, Company
 from app.qc_models import QcMemberRow
+from app.routers.job_board import _assert_employer_company, _resolve_bearer
 from app.schemas import (
     AbuseFlagResponse,
     AdminReviewRequest,
@@ -20,7 +22,10 @@ sub_router = APIRouter(prefix="/v1/subscriptions", tags=["subscriptions"])
 
 
 @router.get("/compliance/flags", response_model=list[AbuseFlagResponse])
-def list_flags(db: Session = Depends(get_db)):
+def list_flags(
+    db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_api_key),
+):
     rows = db.query(AbuseFlag).order_by(AbuseFlag.created_at.desc()).limit(50).all()
     return [
         AbuseFlagResponse(
@@ -36,7 +41,10 @@ def list_flags(db: Session = Depends(get_db)):
 
 
 @router.get("/compliance/business-records", response_model=list[BusinessRecordResponse])
-def list_business_records(db: Session = Depends(get_db)):
+def list_business_records(
+    db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_api_key),
+):
     rows = db.query(Company).order_by(Company.created_at.desc()).all()
     return [
         BusinessRecordResponse(
@@ -55,7 +63,10 @@ def list_business_records(db: Session = Depends(get_db)):
 
 @router.patch("/companies/{company_key}/review")
 def review_company(
-    company_key: str, body: AdminReviewRequest, db: Session = Depends(get_db)
+    company_key: str,
+    body: AdminReviewRequest,
+    db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_api_key),
 ):
     brn = normalize_brn(company_key)
     company = db.query(Company).filter(Company.company_key == brn).first()
@@ -89,7 +100,11 @@ def review_company(
 
 
 @router.patch("/companies/{company_key}/suspend")
-def suspend_company(company_key: str, db: Session = Depends(get_db)):
+def suspend_company(
+    company_key: str,
+    db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_api_key),
+):
     brn = normalize_brn(company_key)
     company = db.query(Company).filter(Company.company_key == brn).first()
     if not company:
@@ -118,7 +133,13 @@ class EnterpriseInquiryRequest(BaseModel):
 
 
 @sub_router.post("/enterprise-inquiry")
-def enterprise_inquiry(body: EnterpriseInquiryRequest, db: Session = Depends(get_db)):
+def enterprise_inquiry(
+    body: EnterpriseInquiryRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, body.company_key)
     brn = normalize_brn(body.company_key)
     db.add(
         AbuseFlag(
@@ -136,7 +157,13 @@ def enterprise_inquiry(body: EnterpriseInquiryRequest, db: Session = Depends(get
 
 
 @sub_router.post("/subscribe", response_model=SubscribeResponse)
-def subscribe(body: SubscribeRequest, db: Session = Depends(get_db)):
+def subscribe(
+    body: SubscribeRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer_company(payload, body.company_key)
     brn = normalize_brn(body.company_key)
     company = db.query(Company).filter(Company.company_key == brn).first()
     if not company:

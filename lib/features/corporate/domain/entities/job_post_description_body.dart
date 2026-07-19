@@ -6,11 +6,19 @@ class JobPostDescriptionBody {
     this.text = '',
     this.html = '',
     this.imageUrls = const [],
+    this.sourceUrl,
+    this.sourceOwnershipConfirmedAt,
   });
 
   final String text;
   final String html;
   final List<String> imageUrls;
+
+  /// 외부 URL에서 가져와 작성한 경우의 원본 URL
+  final String? sourceUrl;
+
+  /// 본인 회사가 게시한 공고임을 확인(체크박스)한 시각 — 분쟁 대비 기록용
+  final DateTime? sourceOwnershipConfirmedAt;
 
   bool get hasContent =>
       text.trim().isNotEmpty ||
@@ -38,6 +46,10 @@ class JobPostDescriptionBody {
         if (text.isNotEmpty) 'text': text,
         if (html.isNotEmpty) 'html': html,
         if (imageUrls.isNotEmpty) 'images': imageUrls,
+        if (sourceUrl != null && sourceUrl!.isNotEmpty) 'source_url': sourceUrl,
+        if (sourceOwnershipConfirmedAt != null)
+          'source_ownership_confirmed_at':
+              sourceOwnershipConfirmedAt!.toIso8601String(),
       };
 
   String toJsonString() => jsonEncode(toJson());
@@ -70,10 +82,15 @@ class JobPostDescriptionBody {
     if (imageUrls.isEmpty && html.isNotEmpty) {
       imageUrls = extractImageUrlsFromHtml(html);
     }
+    final confirmedAtRaw = map['source_ownership_confirmed_at'] as String?;
     return JobPostDescriptionBody(
       text: map['text'] as String? ?? '',
       html: html,
       imageUrls: imageUrls,
+      sourceUrl: map['source_url'] as String?,
+      sourceOwnershipConfirmedAt: confirmedAtRaw != null
+          ? DateTime.tryParse(confirmedAtRaw)
+          : null,
     );
   }
 
@@ -98,11 +115,16 @@ class JobPostDescriptionBody {
     String? text,
     String? html,
     List<String>? imageUrls,
+    String? sourceUrl,
+    DateTime? sourceOwnershipConfirmedAt,
   }) {
     return JobPostDescriptionBody(
       text: text ?? this.text,
       html: html ?? this.html,
       imageUrls: imageUrls ?? this.imageUrls,
+      sourceUrl: sourceUrl ?? this.sourceUrl,
+      sourceOwnershipConfirmedAt:
+          sourceOwnershipConfirmedAt ?? this.sourceOwnershipConfirmedAt,
     );
   }
 

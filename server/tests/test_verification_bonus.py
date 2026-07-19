@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.database import Base, engine
 from app.main import app
+from app.services.auth_token_service import issue_token
 from app.services.nts_service import NtsLookupResult
 
 client = TestClient(app)
@@ -9,6 +10,17 @@ client = TestClient(app)
 
 def setup_module():
     Base.metadata.create_all(bind=engine)
+
+
+def _employer_headers(company_key: str) -> dict[str, str]:
+    token = issue_token(
+        {
+            "sub": "corp-verification@test.iljari.co.kr",
+            "member_type": "corporate",
+            "company_key": company_key,
+        }
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _stub_nts(monkeypatch, *, industry_name: str) -> None:
@@ -43,14 +55,16 @@ def test_verified_business_grants_bonus_once(monkeypatch):
     assert first.status_code == 200
     assert first.json()["status"] == "verified"
 
-    wallet = client.get(f"/v1/wallet/{brn}").json()
+    wallet = client.get(f"/v1/wallet/{brn}", headers=_employer_headers(brn)).json()
     assert wallet["package_credits"] == 5
     assert wallet["location_slots_from_packages"] == 5
 
     # 재인증(재조회) 해도 중복 지급되지 않음
     second = client.post("/v1/compliance/business/verify", json=body)
     assert second.status_code == 200
-    wallet_after = client.get(f"/v1/wallet/{brn}").json()
+    wallet_after = client.get(
+        f"/v1/wallet/{brn}", headers=_employer_headers(brn)
+    ).json()
     assert wallet_after["package_credits"] == 5
 
 
@@ -66,5 +80,5 @@ def test_admin_review_required_business_does_not_grant_bonus(monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "adminReviewRequired"
 
-    wallet = client.get(f"/v1/wallet/{brn}").json()
+    wallet = client.get(f"/v1/wallet/{brn}", headers=_employer_headers(brn)).json()
     assert wallet["package_credits"] == 0

@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.database import Base, engine
 from app.main import app
+from app.services.auth_token_service import issue_token
 
 client = TestClient(app)
 
@@ -12,6 +13,11 @@ COMPANY_KEY = "5055055055"
 
 def setup_module():
     Base.metadata.create_all(bind=engine)
+
+
+def _seeker_headers(seeker_email: str) -> dict[str, str]:
+    token = issue_token({"sub": seeker_email, "member_type": "seeker"})
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _submit(seeker_email: str, **overrides) -> dict:
@@ -27,7 +33,11 @@ def _submit(seeker_email: str, **overrides) -> dict:
         "held_credential_ids_json": json.dumps(["forklift_operator_cert", "health_certificate"]),
     }
     body.update(overrides)
-    response = client.post("/v1/hiring/applications", json=body)
+    response = client.post(
+        "/v1/hiring/applications",
+        json=body,
+        headers=_seeker_headers(seeker_email),
+    )
     assert response.status_code == 200
     return response.json()
 
@@ -42,7 +52,10 @@ def test_credential_snapshot_persists_through_create_and_get():
         "health_certificate",
     ]
 
-    fetched = client.get(f"/v1/hiring/applications/{created['id']}")
+    fetched = client.get(
+        f"/v1/hiring/applications/{created['id']}",
+        headers=_seeker_headers("seeker-cred-snap-1@test.iljari.co.kr"),
+    )
     assert fetched.status_code == 200
     assert json.loads(fetched.json()["required_credential_ids_json"]) == [
         "forklift_operator_cert"
@@ -54,13 +67,15 @@ def test_credential_snapshot_persists_through_create_and_get():
 
 
 def test_credential_snapshot_defaults_to_empty_list():
+    seeker_email = "seeker-cred-snap-2@test.iljari.co.kr"
     created = client.post(
         "/v1/hiring/applications",
         json={
             "post_id": "post-cred-snap-2",
             "company_key": COMPANY_KEY,
-            "seeker_email": "seeker-cred-snap-2@test.iljari.co.kr",
+            "seeker_email": seeker_email,
         },
+        headers=_seeker_headers(seeker_email),
     )
     assert created.status_code == 200
     assert json.loads(created.json()["required_credential_ids_json"]) == []

@@ -80,6 +80,8 @@ class CorporateJobPostWriteFormHostState
   List<ResumeItemKind> _requiredResumeItems = const [];
   List<String> _requiredCredentialIds = const [];
   String? _importSourceLabel;
+  String? _importSourceUrl;
+  bool _sourceOwnershipConfirmed = false;
 
   static JobPostDescriptionBody _initialDescriptionBody(JobPostWriteDraft draft) {
     if (draft.descriptionBody.hasContent) return draft.descriptionBody;
@@ -134,6 +136,8 @@ class CorporateJobPostWriteFormHostState
     _requiredResumeItems = List<ResumeItemKind>.from(draft.requiredResumeItems);
     _requiredCredentialIds = List<String>.from(draft.requiredCredentialIds);
     _importSourceLabel = draft.importSourceLabel;
+    _importSourceUrl = draft.importSourceUrl;
+    if (draft.importSourceLabel == null) _sourceOwnershipConfirmed = false;
     if (!ProductFeatureFlags.isWorkerCategoryAllowed(_workerCategory)) {
       _workerCategory = ProductFeatureFlags.defaultWorkerCategory;
     }
@@ -252,6 +256,15 @@ class CorporateJobPostWriteFormHostState
   Future<void> _submit() async {
     if (_submitting) return;
 
+    if (_importSourceLabel != null && !_sourceOwnershipConfirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('본인 회사가 게시한 공고임을 확인해 주세요.'),
+        ),
+      );
+      return;
+    }
+
     if (_workplace == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('근무지를 검색해 주세요.')),
@@ -319,12 +332,18 @@ class CorporateJobPostWriteFormHostState
 
     final registeredBy = AuthSession.instance.currentUser?.corporateProfile;
     final wageLabel = _salaryPayType.formatAmount(_wageController.text);
+    final descriptionBody = _importSourceLabel != null
+        ? _descriptionBody.copyWith(
+            sourceUrl: _importSourceUrl,
+            sourceOwnershipConfirmedAt: DateTime.now(),
+          )
+        : _descriptionBody;
     final result = await _createPost(
       title: _titleController.text,
       workplace: _workplace!,
       hourlyWage: wageLabel,
       workSchedule: _scheduleController.text,
-      descriptionBody: _descriptionBody,
+      descriptionBody: descriptionBody,
       paymentSchedule: paymentSchedule,
       workerCategory: _workerCategory,
       workPeriodNegotiable:
@@ -512,7 +531,20 @@ class CorporateJobPostWriteFormHostState
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            value: _sourceOwnershipConfirmed,
+            onChanged: (value) =>
+                setState(() => _sourceOwnershipConfirmed = value ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: const Text(
+              '본인 회사가 게시한 공고가 맞습니다',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 8),
         ],
         CorporateJobPostForm(
           titleController: _titleController,

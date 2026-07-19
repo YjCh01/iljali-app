@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.job_sync_models import PaymentOrderRow
+from app.routers.job_board import _assert_employer_company, _resolve_bearer
 from app.services.payment_service import (
     confirm_toss_payment,
     get_or_create_order,
@@ -12,6 +13,13 @@ from app.services.payment_service import (
 )
 
 router = APIRouter(prefix="/v1/payments", tags=["payments"])
+
+
+def _assert_order_owner(payload: dict, company_key: str | None) -> None:
+    """주문에 company_key가 있으면 그 기업 소유임을, 없으면 최소한 로그인된
+    사용자임을(익명 주문 생성/조회 방지) 확인한다."""
+    if company_key:
+        _assert_employer_company(payload, company_key)
 
 
 class ChargeRequest(BaseModel):
@@ -51,7 +59,13 @@ class ConfirmRequest(BaseModel):
 
 
 @router.post("/charge", response_model=ChargeResponse)
-async def charge_payment(body: ChargeRequest, db: Session = Depends(get_db)):
+async def charge_payment(
+    body: ChargeRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_order_owner(payload, body.company_key)
     row = get_or_create_order(db, body)
     db.commit()
 
@@ -82,7 +96,14 @@ async def charge_payment(body: ChargeRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/confirm", response_model=ChargeResponse)
-async def confirm_payment(body: ConfirmRequest, db: Session = Depends(get_db)):
+async def confirm_payment(
+    body: ConfirmRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
+    existing = db.get(PaymentOrderRow, body.order_id)
+    _assert_order_owner(payload, existing.company_key if existing else None)
     try:
         row = await confirm_toss_payment(
             db,
@@ -104,10 +125,16 @@ async def confirm_payment(body: ConfirmRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/orders/{order_id}")
-def get_payment_order(order_id: str, db: Session = Depends(get_db)):
+def get_payment_order(
+    order_id: str,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    payload = _resolve_bearer(authorization)
     row = db.get(PaymentOrderRow, order_id)
     if row is None:
         raise HTTPException(status_code=404, detail="주문을 찾을 수 없습니다.")
+    _assert_order_owner(payload, row.company_key)
     return {
         "order_id": row.order_id,
         "status": row.status,

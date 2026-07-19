@@ -120,3 +120,4 @@ class PaymentOrderRow(Base):
     credit_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     credit_location_slots: Mapped[int | None] = mapped_column(Integer, nullable=True)
     credit_granted: Mapped[bool] = mapped_column(Boolean, default=False)
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

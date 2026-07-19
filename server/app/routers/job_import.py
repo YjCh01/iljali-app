@@ -5,12 +5,19 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
+from app.routers.job_board import _resolve_bearer
 from app.services.job_post_scraper import detect_platform, fetch_job_post
 
 router = APIRouter(prefix="/v1/job-import", tags=["job-import"])
+
+
+def _assert_employer(payload: dict) -> None:
+    member_type = str(payload.get("member_type", ""))
+    if member_type not in ("employer", "corporate"):
+        raise HTTPException(status_code=403, detail="기업회원만 이용할 수 있습니다.")
 
 
 def _description_body_payload(
@@ -77,7 +84,12 @@ def _parse_text(text: str) -> dict:
 
 
 @router.post("/parse")
-async def parse_job_import(body: JobImportRequest):
+async def parse_job_import(
+    body: JobImportRequest,
+    authorization: str | None = Header(default=None),
+):
+    payload = _resolve_bearer(authorization)
+    _assert_employer(payload)
     raw_text = (body.text or "").strip()
     platform = body.platform or "unknown"
 

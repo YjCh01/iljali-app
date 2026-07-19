@@ -284,6 +284,7 @@ _PAYMENT_ORDER_COLUMNS_SQLITE = {
     "credit_granted": (
         "ALTER TABLE payment_orders ADD COLUMN credit_granted BOOLEAN DEFAULT 0"
     ),
+    "refunded_at": "ALTER TABLE payment_orders ADD COLUMN refunded_at DATETIME",
 }
 
 _PAYMENT_ORDER_COLUMNS_POSTGRES = {
@@ -300,6 +301,9 @@ _PAYMENT_ORDER_COLUMNS_POSTGRES = {
     "credit_granted": (
         "ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS "
         "credit_granted BOOLEAN DEFAULT FALSE"
+    ),
+    "refunded_at": (
+        "ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP"
     ),
 }
 

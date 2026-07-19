@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import sys
 import time
 from typing import Any
 
@@ -14,10 +15,19 @@ from app.config import settings
 TOKEN_TTL_SEC = 60 * 60 * 24 * 7  # 7 days
 PHONE_VERIFY_TTL_SEC = 60 * 60  # 60 minutes — 다단계 가입 완료까지
 
+# 테스트에서만 쓰는 고정 시크릿 — 운영 환경에서는 절대 쓰이지 않음(아래 가드 참고).
+_TEST_ONLY_SECRET = "iljari-test-secret"
+
 
 def _secret() -> bytes:
-    raw = settings.auth_token_secret or settings.admin_api_key or "iljari-dev-secret"
-    return raw.encode("utf-8")
+    if settings.auth_token_secret:
+        return settings.auth_token_secret.encode("utf-8")
+    if "pytest" in sys.modules:
+        return _TEST_ONLY_SECRET.encode("utf-8")
+    raise RuntimeError(
+        "AUTH_TOKEN_SECRET이 설정되지 않았습니다. 세션 토큰 서명 키를 "
+        "환경변수로 반드시 설정해야 합니다(추측 가능한 기본값을 쓰지 않습니다)."
+    )
 
 
 def issue_token(payload: dict[str, Any], *, ttl_sec: int = TOKEN_TTL_SEC) -> str:

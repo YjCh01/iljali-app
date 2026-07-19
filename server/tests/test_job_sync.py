@@ -80,13 +80,16 @@ def test_job_board_rejects_cross_company_update():
 
 
 def test_hiring_and_chat():
+    email = "seeker@test.iljari.co.kr"
+    headers = _seeker_auth_headers(email)
     app_row = client.post(
         "/v1/hiring/applications",
         json={
             "post_id": "post_test",
-            "seeker_email": "seeker@test.iljari.co.kr",
+            "seeker_email": email,
             "seeker_name": "구직자",
         },
+        headers=headers,
     )
     assert app_row.status_code == 200
     app_id = app_row.json()["id"]
@@ -94,28 +97,33 @@ def test_hiring_and_chat():
     msg = client.post(
         f"/v1/chat-sync/{app_id}/messages",
         json={"sender_role": "seeker", "body": "안녕하세요"},
+        headers=headers,
     )
     assert msg.status_code == 200
 
-    messages = client.get(f"/v1/chat-sync/{app_id}/messages")
+    messages = client.get(f"/v1/chat-sync/{app_id}/messages", headers=headers)
     assert messages.status_code == 200
     assert len(messages.json()["messages"]) == 1
 
 
 def test_chat_websocket_broadcast():
+    email = "ws@test.iljari.co.kr"
+    headers = _seeker_auth_headers(email)
     app_row = client.post(
         "/v1/hiring/applications",
         json={
             "post_id": "post_ws",
-            "seeker_email": "ws@test.iljari.co.kr",
+            "seeker_email": email,
             "seeker_name": "실시간",
         },
+        headers=headers,
     )
     assert app_row.status_code == 200
     app_id = app_row.json()["id"]
+    token = headers["Authorization"].split(" ", 1)[1]
 
     with client.websocket_connect(
-        f"/v1/chat-sync/ws/{app_id}?role=employer"
+        f"/v1/chat-sync/ws/{app_id}?role=seeker&token={token}"
     ) as ws:
         hello = ws.receive_json()
         assert hello["type"] == "connected"
@@ -124,6 +132,7 @@ def test_chat_websocket_broadcast():
         posted = client.post(
             f"/v1/chat-sync/{app_id}/messages",
             json={"sender_role": "seeker", "body": "실시간 테스트"},
+            headers=headers,
         )
         assert posted.status_code == 200
 
@@ -144,6 +153,7 @@ def test_withdraw_application_removes_from_bootstrap():
             "seeker_email": email,
             "seeker_name": "최영진",
         },
+        headers=headers,
     )
     assert created.status_code == 200
 
@@ -218,6 +228,7 @@ def test_list_applications_allows_the_seeker_themself():
             "seeker_email": email,
             "seeker_name": "본인",
         },
+        headers=_seeker_auth_headers(email),
     )
     resp = client.get(
         "/v1/hiring/applications",

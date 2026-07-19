@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:map/core/admin/admin_ops_api_client.dart';
 import 'package:map/core/compliance/business_verification_status.dart';
-import 'package:map/core/compliance/data/compliance_api_client.dart';
 import 'package:map/core/compliance/data/compliance_repository.dart';
 import 'package:map/core/compliance/services/abuse_detection_service.dart';
 import 'package:map/core/compliance/services/admin_outsourcing_roi_watchlist.dart';
 import 'package:map/core/compliance/verified_business_record.dart';
-import 'package:map/core/config/env_config.dart';
 import 'package:map/core/constants/app_colors.dart';
 import 'package:map/core/hiring/local_hiring_repository.dart';
 import 'package:map/core/session/auth_session.dart';
@@ -74,10 +73,10 @@ class _AdminComplianceDashboardPageState
   Future<void> _approve(VerifiedBusinessRecord record) async {
     final repo = await ComplianceRepository.create();
     await repo.approveAdminReview(record.businessRegistrationNumber);
-    if (EnvConfig.isComplianceApiEnabled) {
+    if (AdminOpsApiClient().isEnabled) {
       try {
-        await ComplianceApiClient().adminReviewCompany(
-          companyKey: record.businessRegistrationNumber,
+        await AdminOpsApiClient().reviewCompanyLegacy(
+          record.businessRegistrationNumber,
           approved: true,
         );
       } on Object {
@@ -97,10 +96,10 @@ class _AdminComplianceDashboardPageState
   Future<void> _reject(VerifiedBusinessRecord record) async {
     final repo = await ComplianceRepository.create();
     await repo.rejectAdminReview(record.businessRegistrationNumber);
-    if (EnvConfig.isComplianceApiEnabled) {
+    if (AdminOpsApiClient().isEnabled) {
       try {
-        await ComplianceApiClient().adminReviewCompany(
-          companyKey: record.businessRegistrationNumber,
+        await AdminOpsApiClient().reviewCompanyLegacy(
+          record.businessRegistrationNumber,
           approved: false,
         );
       } on Object {}
@@ -116,9 +115,9 @@ class _AdminComplianceDashboardPageState
   Future<void> _suspend(VerifiedBusinessRecord record) async {
     final repo = await ComplianceRepository.create();
     await repo.suspendCompany(record.businessRegistrationNumber);
-    if (EnvConfig.isComplianceApiEnabled) {
+    if (AdminOpsApiClient().isEnabled) {
       try {
-        await ComplianceApiClient().adminSuspendCompany(
+        await AdminOpsApiClient().suspendCompanyLegacy(
           record.businessRegistrationNumber,
         );
       } on Object {}

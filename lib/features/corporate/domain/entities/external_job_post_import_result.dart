@@ -83,6 +83,7 @@ class ExternalJobPostImportResult {
       workerCategory: workerCategory,
       paymentDate: paymentDate,
       importSourceLabel: importSourceLabel,
+      importSourceUrl: sourceUrl,
       workScheduleNegotiable: negotiable,
       descriptionBody: descriptionBody,
     );
