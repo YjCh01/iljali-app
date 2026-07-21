@@ -67,6 +67,7 @@ from app.services.map_content_purge_service import (
 from app.services.qc_data_purge_service import purge_qc_data
 from app.models import Company
 from app.services.entitlement_service import get_or_create_company, normalize_brn
+from app.services.location_usage_log_service import list_usage_logs
 from app.services.payment_service import cancel_toss_payment
 from app.services.push_wallet_service import get_or_create_wallet, wallet_to_response
 from app.services.sanction_policy import policy_catalog
@@ -354,6 +355,18 @@ def ops_get_payment(
     if row is None:
         raise HTTPException(status_code=404, detail="주문을 찾을 수 없습니다.")
     return _order_to_dict(row)
+
+
+@router.get("/location-usage-logs")
+def ops_list_location_usage_logs(
+    usage_type: str | None = Query(default=None),
+    limit: int = Query(default=100, le=500),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_admin_api_key),
+):
+    """위치정보 이용ㆍ제공사실 확인 자료 취급대장 조회."""
+    logs = list_usage_logs(db, usage_type=usage_type, limit=limit)
+    return {"logs": logs, "count": len(logs)}
 
 
 @router.post("/payments/{order_id}/refund")

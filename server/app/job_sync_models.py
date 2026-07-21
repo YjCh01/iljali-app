@@ -121,3 +121,34 @@ class PaymentOrderRow(Base):
     credit_location_slots: Mapped[int | None] = mapped_column(Integer, nullable=True)
     credit_granted: Mapped[bool] = mapped_column(Boolean, default=False)
     refunded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class LocationUsageLogRow(Base):
+    """위치정보의 이용ㆍ제공사실 확인 자료 — 위치정보법상 취급대장 전자 기록.
+
+    사업계획서에 기재한 4가지 이용 유형(지도 노출/출근 위치검증/근무지·PUSH 노출/
+    반경 PUSH)을 동일한 형식으로 남긴다: 대상ㆍ취득경로ㆍ제공 서비스ㆍ제공받는자ㆍ
+    이용일시.
+    """
+
+    __tablename__ = "location_usage_logs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    # "map_view" | "checkin_verify" | "push_radius"
+    usage_type: Mapped[str] = mapped_column(String(32), index=True)
+    # 대상 — "구직자(개인회원)" | "기업회원"
+    subject_label: Mapped[str] = mapped_column(String(64), default="")
+    subject_email: Mapped[str] = mapped_column(String(200), default="", index=True)
+    # 취득경로 — 예: "이용자 단말 GPS서비스"
+    acquisition_path: Mapped[str] = mapped_column(String(200), default="")
+    # 제공 서비스 — 예: "출근ㆍ근태 위치검증(반경 200m)"
+    service_description: Mapped[str] = mapped_column(String(200), default="")
+    # 제공받는자 — 예: "본인", "본인ㆍ해당기업"
+    recipient_label: Mapped[str] = mapped_column(String(200), default="")
+    latitude: Mapped[float | None] = mapped_column(nullable=True)
+    longitude: Mapped[float | None] = mapped_column(nullable=True)
+    # 자유 형식 참고값 — post_id/application_id/거리(m)/성공여부 등
+    detail_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )

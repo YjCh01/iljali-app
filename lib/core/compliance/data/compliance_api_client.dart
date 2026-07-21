@@ -162,6 +162,46 @@ class ComplianceApiClient {
     );
   }
 
+  /// 출근·근태 위치검증 이용사실을 서버 취급대장에 기록 (위치정보법).
+  /// 네트워크 오류는 호출부에서 무음 처리하는 로그성 호출이므로 예외를 던지지 않는다.
+  Future<void> logAttendanceVerification({
+    required String applicationId,
+    required String role,
+    required bool allowed,
+    required bool withinGeofence,
+    double? distanceMeters,
+    bool isMocked = false,
+    String reason = '',
+    double? latitude,
+    double? longitude,
+    String? companyKey,
+  }) async {
+    final token = AuthSession.instance.accessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      await _client.post(
+        Uri.parse('$_baseUrl/v1/compliance/attendance-verification-log'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'application_id': applicationId,
+          'role': role,
+          'allowed': allowed,
+          'within_geofence': withinGeofence,
+          if (distanceMeters != null) 'distance_meters': distanceMeters,
+          'is_mocked': isMocked,
+          'reason': reason,
+          if (latitude != null) 'latitude': latitude,
+          if (longitude != null) 'longitude': longitude,
+          if (companyKey != null) 'company_key': companyKey,
+        }),
+      );
+    } catch (_) {
+      // 로그성 호출 — 실패해도 출근 확인 흐름을 막지 않는다.
+    }
+  }
 }
 
 class ComplianceApiException implements Exception {

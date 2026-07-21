@@ -5,6 +5,7 @@ import 'package:map/features/admin/presentation/panels/admin_audit_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_chat_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_dashboard_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_jobs_panel.dart';
+import 'package:map/features/admin/presentation/panels/admin_location_usage_log_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_map_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_members_panel.dart';
 import 'package:map/features/admin/presentation/panels/admin_pilot_panel.dart';
@@ -66,6 +67,8 @@ class _AdminWebShellPageState extends State<AdminWebShellPage> {
         return AdminAuditPanel(controller: _controller);
       case AdminNavSection.compliance:
         return AdminWorkplaceMismatchPanel(controller: _controller);
+      case AdminNavSection.locationLog:
+        return AdminLocationUsageLogPanel(controller: _controller);
     }
   }
 

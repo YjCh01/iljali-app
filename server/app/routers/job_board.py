@@ -9,6 +9,7 @@ from app.database import get_db
 from app.job_sync_models import JobPostRow
 from app.services.auth_token_service import verify_token
 from app.services.entitlement_service import normalize_brn
+from app.services.location_usage_log_service import record_usage
 from app.services.workplace_service import resolve_or_create_workplace
 
 router = APIRouter(prefix="/v1/job-board", tags=["job-board"])
@@ -180,13 +181,31 @@ def record_post_view(post_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/posts/{post_id}/map-impression")
-def record_map_impression(post_id: str, db: Session = Depends(get_db)):
+def record_map_impression(
+    post_id: str,
+    seeker_email: str | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    db: Session = Depends(get_db),
+):
     row = db.get(JobPostRow, post_id)
     if row is None:
         raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
     row.map_impression_count = (row.map_impression_count or 0) + 1
     db.commit()
     db.refresh(row)
+    record_usage(
+        db,
+        usage_type="map_view",
+        subject_label="구직자(개인회원)",
+        subject_email=seeker_email or "",
+        acquisition_path="이용자 단말 OS 위치서비스",
+        service_description=f"지도상 공고·근무지 위치 표시 (post_id={post_id})",
+        recipient_label="본인(서비스 화면)",
+        latitude=latitude if latitude is not None else row.workplace_latitude,
+        longitude=longitude if longitude is not None else row.workplace_longitude,
+        detail={"post_id": post_id},
+    )
     return {"post_id": post_id, "map_impression_count": row.map_impression_count}
 
 

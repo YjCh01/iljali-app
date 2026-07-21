@@ -301,6 +301,22 @@ class AdminOpsApiClient {
         'status': status,
       });
 
+  /// 위치정보 이용ㆍ제공사실 확인 자료 취급대장 조회
+  Future<List<Map<String, dynamic>>> locationUsageLogs({
+    String? usageType,
+    int limit = 100,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/v1/admin/ops/location-usage-logs').replace(
+      queryParameters: {
+        if (usageType != null && usageType.isNotEmpty) 'usage_type': usageType,
+        'limit': '$limit',
+      },
+    );
+    final body = _decode(await _client.get(uri, headers: _headers));
+    final list = body['logs'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   Future<List<Map<String, dynamic>>> auditLogs({int limit = 50}) async {
     final uri = Uri.parse('$_baseUrl/v1/admin/ops/audit?limit=$limit');
     final body = _decode(await _client.get(uri, headers: _headers));

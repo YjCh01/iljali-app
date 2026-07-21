@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import AbuseFlag, Company, ContactEvent, industry_requires_review
 from app.schemas import (
+    AttendanceVerificationLogRequest,
     ContactEntitlementResponse,
     ContactEventRequest,
     ResubmitCertificateRequest,
@@ -19,6 +20,7 @@ from app.services.entitlement_service import (
     increment_contact,
     normalize_brn,
 )
+from app.services.location_usage_log_service import record_usage
 from app.services.nts_service import NtsService
 from app.services.ocr_business_cross_check import (
     OcrCrossCheckInput,
@@ -229,6 +231,41 @@ def log_contact_event(
         access = evaluate_contact(db, company)
 
     return ContactEntitlementResponse(**access)
+
+
+@router.post("/attendance-verification-log")
+def log_attendance_verification(
+    body: AttendanceVerificationLogRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """출근·근태 위치검증(반경 200m) 이용사실 확인 자료 — 위치정보법상 취급대장 기록."""
+    payload = _resolve_bearer(authorization)
+    email = str(payload.get("sub", "")).strip().lower()
+    member_type = str(payload.get("member_type", ""))
+    subject_label = "구직자(개인회원)" if member_type == "seeker" else "기업회원"
+    record_usage(
+        db,
+        usage_type="checkin_verify",
+        subject_label=subject_label,
+        subject_email=email,
+        acquisition_path="이용자 단말 GPS서비스",
+        service_description="출근·근태 시 근무지 대비 위치 검증(반경 200m)",
+        recipient_label="본인·해당기업(채용절차범위)",
+        latitude=body.latitude,
+        longitude=body.longitude,
+        detail={
+            "application_id": body.application_id,
+            "role": body.role,
+            "allowed": body.allowed,
+            "within_geofence": body.within_geofence,
+            "distance_meters": body.distance_meters,
+            "is_mocked": body.is_mocked,
+            "reason": body.reason,
+            "company_key": body.company_key,
+        },
+    )
+    return {"ok": True}
 
 
 @router.post("/workplace-mismatch")

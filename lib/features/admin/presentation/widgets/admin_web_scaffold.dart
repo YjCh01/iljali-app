@@ -14,7 +14,8 @@ enum AdminNavSection {
   qc('QC 시드', Icons.science_outlined),
   pilot('파일럿', Icons.directions_bus_outlined),
   audit('감사 로그', Icons.receipt_long_outlined),
-  compliance('컴플라이언스', Icons.verified_user_outlined);
+  compliance('컴플라이언스', Icons.verified_user_outlined),
+  locationLog('위치정보 취급대장', Icons.my_location_outlined);
 
   const AdminNavSection(this.label, this.icon);
   final String label;

@@ -50,6 +50,19 @@ class ContactEventRequest(BaseModel):
     tier: str = "basic"
 
 
+class AttendanceVerificationLogRequest(BaseModel):
+    application_id: str
+    role: str  # "seeker" | "employer"
+    allowed: bool
+    within_geofence: bool
+    distance_meters: float | None = None
+    is_mocked: bool = False
+    reason: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    company_key: str | None = None
+
+
 class SubscribeRequest(BaseModel):
     company_key: str
     tier: Literal["starter", "growth", "enterprise"]

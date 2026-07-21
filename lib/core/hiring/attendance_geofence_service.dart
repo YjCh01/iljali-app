@@ -1,3 +1,4 @@
+import 'package:map/core/compliance/data/compliance_api_client.dart';
 import 'package:map/core/compliance/data/compliance_repository.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/geo/geo_coordinate.dart';
@@ -159,6 +160,22 @@ abstract final class AttendanceGeofenceService {
       'longitude': longitude,
       if (companyKey != null) 'companyKey': companyKey,
     });
+
+    final apiClient = ComplianceApiClient();
+    if (apiClient.isEnabled) {
+      await apiClient.logAttendanceVerification(
+        applicationId: applicationId,
+        role: role,
+        allowed: result.allowed,
+        withinGeofence: result.withinGeofence,
+        distanceMeters: result.distanceMeters,
+        isMocked: result.isMocked,
+        reason: result.reason,
+        latitude: latitude,
+        longitude: longitude,
+        companyKey: companyKey,
+      );
+    }
 
     if (result.isMocked) {
       await repo.addAbuseFlag({

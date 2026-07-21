@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.job_sync_models import JobApplicationRow, JobPostRow
 from app.qc_models import QcMemberRow
+from app.services.location_usage_log_service import record_usage
 from app.services.push_notification_service import (
     fcm_service,
     seeker_emails_in_radius,
@@ -358,6 +359,8 @@ def push_recruitment_targets(
     resolved_company = company_name or (post.company_name if post else "채용 기업")
 
     matched_emails: set[str] = set()
+    representative_lat: float | None = None
+    representative_lng: float | None = None
     for target in targets:
         try:
             lat = float(target["latitude"])
@@ -365,10 +368,31 @@ def push_recruitment_targets(
             radius = float(target.get("radius_meters") or 1000)
         except (KeyError, TypeError, ValueError):
             continue
+        if representative_lat is None:
+            representative_lat, representative_lng = lat, lng
         for email in seeker_emails_in_radius(
             db, latitude=lat, longitude=lng, radius_meters=radius
         ):
             matched_emails.add(email.strip().lower())
+
+    if targets:
+        record_usage(
+            db,
+            usage_type="push_radius",
+            subject_label="기업회원",
+            subject_email="",
+            acquisition_path="단말 위치(동의, 설정범위)",
+            service_description=f"위치기반 PUSH — post_id={post_id}",
+            recipient_label=f"구직자 {len(matched_emails)}명(동의자만)",
+            latitude=representative_lat,
+            longitude=representative_lng,
+            detail={
+                "post_id": post_id,
+                "company_key": company_key,
+                "target_zones": len(targets),
+                "matched_emails": sorted(matched_emails),
+            },
+        )
 
     tokens = tokens_for_emails(db, list(matched_emails), category="job_alerts")
     if not tokens:

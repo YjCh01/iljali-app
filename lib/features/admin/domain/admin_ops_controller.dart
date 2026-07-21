@@ -22,6 +22,7 @@ class AdminOpsController extends ChangeNotifier {
   Map<String, dynamic>? stats;
   List<Map<String, dynamic>> auditLogs = const [];
   List<Map<String, dynamic>> members = const [];
+  List<Map<String, dynamic>> locationUsageLogs = const [];
 
   Future<void> refreshDashboard() async {
     if (!apiReady) {
@@ -56,6 +57,12 @@ class AdminOpsController extends ChangeNotifier {
   Future<void> refreshAudit({int limit = 100}) async {
     if (!apiReady) return;
     auditLogs = await _client.auditLogs(limit: limit);
+    notifyListeners();
+  }
+
+  Future<void> refreshLocationUsageLogs({String? usageType, int limit = 200}) async {
+    if (!apiReady) return;
+    locationUsageLogs = await _client.locationUsageLogs(usageType: usageType, limit: limit);
     notifyListeners();
   }
 
