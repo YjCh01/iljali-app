@@ -50,7 +50,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>주변 일자리·근무지를 지도에서 보여드리기 위해 위치 정보가 필요합니다.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>근무지·셔틀 정류장 안내 등 지도 서비스를 위해 위치 정보가 필요합니다.</string>
+	<string>운영팀이 지정한 버스위치 공유 담당자가 화면을 꺼도 탑승자에게 실시간 셔틀 위치를 계속 전달하기 위해 백그라운드 위치 정보가 필요합니다.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>운영팀이 지정한 버스위치 공유 담당자가 화면을 꺼도 탑승자에게 실시간 셔틀 위치를 계속 전달하기 위해 백그라운드 위치 정보가 필요합니다.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>이력서·채팅·출근 확인 등에 사진을 촬영하기 위해 카메라 접근이 필요합니다.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -62,6 +64,10 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>NMFClientId</key>
 	<string>$(NAVER_MAP_CLIENT_ID)</string>
 	<key>CFBundleURLTypes</key>

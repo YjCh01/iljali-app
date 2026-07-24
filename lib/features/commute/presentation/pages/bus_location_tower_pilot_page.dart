@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:map/core/constants/app_routes.dart';
 import 'package:map/core/constants/app_colors.dart';
+import 'package:map/core/geo/background_location_share_service.dart';
 import 'package:map/core/geo/device_location_service.dart';
 import 'package:map/core/geo/location_consent_service.dart';
 import 'package:map/core/pilot/bus_location_tower_pilot_service.dart';
@@ -28,6 +30,8 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
   Timer? _pollTimer;
   Timer? _shareTimer;
   var _autoSharing = false;
+  var _backgroundSharing = false;
+  DateTime? _lastBackgroundUpdateAt;
 
   @override
   void initState() {
@@ -43,6 +47,7 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
     _pollTimer?.cancel();
     _shareTimer?.cancel();
     if (_autoSharing) unawaited(WakelockPlus.disable());
+    if (_backgroundSharing) unawaited(BackgroundLocationShareService.stopSharing());
     super.dispose();
   }
 
@@ -57,6 +62,10 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
         _shareTimer?.cancel();
         if (_autoSharing) unawaited(WakelockPlus.disable());
         _autoSharing = false;
+        if (_backgroundSharing) {
+          _backgroundSharing = false;
+          unawaited(BackgroundLocationShareService.stopSharing());
+        }
       }
     } on Object {
       if (!silent) rethrow;
@@ -159,11 +168,51 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
       const Duration(seconds: 12),
       (_) => _shareCurrentLocation(silent: true),
     );
+    unawaited(_tryEnableBackgroundSharing());
+  }
+
+  /// 백그라운드 권한이 이미 있으면 화면이 꺼져도 계속 전송되도록 위치 스트림을 시작한다.
+  /// 없으면 안내 후 요청하고, 거부되어도 기존 포그라운드 타이머로 정상 동작한다.
+  Future<void> _tryEnableBackgroundSharing() async {
+    if (_backgroundSharing || !mounted) return;
+    var granted = await BackgroundLocationShareService.hasAlwaysPermission();
+    if (!granted && mounted) {
+      granted = await BackgroundLocationShareService.requestAlwaysPermission(context);
+    }
+    if (!granted || !mounted || !_autoSharing) return;
+
+    final started = await BackgroundLocationShareService.startSharing(
+      onPosition: _onBackgroundPosition,
+      onError: (_) {},
+    );
+    if (started) _backgroundSharing = true;
+  }
+
+  void _onBackgroundPosition(Position position) {
+    final now = DateTime.now();
+    if (_lastBackgroundUpdateAt != null &&
+        now.difference(_lastBackgroundUpdateAt!) < const Duration(seconds: 10)) {
+      return;
+    }
+    _lastBackgroundUpdateAt = now;
+    unawaited(
+      BusLocationTowerPilotService.updatePosition(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracyMeters: position.accuracy,
+      ).then((updated) {
+        if (mounted) setState(() => _future = Future.value(updated));
+      }).onError((_, __) {}),
+    );
   }
 
   Future<void> _stopSharing() async {
     _shareTimer?.cancel();
     _shareTimer = null;
+    if (_backgroundSharing) {
+      _backgroundSharing = false;
+      await BackgroundLocationShareService.stopSharing();
+    }
     if (_autoSharing) {
       _autoSharing = false;
       unawaited(WakelockPlus.disable());
@@ -347,6 +396,7 @@ class _BusLocationTowerPilotPageState extends State<BusLocationTowerPilotPage> {
                   title: '오늘 위치 공유',
                   subtitle: status.hasLiveLocation
                       ? '${_routeLabel(status)} · 탑승자 ${status.authorizedRiderCount}명이 확인할 수 있습니다. 언제든 직접 켜고 끌 수 있습니다.'
+                          '${_backgroundSharing ? ' · 화면을 꺼도 계속 전송됩니다.' : ''}'
                       : '${_routeLabel(status)} · 탑승자 ${status.authorizedRiderCount}명이 확인할 수 있습니다.',
                   done: status.hasLiveLocation,
                   actionLabel:
